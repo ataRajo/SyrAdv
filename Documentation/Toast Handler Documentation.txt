@@ -1,0 +1,131 @@
+# وثيقة شرح وظيفة معالجة الإشعارات (toastHandler.js)
+
+## باللغة العربية
+
+### فكرة الكود العامة
+ملف `toastHandler.js` يحتوي على وظيفة مساعدة تُسمى `showToast` تُستخدم لعرض إشعارات (Toasts) في تطبيقات React باستخدام مكتبة `react-hot-toast`. الهدف من هذه الوظيفة هو توفير طريقة موحدة وسهلة لعرض إشعارات من أنواع مختلفة (نجاح، خطأ، تحميل، أو إشعار عام) مع خيارات تخصيص مثل مدة العرض وموقع الإشعار. الوظيفة تُبسط عملية إدارة الإشعارات وتضمن تناسقها عبر التطبيق.
+
+### شكل البيانات التي تستقبلها
+الوظيفة `showToast` تأخذ ثلاث معلمات:
+1. `type`: نوع الإشعار، وهو سلسلة نصية تحدد نوع الإشعار. القيم المقبولة هي:
+   - `"success"`: إشعار نجاح.
+   - `"error"`: إشعار خطأ.
+   - `"loading"`: إشعار تحميل.
+   - أي قيمة أخرى: إشعار عام (بدون تنسيق خاص).
+2. `message`: السلسلة النصية التي تُعرض كمحتوى الإشعار.
+3. `options` (اختياري): كائن يحتوي على خيارات تخصيص، مثل:
+   - `duration`: مدة عرض الإشعار بالميلي ثانية (الافتراضي: 4000).
+   - `position`: موقع الإشعار (الافتراضي: `"top-center"`).
+   - أي خيارات أخرى مدعومة من مكتبة `react-hot-toast`.
+
+مثال على استدعاء الوظيفة:
+```javascript
+showToast("success", "تم حفظ البيانات بنجاح", { duration: 6000, position: "bottom-right" });
+```
+
+### كيفية استخدام الوظيفة
+لاستخدام الوظيفة، يجب أولاً التأكد من تثبيت مكتبة `react-hot-toast` في المشروع وإعداد مكون `Toaster` في التطبيق (عادةً في الملف الرئيسي مثل `App.js`). ثم يتم استيراد `showToast` واستخدامها في أي مكان بالتطبيق. مثال:
+
+```javascript
+import { showToast } from './utils/toastHandler';
+
+// في مكون React
+const handleSave = () => {
+  try {
+    // عملية حفظ
+    showToast("success", "تم الحفظ بنجاح!");
+  } catch (error) {
+    showToast("error", "حدث خطأ أثناء الحفظ.");
+  }
+};
+
+// إعداد Toaster في App.js
+import { Toaster } from 'react-hot-toast';
+
+function App() {
+  return (
+    <div>
+      <Toaster />
+      {/* باقي التطبيق */}
+    </div>
+  );
+}
+```
+
+### التوابع الموجودة ووظيفة كل منها
+1. **`showToast(type, message, options = {})`**:
+   - **الوظيفة**: تعرض إشعارًا بناءً على النوع والرسالة والخيارات المحددة.
+   - **المدخلات**:
+     - `type`: نوع الإشعار (`"success"`, `"error"`, `"loading"`, أو أي قيمة لإشعار عام).
+     - `message`: النص الذي يظهر في الإشعار.
+     - `options`: كائن اختياري لتخصيص الإشعار (مثل `duration` و`position`).
+   - **المخرجات**: لا تُرجع قيمة، بل تعرض إشعارًا بصريًا باستخدام مكتبة `react-hot-toast`.
+   - **التفاصيل**:
+     - تستخدم كائن `defaultOptions` لتعيين القيم الافتراضية (`duration: 4000`, `position: "top-center"`) ودمجها مع الخيارات الممررة.
+     - بناءً على `type`، يتم استدعاء الدالة المناسبة من `react-hot-toast` (`toast.success`, `toast.error`, `toast.loading`, أو `toast`).
+
+---
+
+## In English 
+
+### General Concept of the Code
+The `toastHandler.js` file contains a utility function named `showToast` designed to display toast notifications in React applications using the `react-hot-toast` library. The purpose of this function is to provide a standardized and easy-to-use method for showing different types of notifications (success, error, loading, or general) with customizable options like duration and position. It simplifies notification management and ensures consistency across the application.
+
+### Shape of the Data It Receives
+The `showToast` function accepts three parameters:
+1. `type`: The type of the toast, a string specifying the notification type. Accepted values are:
+   - `"success"`: Success notification.
+   - `"error"`: Error notification.
+   - `"loading"`: Loading notification.
+   - Any other value: General notification (without specific styling).
+2. `message`: The string to display as the content of the toast.
+3. `options` (optional): An object containing customization options, such as:
+   - `duration`: Duration of the toast in milliseconds (default: 4000).
+   - `position`: Position of the toast (default: `"top-center"`).
+   - Any other options supported by `react-hot-toast`.
+
+Example of calling the function:
+```javascript
+showToast("success", "Data saved successfully", { duration: 6000, position: "bottom-right" });
+```
+
+### How to Use the Function
+To use the function, ensure that the `react-hot-toast` library is installed in the project and that the `Toaster` component is set up in the application (typically in the main file like `App.js`). Then, import `showToast` and use it anywhere in the application. Example:
+
+```javascript
+import { showToast } from './utils/toastHandler';
+
+// In a React component
+const handleSave = () => {
+  try {
+    // Save operation
+    showToast("success", "Saved successfully!");
+  } catch (error) {
+    showToast("error", "An error occurred while saving.");
+  }
+};
+
+// Setup Toaster in App.js
+import { Toaster } from 'react-hot-toast';
+
+function App() {
+  return (
+    <div>
+      <Toaster />
+      {/* Rest of the app */}
+    </div>
+  );
+}
+```
+
+### Available Functions and Their Purposes
+1. **`showToast(type, message, options = {})`**:
+   - **Purpose**: Displays a toast notification based on the specified type, message, and options.
+   - **Inputs**:
+     - `type`: The type of toast (`"success"`, `"error"`, `"loading"`, or any value for a general toast).
+     - `message`: The text to display in the toast.
+     - `options`: An optional object to customize the toast (e.g., `duration`, `position`).
+   - **Output**: Does not return a value; it displays a visual toast using `react-hot-toast`.
+   - **Details**:
+     - Uses a `defaultOptions` object to set default values (`duration: 4000`, `position: "top-center"`) and merges them with provided options.
+     - Based on the `type`, it calls the appropriate `react-hot-toast` function (`toast.success`, `toast.error`, `toast.loading`, or `toast`).

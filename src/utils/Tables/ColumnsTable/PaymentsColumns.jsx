@@ -1,0 +1,45 @@
+
+  export const PaymentsColumns = [
+    {
+      header: "اسم الشركة",
+      accessor: "customer.company_name",
+      prefixIcon: "mdi:office-building",
+      className: "min-w-[120px] sm:min-w-[150px] md:min-w-[200px] lg:min-w-[250px]",
+      cellClassName: "font-medium",
+      priority: 1,
+    },
+    {
+      header: "المبلغ الكلي",
+      accessor: "total",
+      prefixIcon: "mdi:currency-usd",
+      format: (value) => `${parseFloat(value).toFixed(2)}`,
+      className: "text-right min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
+      cellClassName: "text-right font-mono",
+      priority: 2,
+    },
+    {
+      header: "المبلغ المدفوع",
+      accessor: "paid",
+      prefixIcon: "mdi:currency-usd",
+      format: (value) => `${parseFloat(value).toFixed(2)}`,
+      className: "text-right min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
+      cellClassName: "text-right font-mono",
+      priority: 3,
+    },
+    {
+      header: "المبلغ الباقي",
+      accessor: "remaining",
+      prefixIcon: "mdi:currency-usd",
+      format: (value) => `${parseFloat(value).toFixed(2)}`,
+      className: "text-right min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
+      cellClassName: "text-right font-mono",
+      priority: 4,
+    },
+    {
+      header: "التاريخ",
+      accessor: "date",
+      prefixIcon: "mdi:calendar",
+      className: "min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
+      priority: 5,
+    },
+  ];

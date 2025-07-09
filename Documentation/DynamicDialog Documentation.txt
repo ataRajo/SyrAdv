@@ -1,0 +1,331 @@
+# وثيقة شرح مكون النافذة الديناميكية (DynamicDialog)
+
+## باللغة العربية
+
+### فكرة الكود العامة
+مكون `DynamicDialog` هو مكون React يعتمد على مكتبات مثل `formik`، `react-hot-toast`، `react-select`، و`react-quill-new` بالإضافة إلى مكونات `shadcn/ui` لإنشاء نافذة حوار ديناميكية (Dialog) قابلة للتخصيص. الهدف من هذا المكون هو توفير واجهة مرنة لإدخال البيانات أو تعديلها، مع دعم أنواع حقول متعددة (نصوص، قوائم منسدلة، ملفات، نصوص غنية، مصفوفات)، والتحقق من صحة البيانات، وإرسالها باستخدام طفرات (mutations) من مكتبة `react-query` أو غيرها. يتميز المكون بدعمه للغة العربية (من اليمين إلى اليسار) وإشعارات النجاح أو الخطأ باستخدام `showToast`.
+
+### أنواع الحقول المدعومة
+المكون يدعم أنواع الحقول التالية:
+1. **`text` (نص)**: حقل إدخال نصي بسيط، يُستخدم لإدخال نصوص قصيرة مثل الأسماء أو الأرقام.
+   - مثال: حقل "مكان التموضع" في `roadSignFields`.
+2. **`number` (رقم)**: حقل إدخال أرقام، يُستخدم للقيم العددية مثل عدد الوجوه أو الأمتار.
+   - مثال: حقل "عدد الوجوه" في `roadSignFields`.
+3. **`select` (قائمة منسدلة)**: حقل اختيار منسدل يعرض خيارات يتم جلبها من `selectData` أو `field.options`.
+   - مثال: حقل "المدينة" في `roadSignFields`.
+4. **`array` (مصفوفة)**: حقل يسمح بإدخال قيم متعددة في مصفوفة (مثل الأسعار المحلية والأجنبية).
+   - مثال: حقل أسعار المنتجات في نموذج سابق (غير موجود في `roadSignFields`).
+5. **`file` (ملف)**: حقل لتحميل ملف، يدعم تحديد نوع الملفات المقبولة (مثل الصور).
+   - مثال: غير مستخدم في `roadSignFields` ولكنه مدعوم.
+6. **`textarea` (نص طويل)**: حقل نصي متعدد الأسطر لإدخال نصوص طويلة.
+   - مثال: غير مستخدم في `roadSignFields` ولكنه مدعوم.
+7. **`reactquill` (نص غني)**: حقل محرر نصوص غني باستخدام `react-quill-new`، يسمح بتنسيق النصوص (مثل الخط العريض أو القوائم).
+   - مثال: غير مستخدم في `roadSignFields` ولكنه مدعوم.
+
+### الوسائط التي يستقبلها المكون ودور كل وسيط
+المكون يستقبل الوسائط التالية عبر الـ `props`:
+1. **`show` (نوع: boolean)**:
+   - **الدور**: يتحكم في عرض النافذة (مفتوحة إذا كانت `true`، مغلقة إذا كانت `false`).
+   - **مثال**: `show={true}` يفتح النافذة.
+2. **`handleClose` (نوع: function)**:
+   - **الدور**: دالة تُستدعى عند إغلاق النافذة (إما بالنقر على زر "إلغاء" أو إغلاق النافذة).
+   - **مثال**: `handleClose={() => setShow(false)}`.
+3. **`title` (نوع: string)**:
+   - **الدور**: عنوان النافذة المعروض في رأسها.
+   - **مثال**: `"تعديل لوحة طرقية"`.
+4. **`fields` (نوع: array)**:
+   - **الدور**: مصفوفة من الكائنات تحدد الحقول التي ستظهر في النافذة. كل حقل يحتوي على:
+     - `name`: اسم الحقل (مفتاح القيمة في النموذج).
+     - `label`: النص المعروض كعنوان للحقل.
+     - `type`: نوع الحقل (`text`, `number`, `select`, `array`, `file`, `textarea`, `reactquill`).
+     - `dir` (اختياري): اتجاه النص (`rtl` أو `ltr`، الافتراضي: `rtl`).
+     - `dataKey` (لـ `select`): مفتاح البيانات في `selectData`.
+     - `valueKey` و`displayKey` (لـ `select`): مفاتيح القيمة والعرض في البيانات.
+     - `accept` (لـ `file`): أنواع الملفات المقبولة (مثل `image/*`).
+     - `placeholder` (اختياري): النص الافتراضي للحقل.
+   - **مثال**: انظر `roadSignFields` أعلاه.
+5. **`validationSchema` (نوع: Yup schema)**:
+   - **الدور**: مخطط التحقق من صحة البيانات باستخدام مكتبة `Yup`. يحدد القواعد لكل حقل (مطلوب، نوع البيانات، الحد الأدنى، إلخ).
+   - **مثال**: `roadSignValidationSchema` يحدد أن `city_id` يجب أن يكون رقمًا مطلوبًا.
+6. **`mutationHook` (نوع: function)**:
+   - **الدور**: دالة طفرة (mutation) من مكتبة مثل `react-query` تُستخدم لإرسال البيانات إلى الخادم. تُرجع كائنًا يحتوي على `mutate`, `isLoading`, `isSuccess`, `isError`, و`error`.
+   - **مثال**: `useAddRoadSignMutation` أو `useUpdateRoadSignMutation`.
+7. **`initialValues` (نوع: object)**:
+   - **الدور**: الكائن الذي يحتوي على القيم الابتدائية للحقول.
+   - **مثال**: انظر `roadSignInitialValues` أعلاه.
+8. **`selectData` (نوع: object, اختياري)**:
+   - **الدور**: كائن يحتوي على بيانات القوائم المنسدلة للحقول من نوع `select`. يتم تنظيمه كـ `{ [dataKey]: { data: [...] } }`.
+   - **مثال**: انظر `selectData` في `DialogAddRoadSign`.
+9. **`id` (نوع: string | number, اختياري)**:
+   - **الدور**: معرف السجل عند التعديل (يُستخدم مع `mutationHook` لتحديد السجل المراد تعديله).
+   - **مثال**: `id={initData?.id}` في `DialogEditTemplate`.
+10. **`onSubmitTransform` (نوع: function, اختياري)**:
+    - **الدور**: دالة تحول القيم قبل إرسالها إلى الطفرة (مثل تحويل أنواع البيانات أو إعادة هيكلة الكائن).
+    - **مثال**: في `DialogAddRoadSign`، تحويل `city_id` إلى رقم.
+
+### شكل البيانات التي يستقبلها
+- **البيانات المدخلة (initialValues)**: كائن يحتوي على مفاتيح تتوافق مع أسماء الحقول في `fields`. القيم يجب أن تكون متوافقة مع نوع الحقل (مثل نص لـ `text`، رقم لـ `number`، إلخ).
+  - مثال: `roadSignInitialValues`:
+    ```javascript
+    {
+      city_id: "",
+      region_id: "",
+      place: "",
+      directions: "",
+      number: "",
+      faces_number: "",
+      advertising_meters: "",
+      printing_meters: "",
+      template_id: "",
+      is_available: ""
+    }
+    ```
+- **بيانات القوائم المنسدلة (selectData)**: كائن يحتوي على بيانات لكل حقل `select`، بتنسيق:
+  ```javascript
+  {
+    [dataKey]: {
+      data: [{ id: string | number, name: string }, ...]
+    }
+  }
+  ```
+  - مثال: في `DialogAddRoadSign`:
+    ```javascript
+    {
+      cities: { data: [{ id: "1", name: "الرياض" }, ...] },
+      regions: { data: [{ id: "1", name: "حي الملك" }, ...] },
+      template_id: { data: [{ id: "1", name: "Local" }, ...] },
+      is_available: { data: [{ id: "1", name: "متاح" }, { id: "0", name: "غير متاح" }] }
+    }
+    ```
+
+### شكل البيانات التي يرسلها
+- عند إرسال النموذج، يتم تحويل القيم باستخدام `onSubmitTransform` (إذا وُجدت) وإرسالها إلى `mutate`:
+  - إذا كان `id` موجودًا: `{ id, data: transformedValues }`.
+  - إذا لم يكن `id` موجودًا: `transformedValues`.
+- مثال من `DialogAddRoadSign`:
+  ```javascript
+  {
+    city_id: 1,
+    region_id: 2,
+    place: "شارع الملك",
+    directions: "شمال",
+    number: "123",
+    faces_number: 2,
+    advertising_meters: "10",
+    printing_meters: "5",
+    template_id: 1,
+    is_available: 1
+  }
+  ```
+
+### شكل البيانات الابتدائية للحقول
+لتحديد القيم الابتدائية في `initialValues`، يجب أن تتطابق المفاتيح مع `field.name` في `fields`. القيم يجب أن تكون:
+- **لـ `text` أو `textarea` أو `reactquill`**: سلسلة نصية (مثل `""` أو `"قيمة افتراضية"`).
+- **لـ `number`**: سلسلة تمثل رقمًا (مثل `""` أو `"5"`) أو رقم.
+- **لـ `select`**: قيمة تتطابق مع إحدى القيم في `selectData[dataKey].data` (مثل `"1"` لـ `city_id`).
+- **لـ `array`**: مصفوفة من الكائنات (مثل `[{ price: "" }, { price: "" }]`).
+- **لـ `file`**: ملف أو `null`.
+
+مثال: `roadSignInitialValues` يحدد قيمًا فارغة لتجنب الأخطاء، ولكن يمكن تعيين قيم افتراضية مثل:
+```javascript
+{
+  city_id: "1",
+  region_id: "2",
+  place: "شارع الملك",
+  directions: "شمال",
+  number: "123",
+  faces_number: "2",
+  advertising_meters: "10",
+  printing_meters: "5",
+  template_id: "1",
+  is_available: "1"
+}
+```
+
+### كيفية استخدام المكون
+يتم استخدام المكون في سياقات مثل إضافة أو تعديل سجلات (مثل لوحات طرقية، قوالب، مستخدمين). يجب توفير `fields`، `validationSchema`، `mutationHook`، و`initialValues`. مثال من `DialogAddRoadSign`:
+```javascript
+<DynamicDialog
+  show={show}
+  handleClose={handleClose}
+  title="إضافة لوحة طرقية"
+  fields={roadSignFields}
+  validationSchema={roadSignValidationSchema}
+  mutationHook={useAddRoadSignMutation}
+  initialValues={roadSignInitialValues}
+  selectData={selectData}
+  onSubmitTransform={onSubmitTransform}
+/>
+```
+
+### ملاحظات إضافية
+- **إشعارات**: يستخدم `showToast` لعرض إشعارات النجاح أو الخطأ بعد إرسال النموذج.
+- **التحقق من الصحة**: يعتمد على `Yup` للتحقق من صحة المدخلات قبل الإرسال.
+- **الاتجاه**: يدعم الاتجاه من اليمين إلى اليسار (RTL) بشكل افتراضي، مع تخصيص عبر `field.dir`.
+- **إعادة التهيئة**: خاصية `enableReinitialize` في `Formik` تتيح تحديث `initialValues` ديناميكيًا عند التعديل.
+
+---
+
+## In English
+
+### General Concept of the Code
+The `DynamicDialog` component is a React component that leverages libraries like `formik`, `react-hot-toast`, `react-select`, `react-quill-new`, and `shadcn/ui` components to create a customizable dialog for data entry or editing. It supports various field types (text, dropdowns, files, rich text, arrays), data validation, and submission via mutations (e.g., from `react-query`). The component is designed to handle right-to-left (RTL) layouts for Arabic and provides success/error notifications using `showToast`.
+
+### Supported Field Types
+The component supports the following field types:
+1. **`text` (Text)**: A simple text input for short text entries like names or codes.
+   - Example: "Place" field in `roadSignFields`.
+2. **`number` (Number)**: A numeric input for values like counts or measurements.
+   - Example: "Faces Number" field in `roadSignFields`.
+3. **`select` (Dropdown)**: A dropdown field displaying options from `selectData` or `field.options`.
+   - Example: "City" field in `roadSignFields`.
+4. **`array` (Array)**: A field for entering multiple values in an array (e.g., local and foreign prices).
+   - Example: Not used in `roadSignFields` but supported.
+5. **`file` (File)**: A file upload field with support for specifying accepted file types (e.g., images).
+   - Example: Not used in `roadSignFields` but supported.
+6. **`textarea` (Textarea)**: A multi-line text input for longer text entries.
+   - Example: Not used in `roadSignFields` but supported.
+7. **`reactquill` (Rich Text)**: A rich text editor using `react-quill-new` for formatted text (e.g., bold, lists).
+   - Example: Not used in `roadSignFields` but supported.
+
+### Props Received and Their Roles
+The component accepts the following props:
+1. **`show` (Type: boolean)**:
+   - **Role**: Controls the visibility of the dialog (`true` to open, `false` to close).
+   - **Example**: `show={true}` opens the dialog.
+2. **`handleClose` (Type: function)**:
+   - **Role**: A function called when the dialog is closed (via the "Cancel" button or dialog close).
+   - **Example**: `handleClose={() => setShow(false)}`.
+3. **`title` (Type: string)**:
+   - **Role**: The title displayed in the dialog header.
+   - **Example**: `"Edit Road Sign"`.
+4. **`fields` (Type: array)**:
+   - **Role**: An array of objects defining the fields to display. Each field object includes:
+     - `name`: The field’s key in the form values.
+     - `label`: The display label for the field.
+     - `type`: The field type (`text`, `number`, `select`, `array`, `file`, `textarea`, `reactquill`).
+     - `dir` (optional): Text direction (`rtl` or `ltr`, default: `rtl`).
+     - `dataKey` (for `select`): Key for data in `selectData`.
+     - `valueKey` and `displayKey` (for `select`): Keys for value and display text in the data.
+     - `accept` (for `file`): Accepted file types (e.g., `image/*`).
+     - `placeholder` (optional): Placeholder text for the field.
+   - **Example**: See `roadSignFields` above.
+5. **`validationSchema` (Type: Yup schema)**:
+   - **Role**: A Yup schema defining validation rules for each field (required, data type, minimum value, etc.).
+   - **Example**: `roadSignValidationSchema` requires `city_id` to be a number.
+6. **`mutationHook` (Type: function)**:
+   - **Role**: A mutation function (e.g., from `react-query`) used to send data to the server. Returns an object with `mutate`, `isLoading`, `isSuccess`, `isError`, and `error`.
+   - **Example**: `useAddRoadSignMutation` or `useUpdateRoadSignMutation`.
+7. **`initialValues` (Type: object)**:
+   - **Role**: An object containing initial values for the form fields.
+   - **Example**: See `roadSignInitialValues` above.
+8. **`selectData` (Type: object, optional)**:
+   - **Role**: An object containing data for `select` fields, structured as `{ [dataKey]: { data: [...] } }`.
+   - **Example**: See `selectData` in `DialogAddRoadSign`.
+9. **`id` (Type: string | number, optional)**:
+   - **Role**: The record ID for editing (used with `mutationHook` to specify the record to update).
+   - **Example**: `id={initData?.id}` in `DialogEditTemplate`.
+10. **`onSubmitTransform` (Type: function, optional)**:
+    - **Role**: A function to transform form values before submission (e.g., converting data types or restructuring the object).
+    - **Example**: In `DialogAddRoadSign`, converts `city_id` to a number.
+
+### Shape of the Data Received
+- **Input Data (initialValues)**: An object with keys matching `field.name` in `fields`. Values must align with the field type (e.g., string for `text`, number for `number`).
+  - Example: `roadSignInitialValues`:
+    ```javascript
+    {
+      city_id: "",
+      region_id: "",
+      place: "",
+      directions: "",
+      number: "",
+      faces_number: "",
+      advertising_meters: "",
+      printing_meters: "",
+      template_id: "",
+      is_available: ""
+    }
+    ```
+- **Dropdown Data (selectData)**: An object containing data for `select` fields, structured as:
+  ```javascript
+  {
+    [dataKey]: {
+      data: [{ id: string | number, name: string }, ...]
+    }
+  }
+  ```
+  - Example: In `DialogAddRoadSign`:
+    ```javascript
+    {
+      cities: { data: [{ id: "1", name: "Riyadh" }, ...] },
+      regions: { data: [{ id: "1", name: "King District" }, ...] },
+      template_id: { data: [{ id: "1", name: "Local" }, ...] },
+      is_available: { data: [{ id: "1", name: "Available" }, { id: "0", name: "Not Available" }] }
+    }
+    ```
+
+### Shape of the Data Sent
+- When the form is submitted, values are transformed using `onSubmitTransform` (if provided) and sent to `mutate`:
+  - If `id` is provided: `{ id, data: transformedValues }`.
+  - If no `id`: `transformedValues`.
+- Example from `DialogAddRoadSign`:
+  ```javascript
+  {
+    city_id: 1,
+    region_id: 2,
+    place: "King Street",
+    directions: "North",
+    number: "123",
+    faces_number: 2,
+    advertising_meters: "10",
+    printing_meters: "5",
+    template_id: 1,
+    is_available: 1
+  }
+  ```
+
+### Shape of Initial Data for Fields
+To set initial values in `initialValues`, keys must match `field.name` in `fields`. Values should be:
+- **For `text`, `textarea`, `reactquill`**: A string (e.g., `""` or `"default value"`).
+- **For `number`**: A string representing a number (e.g., `""` or `"5"`) or a number.
+- **For `select`**: A value matching one of the options in `selectData[dataKey].data` (e.g., `"1"` for `city_id`).
+- **For `array`**: An array of objects (e.g., `[{ price: "" }, { price: "" }]`).
+- **For `file`**: A file or `null`.
+
+Example: `roadSignInitialValues` sets empty values to avoid errors, but defaults could be:
+```javascript
+{
+  city_id: "1",
+  region_id: "2",
+  place: "King Street",
+  directions: "North",
+  number: "123",
+  faces_number: "2",
+  advertising_meters: "10",
+  printing_meters: "5",
+  template_id: "1",
+  is_available: "1"
+}
+```
+
+### How to Use the Component
+The component is used for adding or editing records (e.g., road signs, templates, users). Provide `fields`, `validationSchema`, `mutationHook`, and `initialValues`. Example from `DialogAddRoadSign`:
+```javascript
+<DynamicDialog
+  show={show}
+  handleClose={handleClose}
+  title="Add Road Sign"
+  fields={roadSignFields}
+  validationSchema={roadSignValidationSchema}
+  mutationHook={useAddRoadSignMutation}
+  initialValues={roadSignInitialValues}
+  selectData={selectData}
+  onSubmitTransform={onSubmitTransform}
+/>
+```
+
+### Additional Notes
+- **Notifications**: Uses `showToast` to display success or error notifications after form submission.
+- **Validation**: Relies on `Yup` for input validation before submission.
+- **Direction**: Supports right-to-left (RTL) layout by default, customizable via `field.dir`.
+- **Reinitialization**: The `enableReinitialize` prop in `Formik` allows dynamic updates to `initialValues` for editing.

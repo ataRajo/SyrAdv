@@ -1,0 +1,58 @@
+
+export  const TemplateColumns = [
+    {
+      header: "النموذج",
+      accessor: "model",
+      prefixIcon: "mdi:shape-outline",
+      className: "min-w-[100px] sm:min-w-[120px]",
+      cellClassName: "font-medium",
+      priority: 1,
+    },
+    {
+      header: "نوع النموذج",
+      accessor: "type",
+      prefixIcon: "mdi:format-list-bulleted-type",
+      className: "min-w-[100px]",
+      priority: 2,
+    },
+    {
+      header: "الحجم",
+      accessor: "size",
+      prefixIcon: "mdi:ruler-square",
+      className: "min-w-[80px]",
+      priority: 3,
+    },
+    {
+      header: "عدد الأوجه",
+      accessor: "faces_number",
+      prefixIcon: "mdi:image-area",
+      className: "min-w-[80px]",
+      priority: 3,
+    },
+    {
+      header: "مساحة الطباعة",
+      accessor: "printing_space",
+      prefixIcon: "mdi:image-area",
+      format: (value) => `${value}m²`,
+      className: "text-right min-w-[100px]",
+      cellClassName: "text-right font-mono",
+      priority: 5,
+    },
+    {
+      header: "مساحة الإعلان",
+      accessor: "advertising_space",
+      prefixIcon: "mdi:image-area",
+      format: (value) => `${value}m²`,
+      className: "text-right min-w-[100px]",
+      cellClassName: "text-right font-mono",
+      priority: 7,
+    },
+    // {
+    //   header: "Created",
+    //   accessor: "created_at",
+    //   prefixIcon: "mdi:calendar",
+    //   format: (value) => format(new Date(value), "MMM dd, yyyy"),
+    //   className: "min-w-[100px] sm:min-w-[120px]",
+    //   priority: 8,
+    // },
+  ];

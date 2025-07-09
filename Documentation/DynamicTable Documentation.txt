@@ -1,0 +1,171 @@
+# وثيقة شرح مكون الجدول الديناميكي (DynamicTable)
+
+## باللغة العربية
+
+### فكرة الكود العامة
+مكون `DynamicTable` هو مكون في React JS يعتمد على مكتبة `shadcn/ui` لإنشاء جدول ديناميكي قابل للتخصيص. يهدف هذا المكون إلى عرض البيانات في شكل جدول مع دعم ميزات مثل التحميل (Loading State)، التمرير الأفقي والعمودي، وأزرار الإجراءات (Actions) مثل العرض، التعديل، الحذف، تأكيد الطلب، وإلغاء تأكيد الطلب. يتميز المكون بمرونته حيث يمكن تهيئته باستخدام بيانات وأعمدة مخصصة، مع إمكانية تنسيق البيانات وإضافة أيقونات إلى الخلايا.
+
+### شكل البيانات التي يستقبلها
+المكون يستقبل البيانات عبر خاصية `data` كمصفوفة من الكائنات (Array of Objects). كل كائن يمثل صفًا في الجدول، ويحتوي على خصائص تتوافق مع مفاتيح الأعمدة المحددة في خاصية `columns`. على سبيل المثال:
+
+```javascript
+const data = [
+  { id: 1, name: "محمد", status: 0, details: { address: "الرياض" } },
+  { id: 2, name: "أحمد", status: 1, details: { address: "جدة" } },
+];
+```
+
+خاصية `columns` هي مصفوفة من الكائنات تحدد الأعمدة، وكل كائن يحتوي على:
+- `accessor`: مفتاح البيانات (يدعم الخصائص المتداخلة مثل `details.address`).
+- `header`: عنوان العمود.
+- `prefixIcon` (اختياري): أيقونة تُعرض قبل القيمة.
+- `format` (اختياري): دالة لتنسيق القيمة قبل العرض.
+- `className` (اختياري): كلاسات CSS لتخصيص رأس العمود.
+- `cellClassName` (اختياري): كلاسات CSS لتخصيص خلية العمود.
+
+مثال على `columns`:
+```javascript
+const columns = [
+  { accessor: "id", header: "المعرف" },
+  { accessor: "name", header: "الاسم", prefixIcon: "mdi:user" },
+  { accessor: "details.address", header: "العنوان", format: (value) => value.toUpperCase() },
+];
+```
+
+### كيفية استخدام المكون
+لاستخدام المكون، يتم استيراده وتمرير الخصائص المطلوبة. مثال:
+
+```javascript
+import { DynamicTable } from './DynamicTable';
+
+const App = () => {
+  const data = [...]; // البيانات
+  const columns = [...]; // الأعمدة
+  const handleEdit = (row) => console.log("Edit", row);
+  const handleDelete = (row) => console.log("Delete", row);
+  const handleShow = (row) => console.log("Show", row);
+  const handleConfirmOrder = (row) => console.log("Confirm", row);
+  const handleUnconfirmOrder = (row) => console.log("Unconfirm", row);
+
+  return (
+    <DynamicTable
+      data={data}
+      columns={columns}
+      isLoading={false}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      onShow={handleShow}
+      onConfirmOrder={handleConfirmOrder}
+      onUnconfirmOrder={handleUnconfirmOrder}
+      className="my-custom-class"
+    />
+  );
+};
+```
+
+### التوابع الموجودة ووظيفة كل منها
+1. **`getNestedValue(obj, path)`**:
+   - **الوظيفة**: دالة مساعدة للوصول إلى الخصائص المتداخلة في كائن باستخدام مسار (مثل `details.address`).
+   - **المدخلات**: 
+     - `obj`: الكائن الذي يتم البحث فيه.
+     - `path`: سلسلة تمثل المسار إلى الخاصية.
+   - **المخرجات**: القيمة الموجودة في المسار المحدد أو `undefined` إذا لم توجد.
+
+2. **`DynamicTable` (المكون الرئيسي)**:
+   - **الوظيفة**: يقوم بإنشاء جدول ديناميكي يعرض البيانات بناءً على الخصائص الممررة.
+   - **الخصائص (Props)**:
+     - `data`: مصفوفة البيانات.
+     - `columns`: مصفوفة تحدد الأعمدة.
+     - `isLoading`: قيمة منطقية تشير إلى حالة التحميل (تعرض هياكل عظمية إذا كانت `true`).
+     - `onEdit`: دالة تُستدعى عند النقر على زر التعديل (اختياري).
+     - `onDelete`: دالة تُستدعى عند النقر على زر الحذف (اختياري).
+     - `onShow`: دالة تُستدعى عند النقر على زر العرض (اختياري).
+     - `onConfirmOrder`: دالة تُستدعى لتأكيد الطلب (يظهر إذا كان `status` يساوي 0).
+     - `onUnconfirmOrder`: دالة تُستدعى لإلغاء تأكيد الطلب (يظهر إذا كان `status` يساوي 1).
+     - `className`: كلاسات CSS إضافية لتخصيص الجدول.
+
+---
+
+## In English
+
+### General Concept of the Code
+The `DynamicTable` component is a React JS component built using the `shadcn/ui` library to create a customizable dynamic table. It aims to display data in a tabular format with support for features like loading states, horizontal and vertical scrolling, and action buttons such as view, edit, delete, confirm order, and unconfirm order. The component is highly flexible, allowing customization through data and column configurations, with support for formatting data and adding icons to cells.
+
+### Shape of the Data It Receives
+The component receives data through the `data` prop as an array of objects, where each object represents a row in the table and contains properties matching the keys defined in the `columns` prop. For example:
+
+```javascript
+const data = [
+  { id: 1, name: "Mohammed", status: 0, details: { address: "Riyadh" } },
+  { id: 2, name: "Ahmed", status: 1, details: { address: "Jeddah" } },
+];
+```
+
+The `columns` prop is an array of objects defining the columns, where each object contains:
+- `accessor`: The data key (supports nested properties like `details.address`).
+- `header`: The column header text.
+- `prefixIcon` (optional): An icon to display before the cell value.
+- `format` (optional): A function to format the value before rendering.
+- `className` (optional): CSS classes for customizing the column header.
+- `cellClassName` (optional): CSS classes for customizing the column cells.
+
+Example of `columns`:
+```javascript
+const columns = [
+  { accessor: "id", header: "ID" },
+  { accessor: "name", header: "Name", prefixIcon: "mdi:user" },
+  { accessor: "details.address", header: "Address", format: (value) => value.toUpperCase() },
+];
+```
+
+### How to Use the Component
+To use the component, import it and pass the required props. Example:
+
+```javascript
+import { DynamicTable } from './DynamicTable';
+
+const App = () => {
+  const data = [...]; // Data
+  const columns = [...]; // Columns
+  const handleEdit = (row) => console.log("Edit", row);
+  const handleDelete = (row) => console.log("Delete", row);
+  const handleShow = (row) => console.log("Show", row);
+  const handleConfirmOrder = (row) => console.log("Confirm", row);
+  const handleUnconfirmOrder = (row) => console.log("Unconfirm", row);
+
+  return (
+    <DynamicTable
+      data={data}
+      columns={columns}
+      isLoading={false}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      onShow={handleShow}
+      onConfirmOrder={handleConfirmOrder}
+      onUnconfirmOrder={handleUnconfirmOrder}
+      className="my-custom-class"
+    />
+  );
+};
+```
+
+### Available Functions and Their Purposes
+1. **`getNestedValue(obj, path)`**:
+   - **Purpose**: A utility function to access nested properties in an object using a dot-separated path (e.g., `details.address`).
+   - **Inputs**:
+     - `obj`: The object to search in.
+     - `path`: A string representing the path to the property.
+   - **Output**: The value at the specified path or `undefined` if it doesn't exist.
+
+2. **`DynamicTable` (Main Component)**:
+   - **Purpose**: Creates a dynamic table to display data based on the provided props.
+   - **Props**:
+     - `data`: Array of data objects.
+     - `columns`: Array defining the columns.
+     - `isLoading`: Boolean indicating the loading state (displays skeletons if `true`).
+     - `onEdit`: Function called when the edit button is clicked (optional).
+     - `onDelete`: Function called when the delete button is clicked (optional).
+     - `onShow`: Function called when the view button is clicked (optional).
+     - `onConfirmOrder`: Function called to confirm an order (appears if `status` is 0).
+     - `onUnconfirmOrder`: Function called to unconfirm an order (appears if `status` is 1).
+     - `className`: Additional CSS classes to customize the table.

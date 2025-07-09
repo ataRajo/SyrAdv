@@ -1,0 +1,241 @@
+# وثيقة شرح مكون نافذة العرض (DialogShow)
+
+## باللغة العربية
+
+### فكرة الكود العامة
+مكون `DialogShow` هو مكون React يعتمد على مكتبة `shadcn/ui` ومكتبات إضافية مثل `date-fns` و`@iconify/react` لإنشاء نافذة حوار (Dialog) مخصصة لعرض تفاصيل البيانات بشكل منظم. الهدف من المكون هو تقديم واجهة مستخدم نظيفة ومرنة لعرض البيانات، سواء كانت بيانات كائن واحد (Object) أو مصفوفة من الكائنات (Array)، مع دعم التمرير العمودي، حالة التحميل (loading state)، وتنسيق القيم. يدعم المكون اللغة العربية (من اليمين إلى اليسار) ويسمح بتخصيص الحقول المعروضة باستخدام أيقونات وتنسيقات مخصصة. يُستخدم عادةً لعرض تفاصيل سجل معين (مثل تفاصيل نموذج أو منتج) في تطبيقات إدارة البيانات.
+
+### الوسائط التي يستقبلها المكون ودور كل وسيط
+المكون يستقبل الوسائط التالية عبر الـ `props`:
+1. **`show` (نوع: boolean)**:
+   - **الدور**: يتحكم في عرض النافذة (مفتوحة إذا كانت `true`، مغلقة إذا كانت `false`).
+   - **مثال**: `show={openShow}` في `TableTemplate`.
+2. **`handleClose` (نوع: function)**:
+   - **الدور**: دالة تُستدعى عند إغلاق النافذة (عبر زر "إغلاق" أو إغلاق النافذة).
+   - **مثال**: `handleClose={() => setOpenShow(false)}`.
+3. **`data` (نوع: object | array)**:
+   - **الدور**: البيانات التي سيتم عرضها. يمكن أن تكون كائنًا واحدًا (لعرض تفاصيل سجل واحد) أو مصفوفة من الكائنات (لعرض قائمة، مثل المنتجات).
+   - **مثال**: `data={selectedTemplate}` في `TableTemplate`.
+4. **`fields` (نوع: array, اختياري)**:
+   - **الدور**: مصفوفة من الكائنات تحدد الحقول التي سيتم عرضها عندما تكون `data` كائنًا واحدًا. كل حقل يحتوي على:
+     - `key`: مفتاح البيانات (يدعم الخصائص المتداخلة مثل `created_at`).
+     - `label`: النص المعروض كعنوان الحقل.
+     - `icon`: أيقونة (من `@iconify/react`) تُعرض بجانب الحقل.
+     - `format` (اختياري): دالة لتنسيق القيمة قبل العرض (مثل تحويل التاريخ إلى نص).
+   - **مثال**: انظر `TemplateFieldsShow` أعلاه.
+5. **`arrayKey` (نوع: string, اختياري)**:
+   - **الدور**: اسم القسم الذي يُعرض عندما تكون `data` مصفوفة (مثل `"products"` لعرض قائمة المنتجات).
+   - **مثال**: لم يُستخدم في `TableTemplate` ولكنه مدعوم.
+6. **`arrayFields` (نوع: array, اختياري)**:
+   - **الدور**: مصفوفة من الكائنات تحدد الحقول التي سيتم عرضها لكل عنصر في `data` عندما تكون مصفوفة. بنفس تنسيق `fields`.
+   - **مثال**: لم يُستخدم في `TableTemplate` ولكنه مدعوم.
+7. **`loading` (نوع: boolean)**:
+   - **الدور**: يشير إلى حالة التحميل. إذا كانت `true`، يعرض هياكل عظمية (skeletons) بدلاً من البيانات.
+   - **مثال**: لم يُستخدم في `TableTemplate` ولكنه مدعوم.
+
+### شكل البيانات التي يستقبلها
+- **البيانات (`data`)**:
+  - **كائن واحد**: عند استخدام `fields`، يجب أن يكون `data` كائنًا يحتوي على مفاتيح تتطابق مع `field.key`. مثال من `TableTemplate`:
+    ```javascript
+    {
+      id: "1",
+      model: "Model A",
+      type: "Type 1",
+      size: "10x20",
+      printing_space: 50,
+      advertising_space: 40,
+      created_at: "2023-10-01T12:00:00Z"
+    }
+    ```
+  - **مصفوفة**: عند استخدام `arrayKey` و`arrayFields`، يجب أن تكون `data` مصفوفة من الكائنات، كل كائن يحتوي على مفاتيح تتطابق مع `arrayFields.key`. مثال:
+    ```javascript
+    [
+      { id: "1", type: "Local", price: 100 },
+      { id: "2", type: "Foreign", price: 150 }
+    ]
+    ```
+- **الحقول (`fields` أو `arrayFields`)**:
+  - مصفوفة من الكائنات تحدد كيفية عرض البيانات. مثال من `TemplateFieldsShow`:
+    ```javascript
+    [
+      { label: "Model", key: "model", icon: "mdi:shape-outline" },
+      { label: "Type", key: "type", icon: "mdi:format-list-bulleted-type" },
+      { label: "Size", key: "size", icon: "mdi:ruler-square" },
+      { label: "Print Space", key: "printing_space", icon: "mdi:image-area", format: (value) => `${value}m²` },
+      { label: "Ad Space", key: "advertising_space", icon: "mdi:image-area", format: (value) => `${value}m²` },
+      { label: "Created", key: "created_at", icon: "mdi:calendar", format: (value) => format(new Date(value), "MMM dd, yyyy") }
+    ]
+    ```
+
+### شكل البيانات التي يرسلها
+- المكون لا يرسل بيانات، حيث أنه مصمم للعرض فقط. لا يحتوي على نموذج إدخال أو إرسال بيانات، ويُستخدم فقط لعرض البيانات الممررة عبر `data`.
+
+### شكل البيانات الابتدائية
+- المكون لا يتطلب بيانات ابتدائية للحقول لأنه لا يحتوي على نموذج إدخال. بدلاً من ذلك، يعتمد على:
+  - **البيانات (`data`)**: يتم تمريرها مباشرة للعرض.
+  - **الحقول (`fields` أو `arrayFields`)**: تحدد كيفية عرض البيانات.
+  - **حالة النافذة**: يتم التحكم بها عبر `show` و`handleClose`.
+
+### كيفية استخدام المكون
+يُستخدم المكون لعرض تفاصيل سجل معين (مثل نموذج أو منتج) في نافذة حوار. يتم تمرير البيانات والحقول المطلوبة لتخصيص العرض. مثال من `TableTemplate`:
+```javascript
+<DialogShow
+  show={openShow}
+  handleClose={() => {
+    setOpenShow(false);
+    setSelectedTemplate(null);
+  }}
+  data={selectedTemplate}
+  fields={TemplateFieldsShow}
+/>
+```
+- **السياق**: يُستخدم عادةً مع جدول (مثل `DynamicTable`) حيث يتم تحديد سجل لعرض تفاصيله (مثل نموذج في `TableTemplate`).
+- **التكامل**: يُدمج مع البيانات المستردة من واجهات برمجية (مثل `useGetTemplatesQuery`) لعرض التفاصيل.
+
+### التوابع الموجودة ووظيفة كل منها
+1. **`getNestedValue(obj, path)`**:
+   - **الوظيفة**: دالة مساعدة للوصول إلى الخصائص المتداخلة في كائن باستخدام مسار (مثل `created_at`).
+   - **المدخلات**:
+     - `obj`: الكائن الذي يتم البحث فيه.
+     - `path`: سلسلة تمثل المسار إلى الخاصية.
+   - **المخرجات**: القيمة الموجودة في المسار المحدد أو `undefined` إذا لم توجد.
+   - **التفاصيل**: تتضمن معالجة الأخطاء لتجنب الانهيار عند الوصول إلى مسارات غير صالحة.
+
+2. **`DialogShow`** (المكون الرئيسي):
+   - **الوظيفة**: يعرض نافذة حوار لعرض تفاصيل البيانات، سواء كانت كائنًا واحدًا أو مصفوفة، مع دعم التمرير وحالات التحميل.
+   - **المدخلات** (props):
+     - `show`: للتحكم في عرض النافذة.
+     - `handleClose`: لإغلاق النافذة.
+     - `data`: البيانات المراد عرضها (كائن أو مصفوفة).
+     - `fields`: الحقول لعرض كائن واحد.
+     - `arrayKey`: اسم القسم لعرض مصفوفة.
+     - `arrayFields`: الحقول لعرض عناصر المصفوفة.
+     - `loading`: لحالة التحميل.
+   - **المخرجات**: لا يُرجع قيمة، بل يعرض النافذة مع البيانات المُنَسَّقة.
+
+### ملاحظات إضافية
+- **حالة التحميل**: عندما تكون `loading` صحيحة، يعرض هياكل عظمية (skeletons) لتحسين تجربة المستخدم.
+- **التنسيق**: يدعم تنسيق القيم باستخدام دالة `format` في `fields` أو `arrayFields` (مثل تحويل التواريخ باستخدام `date-fns`).
+- **التخصيص**: يسمح بإضافة أيقونات لكل حقل باستخدام `icon`، مما يعزز الواجهة البصرية.
+- **معالجة خاصة**: يحتوي على معالجة خاصة للحقل `type` في `arrayKey="products"` باستخدام `productTypeMap` لتحويل القيم إلى نصوص مفهومة.
+
+---
+
+## In English
+
+### General Concept of the Code
+The `DialogShow` component is a React component that utilizes the `shadcn/ui` library along with additional libraries like `date-fns` and `@iconify/react` to create a dialog for displaying data details in a structured manner. Its purpose is to provide a clean, flexible user interface for viewing details of either a single object or an array of objects, with support for vertical scrolling, loading states, and value formatting. The component supports right-to-left (RTL) layouts for Arabic and allows customization of displayed fields using icons and format functions. It is typically used to show details of a specific record (e.g., a template or product) in data management applications.
+
+### Props Received and Their Roles
+The component accepts the following props:
+1. **`show` (Type: boolean)**:
+   - **Role**: Controls the visibility of the dialog (`true` to open, `false` to close).
+   - **Example**: `show={openShow}` in `TableTemplate`.
+2. **`handleClose` (Type: function)**:
+   - **Role**: A function called when the dialog is closed (via the "Close" button or dialog close).
+   - **Example**: `handleClose={() => setOpenShow(false)}`.
+3. **`data` (Type: object | array)**:
+   - **Role**: The data to display. Can be a single object (for a single record’s details) or an array of objects (for a list, e.g., products).
+   - **Example**: `data={selectedTemplate}` in `TableTemplate`.
+4. **`fields` (Type: array, optional)**:
+   - **Role**: An array of objects defining the fields to display when `data` is a single object. Each field includes:
+     - `key`: The data key (supports nested properties like `created_at`).
+     - `label`: The display label for the field.
+     - `icon`: An icon (from `@iconify/react`) shown next to the field.
+     - `format` (optional): A function to format the value before display (e.g., formatting a date).
+   - **Example**: See `TemplateFieldsShow` above.
+5. **`arrayKey` (Type: string, optional)**:
+   - **Role**: The name of the section displayed when `data` is an array (e.g., `"products"` for a list of products).
+   - **Example**: Not used in `TableTemplate` but supported.
+6. **`arrayFields` (Type: array, optional)**:
+   - **Role**: An array of objects defining the fields to display for each item in `data` when it is an array. Same structure as `fields`.
+   - **Example**: Not used in `TableTemplate` but supported.
+7. **`loading` (Type: boolean)**:
+   - **Role**: Indicates the loading state. If `true`, displays skeletons instead of data.
+   - **Example**: Not used in `TableTemplate` but supported.
+
+### Shape of the Data Received
+- **Data (`data`)**:
+  - **Single Object**: When using `fields`, `data` should be an object with keys matching `field.key`. Example from `TableTemplate`:
+    ```javascript
+    {
+      id: "1",
+      model: "Model A",
+      type: "Type 1",
+      size: "10x20",
+      printing_space: 50,
+      advertising_space: 40,
+      created_at: "2023-10-01T12:00:00Z"
+    }
+    ```
+  - **Array**: When using `arrayKey` and `arrayFields`, `data` should be an array of objects, each with keys matching `arrayFields.key`. Example:
+    ```javascript
+    [
+      { id: "1", type: "Local", price: 100 },
+      { id: "2", type: "Foreign", price: 150 }
+    ]
+    ```
+- **Fields (`fields` or `arrayFields`)**:
+  - An array of objects defining how to display the data. Example from `TemplateFieldsShow`:
+    ```javascript
+    [
+      { label: "Model", key: "model", icon: "mdi:shape-outline" },
+      { label: "Type", key: "type", icon: "mdi:format-list-bulleted-type" },
+      { label: "Size", key: "size", icon: "mdi:ruler-square" },
+      { label: "Print Space", key: "printing_space", icon: "mdi:image-area", format: (value) => `${value}m²` },
+      { label: "Ad Space", key: "advertising_space", icon: "mdi:image-area", format: (value) => `${value}m²` },
+      { label: "Created", key: "created_at", icon: "mdi:calendar", format: (value) => format(new Date(value), "MMM dd, yyyy") }
+    ]
+    ```
+
+### Shape of the Data Sent
+- The component does not send data, as it is designed for display only. It does not include a form or data submission mechanism and is used solely to present the data passed via `data`.
+
+### Shape of Initial Data
+- The component does not require initial data for fields since it does not include a data entry form. Instead, it relies on:
+  - **Data (`data`)**: Passed directly for display.
+  - **Fields (`fields` or `arrayFields`)**: Define how to display the data.
+  - **Dialog State**: Controlled via `show` and `handleClose`.
+
+### How to Use the Component
+The component is used to display details of a specific record (e.g., a template or product) in a dialog. The required data and fields are passed to customize the display. Example from `TableTemplate`:
+```javascript
+<DialogShow
+  show={openShow}
+  handleClose={() => {
+    setOpenShow(false);
+    setSelectedTemplate(null);
+  }}
+  data={selectedTemplate}
+  fields={TemplateFieldsShow}
+/>
+```
+- **Context**: Typically used with a table (e.g., `DynamicTable`) where a record is selected to view its details (e.g., a template in `TableTemplate`).
+- **Integration**: Integrated with data fetched from APIs (e.g., `useGetTemplatesQuery`) to display details.
+
+### Available Functions and Their Purposes
+1. **`getNestedValue(obj, path)`**:
+   - **Purpose**: A utility function to access nested properties in an object using a dot-separated path (e.g., `created_at`).
+   - **Inputs**:
+     - `obj`: The object to search in.
+     - `path`: A string representing the path to the property.
+   - **Output**: The value at the specified path or `undefined` if it doesn’t exist.
+   - **Details**: Includes error handling to prevent crashes when accessing invalid paths.
+
+2. **`DialogShow`** (Main Component):
+   - **Purpose**: Displays a dialog for viewing details of a single object or an array of objects, with support for scrolling and loading states.
+   - **Inputs** (props):
+     - `show`: Controls dialog visibility.
+     - `handleClose`: Closes the dialog.
+     - `data`: The data to display (object or array).
+     - `fields`: Fields for displaying a single object.
+     - `arrayKey`: Section name for displaying an array.
+     - `arrayFields`: Fields for array items.
+     - `loading`: Indicates loading state.
+   - **Output**: Does not return a value; displays the dialog with formatted data.
+
+### Additional Notes
+- **Loading State**: When `loading` is true, displays skeletons to enhance user experience.
+- **Formatting**: Supports value formatting via the `format` function in `fields` or `arrayFields` (e.g., formatting dates with `date-fns`).
+- **Customization**: Allows adding icons to each field using `icon`, enhancing the visual interface.
+- **Special Handling**: Includes special handling for the `type` field when `arrayKey="products"` using `productTypeMap` to convert values to readable text.
