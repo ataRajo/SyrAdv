@@ -10,26 +10,27 @@ export const PaymentsSlice = createApi({
     getPayments: builder.query({
       query: ({ is_received } = {}) => {
         const params = new URLSearchParams();
-        if (typeof is_received === "boolean") params.append("is_received", is_received);
+        if (typeof is_received === "boolean")
+          params.append("is_received", is_received);
 
         const queryString = params.toString();
         return `/payments${queryString ? `?${queryString}` : ""}`;
       },
       providesTags: ["payments"],
     }),
-   getTotalPaymentAndRemaining: builder.query({
-  query: ({ from_date, to_date } = {}) => {
-    const params = new URLSearchParams();
-    if (from_date) params.append("from_date", from_date);
-    if (to_date) params.append("to_date", to_date); 
+    getTotalPaymentAndRemaining: builder.query({
+      query: ({ from_date, to_date } = {}) => {
+        const params = new URLSearchParams();
+        if (from_date) params.append("from_date", from_date);
+        if (to_date) params.append("to_date", to_date);
 
-    const queryString = params.toString();
-    return `/get-total-payment-and-remaining${
-      queryString ? `?${queryString}` : ""
-    }`;
-  },
-  providesTags: ["payments"],
-}),
+        const queryString = params.toString();
+        return `/get-total-payment-and-remaining${
+          queryString ? `?${queryString}` : ""
+        }`;
+      },
+      providesTags: ["payments"],
+    }),
     addNewPayment: builder.mutation({
       query: (data) => {
         return {
@@ -48,13 +49,14 @@ export const PaymentsSlice = createApi({
       }),
       invalidatesTags: ["payments"],
     }),
-     deletePayment: builder.mutation({
+    deletePayment: builder.mutation({
       query: (id) => {
-        return({
-        url: `payments/${id}`,
-        method: "POST",
-        body:{"_method": "DELETE"}
-      })},
+        return {
+          url: `payments/${id}`,
+          method: "POST",
+          body: { _method: "DELETE" },
+        };
+      },
       invalidatesTags: ["payments"],
     }),
   }),

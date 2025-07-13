@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useFormik, Formik, Form, FieldArray } from "formik";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,13 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Select from "react-select"; 
+import Select from "react-select";
 import { showToast } from "../../Notifictions/showToast";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { Textarea } from "@/Components/ui/textarea";
 import ReactQuill from "react-quill-new";
-import "react-quill-new/dist/quill.snow.css"; 
+import "react-quill-new/dist/quill.snow.css";
+import { Eye, EyeOff } from "lucide-react";
 
 const DynamicDialog = ({
   show,
@@ -28,16 +29,25 @@ const DynamicDialog = ({
   initialValues,
   selectData = {},
   id = null,
-  styles="overflow-y-auto",
+  styles = "overflow-y-auto",
   onSubmitTransform = (values) => values,
-  onFieldChange  = () => {}
+  onFieldChange = () => {},
 }) => {
   const hasNotifiedRef = useRef(false);
   const [mutate, { isLoading, isSuccess, isError, error }] = mutationHook();
 
+  // State to manage password visibility for each password field
+  const [passwordVisibility, setPasswordVisibility] = useState({});
+
+  // Function to toggle password visibility
+  const togglePasswordVisibility = (fieldName) => {
+    setPasswordVisibility((prev) => ({
+      ...prev,
+      [fieldName]: !prev[fieldName],
+    }));
+  };
 
   const renderField = (field, formik) => {
-
     switch (field.type) {
       case "select":
         const options = field.options || (selectData[field.dataKey]?.data || []);
@@ -53,17 +63,18 @@ const DynamicDialog = ({
             <Select
               options={selectOptions}
               value={selectOptions.find((opt) => opt.value === formik.values[field.name]) || null}
-              onChange={(selectedOption) =>{ 
+              onChange={(selectedOption) => {
                 const value = selectedOption ? selectedOption.value : "";
                 formik.setFieldValue(field.name, selectedOption ? selectedOption.value : "")
-              onFieldChange(field.name , value)}}
+                onFieldChange(field.name, value)
+              }}
               onBlur={() => formik.setFieldTouched(field.name, true)}
               placeholder={`اختر ${field.label}`}
               isSearchable={true}
               autoFocus={true}
               noOptionsMessage={() => "لا توجد خيارات مطابقة"}
               menuPlacement="auto"
-              
+
               styles={{
                 control: (base) => ({
                   ...base,
@@ -93,8 +104,8 @@ const DynamicDialog = ({
                   backgroundColor: isSelected
                     ? "#2563eb"
                     : isFocused
-                    ? "primary"
-                    : "white",
+                      ? "primary"
+                      : "white",
                   color: isSelected ? "white" : "black",
                   cursor: "pointer",
                 }),
@@ -166,7 +177,7 @@ const DynamicDialog = ({
               name={field.name}
               value={formik.values[field.name] || ""}
               onChange={formik.handleChange}
-              onBlur={ formik.handleBlur}
+              onBlur={formik.handleBlur}
               dir={field.dir || "rtl"}
               placeholder={field.placeholder || `أدخل ${field.label}`}
               className={formik.touched[field.name] && formik.errors[field.name] ? "border-destructive" : ""}
@@ -189,6 +200,35 @@ const DynamicDialog = ({
               placeholder={field.placeholder || `أدخل ${field.label}`}
               className={formik.touched[field.name] && formik.errors[field.name] ? "border-destructive" : ""}
             />
+            {formik.touched[field.name] && formik.errors[field.name] && (
+              <p className="text-sm text-destructive">{formik.errors[field.name]}</p>
+            )}
+          </div>
+        );
+      case "password":
+        const isPasswordVisible = passwordVisibility[field.name];
+        return (
+          <div key={field.name} className="space-y-2">
+            <Label htmlFor={field.name}>{field.label}</Label>
+            <div className="relative">
+              <Input
+                id={field.name}
+                name={field.name}
+                type={isPasswordVisible ? "text" : "password"}
+                value={formik.values[field.name] || ""}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                dir={field.dir || "rtl"}
+                className={formik.touched[field.name] && formik.errors[field.name] ? "border-destructive pl-10" : "pl-10"}
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 left-0 pr-3 flex items-center text-gray-500"
+                onClick={() => togglePasswordVisibility(field.name)}
+              >
+                {isPasswordVisible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
             {formik.touched[field.name] && formik.errors[field.name] && (
               <p className="text-sm text-destructive">{formik.errors[field.name]}</p>
             )}
@@ -217,13 +257,10 @@ const DynamicDialog = ({
   };
 
   return (
-    <Dialog  open={show} onOpenChange={handleClose}>
-      <DialogContent   className={`sm:max-w-[500px] max-h-[600px] dialog-content  ${styles } p-6`} dir="rtl">
+    <Dialog open={show} onOpenChange={handleClose}>
+      <DialogContent className={`sm:max-w-[500px] max-h-[600px] dialog-content ${styles} p-6`} dir="rtl">
         <DialogHeader>
           <DialogTitle className="text-center">{title}</DialogTitle>
-          {/* <DialogDescription>
-            قم بإدخال بيانات النموذج لإضافته أو تعديله.
-          </DialogDescription> */}
         </DialogHeader>
         <Formik
           initialValues={initialValues}
@@ -233,10 +270,10 @@ const DynamicDialog = ({
             try {
               const transformed = onSubmitTransform(values);
               await mutate(id ? { id, data: transformed } : transformed).unwrap();
-              showToast("success" , "تمت المهمة بنجاح")
+              showToast("success", "تمت المهمة بنجاح");
             } catch (err) {
               console.error("Mutation error:", err);
-              showToast("error" , `  لقد حدث خطأ غير متوقع ${err.data.message}`)
+              showToast("error", ` لقد حدث خطأ غير متوقع ${err.data.message}`);
             }
             handleClose();
           }}

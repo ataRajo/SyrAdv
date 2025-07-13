@@ -1,10 +1,9 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { baseQueryWithReauth } from "../Global";
-import { BASE_URL } from "../../../Api/baseUrl";
 
 export const BookingSlice = createApi({
   reducerPath: "booking",
-  baseQuery:baseQueryWithReauth,
+  baseQuery: baseQueryWithReauth,
   tagTypes: ["bookings"],
   endpoints: (builder) => ({
     getBooking: builder.query({
@@ -23,7 +22,6 @@ export const BookingSlice = createApi({
     }),
     calculateReservation: builder.mutation({
       query: (data) => {
-        
         return {
           url: "get-calculate-Amount",
           method: "POST",
@@ -35,7 +33,6 @@ export const BookingSlice = createApi({
     getOneBookings: builder.query({
       query: (id) => `bookings/${id}`,
       providesTags: ["bookings"],
-
     }),
 
     updateBookings: builder.mutation({
@@ -43,27 +40,29 @@ export const BookingSlice = createApi({
         return {
           url: `bookings/${data.id}`,
           method: "POST",
-          body: { ...data, "_method": "PUT" },
+          body: { ...data, _method: "PUT" },
         };
       },
       invalidatesTags: ["bookings"],
     }),
     deleteBooking: builder.mutation({
       query: (id) => {
-        return({
-        url: `bookings/${id}`,
-        method: "POST",
-        body:{"_method": "DELETE"}
-      })},
+        return {
+          url: `bookings/${id}`,
+          method: "POST",
+          body: { _method: "DELETE" },
+        };
+      },
       invalidatesTags: ["bookings"],
     }),
-  cancelBooking: builder.mutation({
+    cancelBooking: builder.mutation({
       query: (id) => {
-        return({
-        url: `cancel-booking/${id}`,
-        method: "POST",
-        body:{}
-      })},
+        return {
+          url: `cancel-booking/${id}`,
+          method: "POST",
+          body: {},
+        };
+      },
       invalidatesTags: ["bookings"],
     }),
   }),

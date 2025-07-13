@@ -1,12 +1,9 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import { BASE_URL } from "../../../Api/baseUrl.jsx";
 import { baseQueryWithReauth } from "../Global.jsx";
-
-
 
 export const UsersSlice = createApi({
   reducerPath: "superAdminsApi",
-  baseQuery:baseQueryWithReauth,
+  baseQuery: baseQueryWithReauth,
   tagTypes: ["users"],
   endpoints: (builder) => ({
     getUsers: builder.query({
@@ -26,7 +23,6 @@ export const UsersSlice = createApi({
       },
       invalidatesTags: ["users"],
     }),
-    // new new
     showOneUsers: builder.query({
       query: (id) => `/users/${id}`,
       providesTags: ["users"],

@@ -1,14 +1,13 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { baseQueryWithReauth } from "../Global";
 
-
 export const RoadSignsSlice = createApi({
   reducerPath: "roadSigns",
-  baseQuery:baseQueryWithReauth,
+  baseQuery: baseQueryWithReauth,
   tagTypes: ["RoadSigns"],
   endpoints: (builder) => ({
     getRoadSigns: builder.query({
-      query: ({ start_date, end_date, city_id, region_id , model } = {}) => {
+      query: ({ start_date, end_date, city_id, region_id, model } = {}) => {
         const params = new URLSearchParams();
         if (start_date) params.append("start_date", start_date);
         if (end_date) params.append("end_date", end_date);
@@ -66,5 +65,5 @@ export const {
   useUpdateRoadSignMutation,
   useAddRoadSignMutation,
   useGetTemplateProductsQuery,
-  useGetRoadSignsModelQuery
+  useGetRoadSignsModelQuery,
 } = RoadSignsSlice;

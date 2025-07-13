@@ -9,10 +9,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "react-router";
-import { useEffect } from "react";
+import { Link, useNavigate } from "react-router";  
+import { useEffect, useState } from "react";  
 import { useLoginMutation } from "../../RtkQuery/Slice/Auth/AuthApi";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react"; 
 import { Toaster } from "react-hot-toast";
 import { showToast } from "../../utils/Notifictions/showToast";
 import { useFormik } from "formik";
@@ -30,6 +30,10 @@ const LoginSchema = Yup.object().shape({
 export function Login({ className, ...props }) {
   const [login, { isLoading }] = useLoginMutation();
   const navigate = useNavigate();
+
+  // State to manage password visibility
+  const [showPassword, setShowPassword] = useState(false);
+
   const formik = useFormik({
     initialValues: {
       username: "",
@@ -48,10 +52,9 @@ export function Login({ className, ...props }) {
       } catch (error) {
         showToast("error", error.data?.message || "حدث خطأ غير متوقع");
       }
-
       setSubmitting(false);
     },
-  }); 
+  });
 
   useEffect(() => {
     if (formik.errors.username && formik.touched.username) {
@@ -65,12 +68,12 @@ export function Login({ className, ...props }) {
   return (
     <div
       className={cn(
-        "flex w-full  min-h-screen justify-center flex-col items-center gap-6",
+        "flex w-full min-h-screen justify-center flex-col items-center gap-6",
         className
       )}
       {...props}
     >
-      <Card className="w-full  max-w-md">
+      <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl text-center">Login</CardTitle>
         </CardHeader>
@@ -98,17 +101,27 @@ export function Login({ className, ...props }) {
                     كلمة المرور
                   </Label>
                 </div>
-
-                <Input
-                  id="password"
-                  value={formik.values.password}
-                  name="password"
-                  placeholder="كلمة المرور"
-                  type="password"
-                  required
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                />
+                {/* Password input with toggle functionality */}
+                <div className="relative">
+                  <Input
+                    id="password"
+                    value={formik.values.password}
+                    name="password"
+                    placeholder="كلمة المرور"
+                    type={showPassword ? "text" : "password"} // Toggle type based on state
+                    required
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="pl-10" // Add padding for the eye icon
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 left-0 pr-3 flex items-center text-gray-500"
+                    onClick={() => setShowPassword((prev) => !prev)} // Toggle password visibility
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
               </div>
               <Button
                 type="submit"
@@ -123,7 +136,7 @@ export function Login({ className, ...props }) {
 
               <Link
                 to="#"
-                onClick={showToast("error" , "يرجى التواصل مع المدير")}
+                onClick={() => showToast("error", "يرجى التواصل مع المدير")}
                 className="ml-auto text-center inline-block text-sm underline-offset-4 hover:underline"
               >
                 هل نسيت كلمة المرور ؟{" "}

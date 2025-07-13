@@ -1,12 +1,9 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { baseQueryWithReauth } from "../Global";
-import { BASE_URL } from "../../../Api/baseUrl";
-
-
 
 export const TemplateSlice = createApi({
   reducerPath: "TemplateSlice",
-  baseQuery:baseQueryWithReauth,
+  baseQuery: baseQueryWithReauth,
   tagTypes: ["Templates"],
   endpoints: (builder) => ({
     getTemplatesModel: builder.query({

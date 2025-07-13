@@ -4,7 +4,7 @@ import { BASE_URL } from "../../../Api/baseUrl.jsx";
 
 export const CustomersSlice = createApi({
   reducerPath: "customers",
-  baseQuery:baseQueryWithReauth,
+  baseQuery: baseQueryWithReauth,
   tagTypes: ["customers"],
   endpoints: (builder) => ({
     getCustomers: builder.query({

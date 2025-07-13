@@ -3,7 +3,7 @@ import { baseQueryWithReauth } from "../Global";
 
 export const AuthSlice = createApi({
   reducerPath: "auth",
-  baseQuery:baseQueryWithReauth,
+  baseQuery: baseQueryWithReauth,
   tagTypes: ["profile", "companies"],
   endpoints: (builder) => ({
     login: builder.mutation({
@@ -27,8 +27,6 @@ export const AuthSlice = createApi({
     }),
     updateProfile: builder.mutation({
       query: (data) => {
-        data["_method"] = "PUT";
-
         return {
           url: "/update-profile",
           method: "POST",
