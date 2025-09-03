@@ -19,8 +19,7 @@ export function NavMain({
   const isActive = (url) => {
     return pathname === url || pathname.startsWith(`${url}/`)
   }
-
-  return (
+   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-1">
         <SidebarMenu>
@@ -28,7 +27,7 @@ export function NavMain({
           </SidebarMenuItem> */}
         </SidebarMenu>
         <SidebarMenu className="space-y-1">
-          {items?.map((item) => (
+          { items?.length>0 && items && items?.map((item) => (
             hasPermission(item.permission) ?
             (<Link 
               key={item.title}
