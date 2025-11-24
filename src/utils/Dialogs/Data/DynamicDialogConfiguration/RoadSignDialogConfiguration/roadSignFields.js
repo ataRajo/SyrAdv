@@ -8,6 +8,7 @@ export const roadSignFields1 = [
     valueKey: "id",
     displayKey: "model",
   },
+
     {
     name: "city_id",
     label: "المدينة",
@@ -28,10 +29,21 @@ export const roadSignFields1 = [
   },
   { name: "place", label: "مكان التموضع", type: "text", dir: "rtl" },
 
-  { name: "direction_one", label: "الإتجاه الأول ", type: "text", dir: "rtl" },
+  { name: "direction_one", label: "الإتجاه للوجه الأول ", type: "text", dir: "rtl" },
 
-  { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
+ // { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
 
+
+  {
+    name: "image",
+    label: "صورة اللوحة",
+    type: "file",
+    accept: "image/*",
+  },
+   {
+    name: "map",
+    type:"map"
+  },
 
 ];
 
@@ -74,6 +86,16 @@ export const roadSignFields2 = [
 
   { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
 
+  {
+    name: "image",
+    label: "صورة اللوحة",
+    type: "file",
+    accept: "image/*",
+  },
+   {
+    name: "map",
+    type:"map"
+  },
  
 ];
 
@@ -99,7 +121,7 @@ export const roadSignFieldsEdit = [
     displayKey: "name",
   },
 
-  { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
+  // { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
   // {
   //   name: "template_id",
   //   label: "نوع النموذج",
@@ -108,6 +130,17 @@ export const roadSignFieldsEdit = [
   //   dataKey: "template_id",
   //   valueKey: "id",
   //   displayKey: "model",
+  // },
+
+  // {
+  //   name: "image",
+  //   label: "صورة اللوحة",
+  //   type: "file",
+  //   accept: "image/*",
+  // },
+  // {
+  //   name: "map",
+  //   type:"map"
   // },
 
 

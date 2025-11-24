@@ -1,62 +1,69 @@
 import { useAddNewPaymentMutation } from "../../../../RtkQuery/Slice/Payments/PaymentsApi";
-import { useGetCustomersQuery } from "../../../../RtkQuery/Slice/Customers/CustomersApi";
-import { PaymentFields } from "../../Data/DynamicDialogConfiguration/PaymentsDialogConfiguration/PaymentFields";
-import { PaymentInitialValues } from "../../Data/DynamicDialogConfiguration/PaymentsDialogConfiguration/PaymentInitialValues";
-import { PaymentValidationSchema } from "../../Data/DynamicDialogConfiguration/PaymentsDialogConfiguration/PaymentValidationSchema";
+import { useGetBookingQuery } from "../../../../RtkQuery/Slice/Booking/BookingApi";
 import DynamicDialog from "../DynamicDialog";
+import * as Yup from "yup";
+import { PaymentInitialValues } from "../../Data/DynamicDialogConfiguration/PaymentsDialogConfiguration/PaymentInitialValues";
 
-export const DialogAddPayments = ({ show, handleClose, id }) => {
-  const { data: customersData, isSuccess: isCustomersSuccess } = useGetCustomersQuery();
+// Validation schema
+export const PaymentValidationSchema = Yup.object({
+  paid: Yup.number()
+    .required("المبلغ المدفوع مطلوب")
+    .positive("المبلغ يجب أن يكون موجبًا")
+    .typeError("يجب أن يكون المبلغ رقمًا"),
+  payment_number: Yup.string().required("رقم الدفعة مطلوب"),
+  booking_id: Yup.string().required("يجب اختيار رقم الحجز"),
+  payment_image: Yup.mixed().required("صورة الدفعة مطلوبة"),
+});
 
-  // Find the customer only if id is provided and data is available
-  const customer = isCustomersSuccess && id
-    ? customersData?.find((customer) => String(customer.id) === String(id))
-    : undefined;
+// Fields configuration
+export const PaymentFields = [
+  { name: "paid", label: "المبلغ المدفوع", type: "number" },
+  { name: "payment_number", label: "رقم الدفعة", type: "text" },
+  {
+    name: "booking_id",
+    label: "رقم الحجز",
+    type: "select",
+    dataKey: "reservations",
+    valueKey: "id",
+    displayKey: "booking_number", // Booking number display
+  },
+  { name: "payment_image", label: "صورة الدفعة", type: "file", accept: "image/*" },
+];
 
-  // Prepare selectData based on whether an ID is provided
+export const DialogAddPayments = ({ show, handleClose }) => {
+  const { data: bookingsData, isSuccess: isBookingsSuccess } = useGetBookingQuery();
+  const [addPayment] = useAddNewPaymentMutation();
+
+  // Map bookings to select data
   const selectData = {
-    customers: {
-      data: [], // Initialize with an empty array
+    reservations: {
+      data: bookingsData?.map((b) => ({
+        id: String(b.id),
+        booking_number: `رقم الحجز: ${b.id} - ${b.customer?.company_name || b.customer?.full_name || ""}`,
+      })) || [],
     },
   };
 
-  if (isCustomersSuccess && customersData) {
-    if (id && customer) {
-      // If an ID is provided and a customer is found, use only that customer
-      selectData.customers.data = [
-        {
-          id: String(customer.id),
-          name: customer.company_name,
-        },
-      ];
-    } else if (!id) {
-      // If no ID is provided, map all customers
-      selectData.customers.data = customersData.map((customer) => ({
-        id: String(customer.id),
-        name: customer.company_name,
-      }));
-    }
-  }
-
+  // Transform form values to FormData
   const onSubmitTransform = (values) => {
     const formData = new FormData();
     formData.append("paid", values.paid);
     formData.append("payment_number", values.payment_number);
-    formData.append("customer_id", values.customer_id);
-    if (values.payment_image) {
-      formData.append("payment_image", values.payment_image);
-    }
+    formData.append("booking_id", values.booking_id);
+    if (values.payment_image) 
+    formData.append("payment_image", values.payment_image);
     return formData;
   };
 
   return (
+
     <DynamicDialog
       show={show}
       handleClose={handleClose}
       title="إضافة دفعة"
       fields={PaymentFields}
       validationSchema={PaymentValidationSchema}
-      mutationHook={useAddNewPaymentMutation}
+      mutationHook={() => [addPayment, { isLoading: false }]}
       initialValues={PaymentInitialValues}
       selectData={selectData}
       onSubmitTransform={onSubmitTransform}

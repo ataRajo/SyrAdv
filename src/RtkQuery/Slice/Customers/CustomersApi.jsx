@@ -19,6 +19,7 @@ export const CustomersSlice = createApi({
       }),
       invalidatesTags: ["customers"],
     }),
+    
     addDiscount: builder.mutation({
       query: (data) => ({
         url: "discounts",
@@ -47,8 +48,20 @@ export const CustomersSlice = createApi({
       }),
       invalidatesTags: ["customers"],
     }),
+
+    // 🆕  endpoint for updating status
+   updateCustomerStatus: builder.mutation({
+  query: ({ id, status }) => ({
+    url: `customers/${id}/update-status`,
+    method: "POST",
+    body: { status }, // ✅ your backend should accept this field
+  }),
+  invalidatesTags: ["customers"],
+    }),
   }),
 });
+
+
 
 export const {
   useGetCustomersQuery,
@@ -57,4 +70,5 @@ export const {
   useDeleteCustomerMutation,
   useUpdateCustomerMutation,
   useAddDiscountMutation,
+  useUpdateCustomerStatusMutation, // <-- 🆕 Export hook here
 } = CustomersSlice;

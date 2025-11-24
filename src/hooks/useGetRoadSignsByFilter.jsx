@@ -84,7 +84,7 @@ const useGetRoadSignsByFilter = () => {
     setCityId,
     regionId,
     setRegionId,
-    roadSigns,
+    roadSigns:roadSigns?.data,
     isError,
     cities,
     isCitiesLoading,

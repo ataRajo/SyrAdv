@@ -5,6 +5,27 @@ const ProductType = {
 };
 
 export const RoadSignColumns = [
+   {
+    header: "اسم العميل",
+    accessor: "bookings",
+    prefixIcon: "mdi:account",
+    className: "min-w-[100px] sm:min-w-[120px] md:min-w-[140px]",
+    priority: 5,
+    // More robust format function
+    format: (bookings) => {
+      if (!bookings || !Array.isArray(bookings) || bookings.length === 0) {
+        return "لا يوجد حجوزات";
+      }
+      
+      // Get the first booking's customer full_name
+      const firstBooking = bookings[0];
+      if (firstBooking?.customer?.full_name) {
+        return firstBooking.customer.full_name;
+      }
+      
+      return "لا يوجد حجوزات";
+    },
+  },
 
   {
     header: "نموذج",
@@ -17,7 +38,6 @@ export const RoadSignColumns = [
     header: "القياس",
     accessor: "template.size",
     prefixIcon: "mdi:ruler-square",
-    // format: (value) => `$${parseFloat(value).toFixed(2)}`,
     className: "text-right min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
     cellClassName: "text-right font-mono",
     priority: 7,
@@ -44,10 +64,10 @@ export const RoadSignColumns = [
     priority: 10,
   },
   {
-    header: "  الإتجاه",
+    header: "الإتجاه",
     accessor: "directions",
     prefixIcon: "mdi:compass",
-    className: "text-right min-w-[80px]  sm:min-w-[100px] md:min-w-[120px]",
+    className: "text-right min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
     cellClassName: "text-right font-mono",
     priority: 6,
   },
@@ -58,7 +78,4 @@ export const RoadSignColumns = [
     className: "min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
     priority: 8,
   },
-
-
-
 ];

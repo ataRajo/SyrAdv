@@ -9,6 +9,7 @@ export const roadSignValidationSchema1 = Yup.object({
     .required("عدد اللوحات مطلوب")
     .min(0, "يجب أن يكون عدد اللوحات أكبر من 0"),
   template_id: Yup.number().required("نوع المنتج مطلوب"),
+  image:Yup.string().nullable("")
 });
 
 
@@ -22,6 +23,8 @@ export const roadSignValidationSchema2 = Yup.object({
     .required("عدد اللوحات مطلوب")
     .min(0, "يجب أن يكون عدد اللوحات أكبر من 0"),
   template_id: Yup.number().required("نوع المنتج مطلوب"),
+  image:Yup.string().nullable("الصورة  مطلوب")
+
 });
 
 
@@ -33,5 +36,7 @@ export const roadSignValidationSchemaEdit = Yup.object({
   panels_number: Yup.number()
     .required("عدد اللوحات مطلوب")
     .min(0, "يجب أن يكون عدد اللوحات أكبر من 0"),
+  image:Yup.string().nullable("الصورة  مطلوب")
+
   // template_id: Yup.number().required("نوع المنتج مطلوب"),
 });

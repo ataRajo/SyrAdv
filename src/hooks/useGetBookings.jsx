@@ -8,7 +8,7 @@ import {
 import { useNavigate } from "react-router";
 import { useAuth } from "../Context/AuthProvider";
 import { Permissions } from "../Static/StaticData";
-
+import { useEffect } from "react";
 const useGetBookings = () => {
   const { data, isLoading } = useGetBookingQuery();
   const navigate = useNavigate();
@@ -47,6 +47,11 @@ const useGetBookings = () => {
     }
     setOpenCancelBooking(false);
   }, [cancelBooking, selectBooking?.id]);
+
+useEffect(() => {
+  console.log("Bookings list:", data);
+}, [data]);
+
 
   const onConfirmDelete = useCallback(async () => {
     try {

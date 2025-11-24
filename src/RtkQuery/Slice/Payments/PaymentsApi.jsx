@@ -1,71 +1,83 @@
-import { createApi } from "@reduxjs/toolkit/query/react";
-import { baseQueryWithReauth } from "../Global";
-import { BASE_URL } from "../../../Api/baseUrl";
+  import { createApi } from "@reduxjs/toolkit/query/react";
+  import { baseQueryWithReauth } from "../Global";
+  import { BASE_URL } from "../../../Api/baseUrl";
 
-export const PaymentsSlice = createApi({
-  reducerPath: "payments",
-  baseQuery: baseQueryWithReauth,
-  tagTypes: ["payments"],
-  endpoints: (builder) => ({
-    getPayments: builder.query({
-      query: ({ is_received } = {}) => {
-        const params = new URLSearchParams();
-        if (typeof is_received === "boolean")
-          params.append("is_received", is_received);
+  export const PaymentsSlice = createApi({
+    reducerPath: "payments",
+    baseQuery: baseQueryWithReauth,
+    tagTypes: ["payments"], // 👈 keep consistent lowercase
+    endpoints: (builder) => ({
+      getPayments: builder.query({
+        query: ({ is_received } = {}) => {
+          const params = new URLSearchParams();
+          if (typeof is_received === "boolean") {
+            params.append("is_received", is_received);
+          }
 
-        const queryString = params.toString();
-        return `/payments${queryString ? `?${queryString}` : ""}`;
-      },
-      providesTags: ["payments"],
-    }),
-    getTotalPaymentAndRemaining: builder.query({
-      query: ({ from_date, to_date } = {}) => {
-        const params = new URLSearchParams();
-        if (from_date) params.append("from_date", from_date);
-        if (to_date) params.append("to_date", to_date);
+          const queryString = params.toString();
+          return `/payments${queryString ? `?${queryString}` : ""}`;
+        },
+        providesTags: ["payments"],
+      }),
 
-        const queryString = params.toString();
-        return `/get-total-payment-and-remaining${
-          queryString ? `?${queryString}` : ""
-        }`;
-      },
-      providesTags: ["payments"],
-    }),
-    addNewPayment: builder.mutation({
-      query: (data) => {
-        return {
+     getTotalPaymentAndRemaining: builder.query({
+  query: ({ from_date, to_date, user_id, customer_id } = {}) => {
+    const params = new URLSearchParams();
+    if (from_date) params.append("from_date", from_date);
+    if (to_date) params.append("to_date", to_date);
+    if (user_id) params.append("user_id", user_id);
+    if (customer_id) params.append("customer_id", customer_id);
+
+    const queryString = params.toString();
+    return `/get-total-payment-and-remaining${
+      queryString ? `?${queryString}` : ""
+    }`;
+  },
+  providesTags: ["payments"],
+}),
+
+      addNewPayment: builder.mutation({
+        query: (data) => ({
           url: "payments",
           method: "POST",
           body: data,
-        };
-      },
-      invalidatesTags: ["payments"],
-    }),
-
-    confirmOnePayment: builder.mutation({
-      query: (id) => ({
-        url: `/payment-is-Received/${id}`,
-        method: "GET",
+        }),
+        invalidatesTags: ["payments"],
       }),
-      invalidatesTags: ["payments"],
-    }),
-    deletePayment: builder.mutation({
-      query: (id) => {
-        return {
+
+      updatePaymentStatus: builder.mutation({
+        query: ({ id, status }) => ({
+          url: `/payment/${id}/update-status`,
+          method: "POST",
+          body: { status },
+        }),
+        invalidatesTags: ["payments"], // 👈 fixed casing
+      }),
+
+      confirmOnePayment: builder.mutation({
+        query: (id) => ({
+          url: `/payment-is-Received/${id}`,
+          method: "GET",
+        }),
+        invalidatesTags: ["payments"],
+      }),
+
+      deletePayment: builder.mutation({
+        query: (id) => ({
           url: `payments/${id}`,
           method: "POST",
           body: { _method: "DELETE" },
-        };
-      },
-      invalidatesTags: ["payments"],
+        }),
+        invalidatesTags: ["payments"],
+      }),
     }),
-  }),
-});
+  });
 
-export const {
-  useGetPaymentsQuery,
-  useAddNewPaymentMutation,
-  useConfirmOnePaymentMutation,
-  useGetTotalPaymentAndRemainingQuery,
-  useDeletePaymentMutation,
-} = PaymentsSlice;
+  export const {
+    useGetPaymentsQuery,
+    useAddNewPaymentMutation,
+    useConfirmOnePaymentMutation,
+    useGetTotalPaymentAndRemainingQuery,
+    useDeletePaymentMutation,
+    useUpdatePaymentStatusMutation, // 👈 now properly exported
+  } = PaymentsSlice;

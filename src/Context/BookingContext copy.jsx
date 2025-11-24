@@ -187,7 +187,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
   // Remove unavailable signs
   useEffect(() => {
     if (roadSigns && selectedSigns.length > 0) {
-      const availableSignIds = new Set(roadSigns.map((sign) => sign.id));
+      const availableSignIds = new Set(roadSigns?.data?.map((sign) => sign.id));
       const unavailableSigns = selectedSigns.filter(
         (sign) => !availableSignIds.has(sign.road_sign_id)
       );

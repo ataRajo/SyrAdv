@@ -37,6 +37,10 @@ const CustomerFormDialog = ({
       address: initialData?.address || "",
       phone_number: initialData?.phone_number || "",
       commercial_registration_number: initialData?.commercial_registration_number || "",
+      email: initialData?.email || "",
+      username: initialData?.username || "",
+      password: "",
+      customer_account: initialData?.customer_account || "", // ✅ Fixed: Added customer_account
       alt_phone_number: initialData?.alt_phone_number?.length ? initialData.alt_phone_number : [""],
       is_tracking: !!(initialData?.customers && initialData.customers.length > 0),
       customer: initialData?.customers && initialData.customers.length > 0
@@ -58,10 +62,22 @@ const CustomerFormDialog = ({
       commercial_registration_number: Yup.string()
         .matches(/^[0-9]*$/, "الرجاء إدخال أرقام فقط")
         .nullable(),
+      email: Yup.string().email("البريد الإلكتروني غير صالح").required("الحقل البريد الالكتروني مطلوب."),
+      username: Yup.string().required("الحقل اسم المُستخدم مطلوب."),
+      customer_account: Yup.string() // ✅ Added validation for customer_account
+        .matches(/^[0-9]*$/, "الرجاء إدخال أرقام فقط")
+        .nullable(),
+      password: Yup.string().test(
+        'password-required-if-add',
+        'الحقل كلمة المرور مطلوب.',
+        function(value) {
+          const { id } = this.parent;
+          if (!id && !value) return false; // require if adding
+          return true;
+        }
+      ),
       alt_phone_number: Yup.array().of(
-        Yup.string()
-          .matches(/^[0-9]*$/, "الرجاء إدخال أرقام فقط!")
-          .nullable()
+        Yup.string().matches(/^[0-9]*$/, "الرجاء إدخال أرقام فقط!").nullable()
       ),
       is_tracking: Yup.boolean(),
       customer: Yup.object().shape({
@@ -74,12 +90,17 @@ const CustomerFormDialog = ({
         address: Yup.string().nullable(),
       }),
     }),
+
     onSubmit: async (values) => {
       const payload = {
         full_name: values.full_name,
         company_name: values.company_name,
         address: values.address,
         phone_number: values.phone_number,
+        email: values.email,
+        username: values.username,
+        customer_account: values.customer_account, // ✅ Added to payload
+        ...(values.password && { password: values.password }),
         alt_phone_number: values.alt_phone_number.filter(num => num && num.trim() !== ""),
         is_tracking: values.is_tracking ? 1 : 0,
         ...(values.is_tracking && values.customer.full_name && { customer: values.customer }),
@@ -94,8 +115,19 @@ const CustomerFormDialog = ({
         }
         onSuccess(); 
       } catch (error) {
-        showToast("error", error.data?.message || "حدث خطأ ما");
-        console.log(error)
+        console.error("Full customer error object:", error);
+
+        if (error?.data) {
+          console.log("API error data:", JSON.stringify(error.data, null, 2));
+
+          if (error.data.errors) {
+            Object.keys(error.data.errors).forEach((field) => {
+              formik.setFieldError(field, error.data.errors[field][0]);
+            });
+          }
+        }
+
+        showToast("error", error?.data?.message || error?.message || "حدث خطأ ما");
       }
     },
   });
@@ -109,6 +141,10 @@ const CustomerFormDialog = ({
         address: initialData?.address || "",
         phone_number: initialData?.phone_number || "",
         commercial_registration_number: initialData?.commercial_registration_number || "",
+        email: initialData?.email || "",
+        username: initialData?.username || "",
+        password: "",
+        customer_account: initialData?.customer_account || "", // ✅ Added to useEffect
         alt_phone_number: initialData?.alt_phone_number?.length ? initialData.alt_phone_number : [""],
         is_tracking: !!(initialData?.customers && initialData.customers.length > 0),
         customer: initialData?.customers && initialData.customers.length > 0
@@ -149,193 +185,135 @@ const CustomerFormDialog = ({
         </DialogHeader>
 
         <form onSubmit={formik.handleSubmit} className="space-y-4 py-4">
+          {/* Existing fields */}
           <div>
             <Label htmlFor="full_name">الاسم الكامل:</Label>
-            <Input
-              id="full_name"
-              type="text"
-              name="full_name"
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              value={formik.values.full_name}
-              className="mt-1"
-            />
-            {formik.touched.full_name && formik.errors.full_name ? (
-              <div className="text-red-500 text-sm mt-1">{formik.errors.full_name}</div>
-            ) : null}
+            <Input id="full_name" name="full_name" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.full_name} className="mt-1" />
+            {formik.touched.full_name && formik.errors.full_name && <div className="text-red-500 text-sm mt-1">{formik.errors.full_name}</div>}
           </div>
 
           <div>
             <Label htmlFor="company_name">اسم الشركة:</Label>
-            <Input
-              id="company_name"
-              type="text"
-              name="company_name"
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              value={formik.values.company_name}
-              className="mt-1"
-            />
-            {formik.touched.company_name && formik.errors.company_name ? (
-              <div className="text-red-500 text-sm mt-1">{formik.errors.company_name}</div>
-            ) : null}
+            <Input id="company_name" name="company_name" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.company_name} className="mt-1" />
+            {formik.touched.company_name && formik.errors.company_name && <div className="text-red-500 text-sm mt-1">{formik.errors.company_name}</div>}
           </div>
 
           <div>
             <Label htmlFor="address">العنوان:</Label>
-            <Input
-              id="address"
-              type="text"
-              name="address"
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              value={formik.values.address}
-              className="mt-1"
-            />
-            {formik.touched.address && formik.errors.address ? (
-              <div className="text-red-500 text-sm mt-1">{formik.errors.address}</div>
-            ) : null}
+            <Input id="address" name="address" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.address} className="mt-1" />
+            {formik.touched.address && formik.errors.address && <div className="text-red-500 text-sm mt-1">{formik.errors.address}</div>}
           </div>
 
           <div>
             <Label htmlFor="phone_number">رقم الهاتف:</Label>
-            <Input
-              id="phone_number"
-              type="text"
-              name="phone_number"
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              value={formik.values.phone_number}
-              className="mt-1"
-            />
-            {formik.touched.phone_number && formik.errors.phone_number ? (
-              <div className="text-red-500 text-sm mt-1">{formik.errors.phone_number}</div>
-            ) : null}
+            <Input id="phone_number" name="phone_number" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.phone_number} className="mt-1" />
+            {formik.touched.phone_number && formik.errors.phone_number && <div className="text-red-500 text-sm mt-1">{formik.errors.phone_number}</div>}
+          </div>
+
+          {/* New fields */}
+          <div>
+            <Label htmlFor="email">البريد الالكتروني:</Label>
+            <Input id="email" name="email" type="email" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.email} className="mt-1" />
+            {formik.touched.email && formik.errors.email && <div className="text-red-500 text-sm mt-1">{formik.errors.email}</div>}
           </div>
 
           <div>
-            <Label htmlFor="commercial_registration_number">رقم السجل التجاري (اختياري):</Label>
-            <Input
-              id="commercial_registration_number"
-              type="text"
-              name="commercial_registration_number"
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              value={formik.values.commercial_registration_number}
-              className="mt-1"
-            />
-            {formik.touched.commercial_registration_number && formik.errors.commercial_registration_number ? (
-              <div className="text-red-500 text-sm mt-1">{formik.errors.commercial_registration_number}</div>
-            ) : null}
+            <Label htmlFor="username">اسم المستخدم:</Label>
+            <Input id="username" name="username" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.username} className="mt-1" />
+            {formik.touched.username && formik.errors.username && <div className="text-red-500 text-sm mt-1">{formik.errors.username}</div>}
           </div>
 
-          <div className="space-y-2 pt-2 border-t border-gray-200 mt-4">
+          {/* ✅ Fixed: Customer Account Field */}
+          <div>
+            <Label htmlFor="customer_account">دفعة بدائية</Label>
+            <Input 
+              id="customer_account" 
+              name="customer_account" 
+              type="number" 
+              onChange={formik.handleChange} 
+              onBlur={formik.handleBlur} 
+              value={formik.values.customer_account} 
+              className="mt-1" 
+            />
+            {formik.touched.customer_account && formik.errors.customer_account && <div className="text-red-500 text-sm mt-1">{formik.errors.customer_account}</div>}
+          </div>
+
+          {!isEditMode && (
+            <div>
+              <Label htmlFor="password">كلمة المرور:</Label>
+              <Input id="password" name="password" type="password" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.password} className="mt-1" />
+              {formik.touched.password && formik.errors.password && <div className="text-red-500 text-sm mt-1">{formik.errors.password}</div>}
+            </div>
+          )}
+
+          {/* Commercial Registration Number */}
+          <div>
+            <Label htmlFor="commercial_registration_number">رقم السجل التجاري:</Label>
+            <Input id="commercial_registration_number" name="commercial_registration_number" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.commercial_registration_number} className="mt-1" />
+            {formik.touched.commercial_registration_number && formik.errors.commercial_registration_number && <div className="text-red-500 text-sm mt-1">{formik.errors.commercial_registration_number}</div>}
+          </div>
+
+          {/* Alternative Phone Numbers */}
+          <div>
             <Label>أرقام هواتف بديلة:</Label>
             {formik.values.alt_phone_number.map((phone, index) => (
-              <div key={index} className="flex items-center gap-2">
+              <div key={index} className="flex items-center gap-2 mt-2">
                 <Input
-                  type="text"
-                  name={`alt_phone_number[${index}]`}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
                   value={phone}
-                  placeholder={`رقم هاتف بديل ${index + 1}`}
-                  className="flex-grow"
+                  onChange={(e) => {
+                    const newAltPhoneNumbers = [...formik.values.alt_phone_number];
+                    newAltPhoneNumbers[index] = e.target.value;
+                    formik.setFieldValue("alt_phone_number", newAltPhoneNumbers);
+                  }}
+                  onBlur={formik.handleBlur}
+                  placeholder="رقم هاتف بديل"
                 />
                 {formik.values.alt_phone_number.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeAltPhoneNumberField(index)}
-                    className="text-red-500 hover:text-red-700"
-                  >
+                  <Button type="button" variant="outline" size="icon" onClick={() => removeAltPhoneNumberField(index)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>
             ))}
-            <Button type="button" variant="outline" onClick={addAltPhoneNumberField} className="w-full">
-              <PlusCircle className="h-4 w-4 mr-2" /> إضافة رقم هاتف بديل
+            <Button type="button" variant="outline" className="mt-2" onClick={addAltPhoneNumberField}>
+              <PlusCircle className="h-4 w-4 ml-2" />
+              إضافة رقم بديل
             </Button>
           </div>
 
-          <div className="space-y-2 pt-2 border-t border-gray-200 mt-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="is_tracking"
-                checked={formik.values.is_tracking}
-                onCheckedChange={(checked) => {
-                  formik.setFieldValue("is_tracking", checked);
-                  if (!checked) {
-                    formik.setFieldValue("customer", { full_name: "", phone_number: "", address: "" });
-                  }
-                }}
-              />
-              <Label htmlFor="is_tracking" className="cursor-pointer">تتبع مدير أعمال؟</Label>
-            </div>
-
-            {formik.values.is_tracking && (
-              <div className="space-y-2 mt-2 p-3 border rounded-md bg-gray-50 dark:bg-gray-800">
-                <div>
-                  <Label htmlFor="customer.full_name">اسم مدير الأعمال:</Label>
-                  <Input
-                    id="customer.full_name"
-                    type="text"
-                    name="customer.full_name"
-                    onChange={formik.handleChange}
-                    onBlur={formik.handleBlur}
-                    value={formik.values.customer.full_name}
-                    className="mt-1"
-                  />
-                  {formik.touched.customer?.full_name && formik.errors.customer?.full_name ? (
-                    <div className="text-red-500 text-sm mt-1">{formik.errors.customer.full_name}</div>
-                  ) : null}
-                </div>
-                <div>
-                  <Label htmlFor="customer.phone_number">رقم هاتف مدير الأعمال:</Label>
-                  <Input
-                    id="customer.phone_number"
-                    type="text"
-                    name="customer.phone_number"
-                    onChange={formik.handleChange}
-                    onBlur={formik.handleBlur}
-                    value={formik.values.customer.phone_number}
-                    className="mt-1"
-                  />
-                  {formik.touched.customer?.phone_number && formik.errors.customer?.phone_number ? (
-                    <div className="text-red-500 text-sm mt-1">{formik.errors.customer.phone_number}</div>
-                  ) : null}
-                </div>
-                <div>
-                  <Label htmlFor="customer.address">عنوان مدير الأعمال:</Label>
-                  <Input
-                    id="customer.address"
-                    type="text"
-                    name="customer.address"
-                    onChange={formik.handleChange}
-                    onBlur={formik.handleBlur}
-                    value={formik.values.customer.address}
-                    className="mt-1"
-                  />
-                  {formik.touched.customer?.address && formik.errors.customer?.address ? (
-                    <div className="text-red-500 text-sm mt-1">{formik.errors.customer.address}</div>
-                  ) : null}
-                </div>
-              </div>
-            )}
+          {/* Tracking Section */}
+          <div className="flex items-center space-x-2 space-x-reverse">
+            <Checkbox
+              id="is_tracking"
+              checked={formik.values.is_tracking}
+              onCheckedChange={(checked) => formik.setFieldValue("is_tracking", checked)}
+            />
+            <Label htmlFor="is_tracking" className="mr-2">تتبع هذا الزبون</Label>
           </div>
+
+          {formik.values.is_tracking && (
+            <div className="border p-4 rounded-md space-y-4">
+              <h3 className="font-medium">معلومات مدير الأعمال:</h3>
+              <div>
+                <Label htmlFor="customer.full_name">اسم مدير الأعمال:</Label>
+                <Input id="customer.full_name" name="customer.full_name" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.customer.full_name} className="mt-1" />
+                {formik.touched.customer?.full_name && formik.errors.customer?.full_name && <div className="text-red-500 text-sm mt-1">{formik.errors.customer.full_name}</div>}
+              </div>
+              <div>
+                <Label htmlFor="customer.phone_number">رقم هاتف مدير الأعمال:</Label>
+                <Input id="customer.phone_number" name="customer.phone_number" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.customer.phone_number} className="mt-1" />
+                {formik.touched.customer?.phone_number && formik.errors.customer?.phone_number && <div className="text-red-500 text-sm mt-1">{formik.errors.customer.phone_number}</div>}
+              </div>
+              <div>
+                <Label htmlFor="customer.address">عنوان مدير الأعمال:</Label>
+                <Input id="customer.address" name="customer.address" onChange={formik.handleChange} onBlur={formik.handleBlur} value={formik.values.customer.address} className="mt-1" />
+                {formik.touched.customer?.address && formik.errors.customer?.address && <div className="text-red-500 text-sm mt-1">{formik.errors.customer.address}</div>}
+              </div>
+            </div>
+          )}
 
           <DialogFooter className="mt-6 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                onOpenChange(false);
-              }}
-            >
-              إلغاء
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
             <Button type="submit" disabled={currentLoading}>
               {currentLoading ? "جاري الحفظ..." : (isEditMode ? "تحديث الزبون" : "حفظ الزبون")}
             </Button>

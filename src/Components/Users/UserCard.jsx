@@ -34,6 +34,7 @@ const UserCard = ({
   const [deleteUser ,{isLoading }] = useDeleteUserMutation();
   const {hasPermission} = useAuth()
 
+console.log("User permissions:", hasPermission(Permissions.DeleteUsers));
 
 
   const handleDelete = async () => {
@@ -73,9 +74,9 @@ const UserCard = ({
             <Avatar className="w-14 h-14 border-2 border-primary/20">
               <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-300 text-primary-foreground font-medium">
                 {full_name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
+                  ?.split(" ")
+                  ?.map((n) => n[0])
+                  ?.join("")}
               </AvatarFallback>
             </Avatar>
 
@@ -179,7 +180,6 @@ const UserCard = ({
               </Button>
                 )
               }
-              
             </motion.div>
           </div>
         </Card>

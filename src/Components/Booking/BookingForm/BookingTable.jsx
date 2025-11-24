@@ -52,7 +52,7 @@ const BookingTable = () => {
     setEndDate(formik.values.end_date);
   }, [formik.values.start_date, formik.values.end_date]);
 
-  console.log(dateRanges);
+  console.log(roadSigns);
   const handleShowDialog = (sign) => {
     setSelectedSign(sign);
 
@@ -309,6 +309,7 @@ const BookingTable = () => {
           <TableHeader>
             <TableRow className="bg-gray-100 dark:bg-gray-800">
               <TableHead className="text-right">نموذج</TableHead>
+              <TableHead className="text-right">نوع النموذج</TableHead>
               <TableHead className="text-right">عدد الوجوه</TableHead>
               {/* <TableHead className="text-right">عدد الوجوه المحجوزة</TableHead> */}
               <TableHead className="text-right">عدد الأمتار</TableHead>
@@ -324,18 +325,18 @@ const BookingTable = () => {
           <TableBody>
             {isRoadSignsFetching ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-4">
+                <TableCell colSpan={12} className="text-center py-4">
                   جاري التحميل...
                 </TableCell>
               </TableRow>
-            ) : !roadSigns || roadSigns.length === 0 ? (
+            ) : !roadSigns || roadSigns?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-4">
+                <TableCell colSpan={12} className="text-center py-4">
                   لا توجد لوحات متوفرة لهذه الفترة
                 </TableCell>
               </TableRow>
             ) : (
-              roadSigns.map((sign) => (
+              roadSigns?.map((sign) => (
                 <TableRow
                   key={sign.id}
                   className={` ${
@@ -346,6 +347,9 @@ const BookingTable = () => {
                 >
                   <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
                     {sign.template?.model || "غير متوفر"}
+                  </TableCell>
+                  <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
+                    {sign.template?.type || "غير محدد"}
                   </TableCell>
                   <TableCell>{sign.panels_number || 0}</TableCell>
                   {/* <TableCell>{sign.total_panels_on_date || 0}</TableCell> */}

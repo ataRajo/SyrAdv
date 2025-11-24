@@ -7,6 +7,7 @@ import { BrokersColumns } from "../../utils/Tables/ColumnsTable/BrokersColumns";
 import { Permissions } from "../../Static/StaticData";
 import { Loader } from "lucide-react";
 import useBrokers from "../../hooks/useBrokers";
+import { useNavigate } from "react-router";
 
 const BrokersContainer = () => {
   const {
@@ -26,6 +27,8 @@ const BrokersContainer = () => {
     onConfirmDelete,
     permissions,
   } = useBrokers();
+
+  const navigate = useNavigate()
 
   if (isLoading) {
     return (
@@ -50,6 +53,7 @@ const BrokersContainer = () => {
         isLoading={isFetching}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onShow={(broker) => navigate(`${broker?.id}`) }
         permissions={permissions}
       />
       <DialogAddBroker show={open} handleClose={() => setOpen(false)} />

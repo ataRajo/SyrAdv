@@ -22,6 +22,9 @@ const useMangePayments = () => {
   // box state
   const [fromDate, setFromDate] = useState();
   const [toDate, setToDate] = useState();
+  // Add filter states
+  const [selectedUser, setSelectedUser] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState("");
 
   const [confirmPayment, { isLoading: isLoadingConfirm }] =
     useConfirmOnePaymentMutation();
@@ -37,11 +40,13 @@ const useMangePayments = () => {
   const [deletePayment, { isLoading: isLoadingDelete }] =
     useDeletePaymentMutation();
 
-  // box query
+  // Updated box query with filters
   const { data, isFetching: isFetchingBox } = useGetTotalPaymentAndRemainingQuery(
     {
       from_date: fromDate,
       to_date: toDate,
+      user_id: selectedUser, // Add user filter
+      customer_id: selectedCustomer, // Add customer filter
     }
   );
 
@@ -99,7 +104,6 @@ const useMangePayments = () => {
     };
   }, [Permissions]);
 
-
   // start box
   const dataBox = [
     {
@@ -108,7 +112,9 @@ const useMangePayments = () => {
       total_paid_received: data?.total_paid_received,
     },
   ];
+
   return {
+    data , 
     openAdd,
     setOpenAdd,
     openViewImage,
@@ -147,6 +153,11 @@ const useMangePayments = () => {
     setFromDate,
     toDate,
     setToDate,
+    // Add the new filter states and functions
+    selectedUser,
+    setSelectedUser,
+    selectedCustomer,
+    setSelectedCustomer,
     isFetchingBox,
   };
 };

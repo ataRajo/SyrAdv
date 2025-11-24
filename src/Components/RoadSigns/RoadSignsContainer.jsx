@@ -1,14 +1,30 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+
 import { useGetRoadSignsModelQuery } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import LoadingGet from "../../utils/Loading/LoadingGet/LoadingGet";
 import SummariesCard from "../Summaries/SummariesCard";
 import HeaderComponent from "../../utils/HeaderComponent";
 import { DialogAddRoadSign } from "../../utils/Dialogs/EditAddDialog/Add/DialogAddRoadSign";
 import { Permissions } from "../../Static/StaticData";
+import RoadSignsMapView from "./RoadSignsMapView";
+import TableRoadSigns from "./TableRoadSigns";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MapIcon, SatelliteIcon, TableIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Toaster , toast } from "react-hot-toast";
+
+import {
+  useGetCitiesQuery,
+  useAddNewRegionMutation,
+} from "../../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi";
 
 const RoadSignsContainer = () => {
   const { data, isFetching } = useGetRoadSignsModelQuery();
   const [open, setOpen] = useState(false);
+  const [activeView, setActiveView] = useState("map");
+
+  // NEW STATE FOR REGION MODAL
+  const [showRegionModal, setShowRegionModal] = useState(false);
 
   if (isFetching) {
     return (
@@ -20,33 +36,160 @@ const RoadSignsContainer = () => {
   }
 
   return (
-    <div dir="rtl">
-     <HeaderComponent
-          title={"اللوحات الطرقية"}
-          titleBtn={"إضافة لوحة"}
-          setShow={setOpen}
-          permission={Permissions.CreateRoadSigns}
-        />
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 p-2  lg:grid-cols-4 gap-4"
-        dir="rtl"
-      >
-       
-        {data?.map((item, ind) => {
-          return (
-            <SummariesCard
-              key={ind}
-              title={item.model}
-              count={item.count || 0}
-              endPoint={`road_signs/${item.model}`}
-              facesNumber={item.faces_number || 0}
-            />
-          );
-        })}
-        <DialogAddRoadSign show={open} handleClose={() => setOpen(false)} />
+    <div dir="rtl" className="p-4">
+      
+      <div className="mb-6">
+
+
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold text-gray-500">اللوحات الطرقية</h1>
+
+          {/* Buttons in table view */}
+          {activeView === "table" && (
+            <div className="flex items-center gap-3">
+              <HeaderComponent
+                title={""}
+                titleBtn={"إضافة لوحة"}
+                setShow={setOpen}
+                permission={Permissions.CreateRoadSigns}
+              />
+
+              {/* NEW BUTTON "إضافة منطقة" */}
+
+              <Button
+                onClick={() => setShowRegionModal(true)}
+                className="bg-white text-gray-700 text-lg"
+              >
+                +
+                إضافة منطقة 
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeView} onValueChange={setActiveView} className="mt-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="map" className="flex items-center gap-2">
+              <MapIcon className="w-4 h-4" />
+              الخريطة
+            </TabsTrigger>
+            <TabsTrigger value="satellite" className="flex items-center gap-2">
+              <SatelliteIcon className="w-4 h-4" />
+              القمر الاصطناعي
+            </TabsTrigger>
+            <TabsTrigger value="table" className="flex items-center gap-2">
+              <TableIcon className="w-4 h-4" />
+              الجدول
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="map" className="mt-4">
+            <RoadSignsMapView viewType="map" />
+          </TabsContent>
+
+          <TabsContent value="satellite" className="mt-4">
+            <RoadSignsMapView viewType="satellite" />
+          </TabsContent>
+
+          <TabsContent value="table" className="mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {data?.map((item, ind) => (
+                <SummariesCard
+                  key={ind}
+                  title={item.model}
+                  count={item.count || 0}
+                  endPoint={`road_signs/${item.model}`}
+                  facesNumber={item.faces_number || 0}
+                />
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
+
+      <DialogAddRoadSign show={open} handleClose={() => setOpen(false)} />
+
+      {/* NEW REGION MODAL */}
+      {showRegionModal && (
+        <AddRegionModal onClose={() => setShowRegionModal(false)} />
+      )}
+      <Toaster position="top-center" />
+
     </div>
   );
 };
 
 export default RoadSignsContainer;
+
+
+const AddRegionModal = ({ onClose }) => {
+  const { data: cities } = useGetCitiesQuery();
+  const [addRegion, { isLoading }] = useAddNewRegionMutation();
+
+  const [form, setForm] = useState({
+    name: "",
+    city_id: "",
+    is_active: "",
+  });
+
+  const handleSubmit = async () => {
+  try {
+    await addRegion(form).unwrap();
+    toast.success("تمت إضافة المنطقة بنجاح");
+    onClose();
+  } catch (err) {
+    toast.error("حدث خطأ أثناء الإضافة");
+  }
+};
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
+      <div className="bg-white p-6 rounded-lg w-[350px]">
+        <h2 className="text-xl font-bold mb-4 text-gray-700">إضافة منطقة</h2>
+
+        {/* الاسم */}
+        <label className="block mb-2 text-gray-700">الاسم :</label>
+        <input
+          className="w-full border p-2 rounded mb-3 text-gray-700"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+
+        {/* المدينة */}
+        <label className="block mb-2 text-gray-700">المدينة :</label>
+        <select
+          className="w-full border p-2 rounded mb-3 text-gray-700"
+          value={form.city_id}
+          onChange={(e) => setForm({ ...form, city_id: e.target.value })}
+        >
+          <option value="">اختر المدينة</option>
+          {cities?.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+
+        {/* هل متوفر */}
+        <label className="block mb-2 text-gray-700">هل متوفر :</label>
+        <select
+          className="w-full border p-2 rounded mb-4 text-gray-700"
+          value={form.is_active}
+          onChange={(e) => setForm({ ...form, is_active: e.target.value })}
+        >
+          <option value="">اختر</option>
+          <option value="1">نعم</option>
+          <option value="0">لا</option>
+        </select>
+
+        <div className="flex justify-between mt-4">
+          <Button onClick={onClose} variant="secondary">
+            إلغاء
+          </Button>
+          <Button onClick={handleSubmit} disabled={isLoading}>
+            إضافة
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};

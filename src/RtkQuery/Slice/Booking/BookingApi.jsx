@@ -6,74 +6,121 @@ export const BookingSlice = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: ["bookings"],
   endpoints: (builder) => ({
+    
     getBooking: builder.query({
       query: () => "/bookings",
-      providesTags: ["bookings"],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map(({ id }) => ({ type: "bookings", id })),
+              { type: "bookings", id: "LIST" },
+            ]
+          : [{ type: "bookings", id: "LIST" }],
     }),
+
+    // ✅ Add booking (no forced status)
     addNewBooking: builder.mutation({
       query: (data) => {
+        const { status, ...rest } = data; // strip status if present
         return {
           url: "bookings",
           method: "POST",
-          body: data,
+          body: rest,
         };
       },
-      invalidatesTags: ["bookings"],
-    }),
-    calculateReservation: builder.mutation({
-      query: (data) => {
-        return {
-          url: "get-calculate-Amount",
-          method: "POST",
-          body: data,
-        };
-      },
-      invalidatesTags: ["reservations"],
-    }),
-    getOneBookings: builder.query({
-      query: (id) => `bookings/${id}`,
-      providesTags: ["bookings"],
+      invalidatesTags: [{ type: "bookings", id: "LIST" }],
     }),
 
+    // ✅ Get single booking
+    getOneBookings: builder.query({
+      query: (id) => `bookings/${id}`,
+      providesTags: (result, error, id) => [{ type: "bookings", id }],
+    }),
+
+    // ✅ Update booking (PUT via _method)
     updateBookings: builder.mutation({
-      query: (data) => {
-        return {
-          url: `bookings/${data.id}`,
-          method: "POST",
-          body: { ...data, _method: "PUT" },
-        };
-      },
-      invalidatesTags: ["bookings"],
+      query: (data) => ({
+        url: `bookings/${data.id}`,
+        method: "POST",
+        body: { ...data, _method: "PUT" },
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: "bookings", id }],
     }),
+
+    // ✅ Delete booking
     deleteBooking: builder.mutation({
-      query: (id) => {
-        return {
-          url: `bookings/${id}`,
-          method: "POST",
-          body: { _method: "DELETE" },
-        };
-      },
-      invalidatesTags: ["bookings"],
+      query: (id) => ({
+        url: `bookings/${id}`,
+        method: "POST",
+        body: { _method: "DELETE" },
+      }),
+      invalidatesTags: [{ type: "bookings", id: "LIST" }],
     }),
+
+    // ✅ Cancel booking
     cancelBooking: builder.mutation({
-      query: (id) => {
-        return {
-          url: `cancel-booking/${id}`,
-          method: "POST",
-          body: {},
-        };
-      },
-      invalidatesTags: ["bookings"],
+      query: (id) => ({
+        url: `cancel-booking/${id}`,
+        method: "POST",
+        body: {},
+      }),
+      invalidatesTags: (result, error, { id }) => [
+    { type: "bookings", id },
+    { type: "bookings", id: "LIST" }, // 👈 force list refetch
+  ],
+}),
+
+
+ //==================== ADD MOVE BOOKING API ==============
+
+   moveBooking: builder.mutation({
+      query: ({ booking_id, old_roadsign_id, new_roadsign_id }) => ({
+        url: "/customer/move-booking",
+        method: "POST",
+        body: {
+          booking_id,
+          old_roadsign_id, 
+          new_roadsign_id
+        },
+      }),
+      invalidatesTags: [{ type: "bookings", id: "LIST" }],
+    }),
+    // ============   ============
+
+
+
+    // ✅ Update status (with reject reason if needed)
+    
+    updateBookingStatus: builder.mutation({
+      query: ({ id, status, reject_reason }) => ({
+        url: `bookings/${id}/update-approvment-status`,
+        method: "POST",
+        body: { status, reject_reason },
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: "bookings", id }],
+    }),
+
+    // ✅ Calculate reservation
+    calculateReservation: builder.mutation({
+      query: (data) => ({
+        url: "get-calculate-Amount",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["reservations"],
     }),
   }),
+  
 });
 
 export const {
   useGetBookingQuery,
   useAddNewBookingMutation,
-  useCalculateReservationMutation,
-  useUpdateBookingsMutation,
   useGetOneBookingsQuery,
+  useUpdateBookingsMutation,
   useDeleteBookingMutation,
   useCancelBookingMutation,
+  useCalculateReservationMutation,
+  useUpdateBookingStatusMutation,
+  useMoveBookingMutation
 } = BookingSlice;

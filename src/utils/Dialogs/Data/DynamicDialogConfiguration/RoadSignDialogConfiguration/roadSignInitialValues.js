@@ -6,4 +6,5 @@ export const roadSignInitialValues = {
   direction_two: "",
   panels_number: "",
   template_id: "",
+  image:""
 };

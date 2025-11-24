@@ -1,22 +1,21 @@
-import { format } from "date-fns";
 
 export const BrokersColumns = [
    
     {
-      header: 'الاسم الكامل',
-      accessor: 'full_name',
+      header: 'اسم المستخدم ',
+      accessor: 'username',
       prefixIcon: 'mdi:account-outline',
       className: 'min-w-[150px]',
       cellClassName: 'font-medium',
     },
     {
       header: 'رقم الهاتف',
-      accessor: 'number',
+      accessor: 'phone_number',
       prefixIcon: 'mdi:phone-outline',
       className: 'min-w-[130px]',
       format: (value) => {
-        const cleaned = value.replace(/\D/g, '');
-        const match = cleaned.match(/^(\d{1,3})(\d{3})(\d{3})(\d{4})$/);
+        const cleaned = value?.replace(/\D/g, '');
+        const match = cleaned?.match(/^(\d{1,3})(\d{3})(\d{3})(\d{4})$/);
         return match ? `+${match[1]} ${match[2]} ${match[3]} ${match[4]}` : value;
       },
     },
@@ -42,4 +41,42 @@ export const BrokersColumns = [
     //   className: 'min-w-[120px]',
     //   format: (value) => format(new Date(value), 'MMM dd, yyyy'),
     // },
+  ];
+
+
+export const BrokersCustomerColumns = [
+   
+    {
+      header: 'الاسم الكامل ',
+      accessor: 'full_name',
+      prefixIcon: 'mdi:account-outline',
+      className: 'min-w-[150px]',
+      cellClassName: 'font-medium',
+    },
+    {
+      header: 'اسم الشركة',
+      accessor: 'company_name',
+      prefixIcon: 'mdi:percent-outline',
+      className: 'min-w-[90px] text-right',
+      cellClassName: 'text-right font-mono',
+     },
+    {
+      header: 'رقم الهاتف',
+      accessor: 'phone_number',
+      prefixIcon: 'mdi:phone-outline',
+      className: 'min-w-[130px]',
+      format: (value) => {
+        const cleaned = value?.replace(/\D/g, '');
+        const match = cleaned?.match(/^(\d{1,3})(\d{3})(\d{3})(\d{4})$/);
+        return match ? `+${match[1]} ${match[2]} ${match[3]} ${match[4]}` : value;
+      },
+    },
+    {
+      header: 'العنوان',
+      accessor: 'address',
+      prefixIcon: 'mdi:percent-outline',
+      className: 'min-w-[90px] text-right',
+      cellClassName: 'text-right font-mono',
+     },
+  
   ];

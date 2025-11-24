@@ -23,14 +23,26 @@ import BookingForm from "./Pages/Booking/BookingForm";
 import TableRoadSigns from "./Components/RoadSigns/TableRoadSigns";
 import Box from "./Pages/Payments/Box";
 import RoadSignsReport from "./Components/Report/RoadSignsReport";
+import BrokerInfo from "./Components/Brokers/BrokerInfo";
+import RoadSignStats from "./Components/RoadSigns/RoadSignStats/RoadSignStats";
+
+import axios from "axios";
 
 function App() {
+
+  axios.defaults.baseURL = "/api"; // goes through Vite proxy
+  axios.defaults.headers.common["Content-Type"] = "application/json";
+
   return (
     <div className="bg-primary">
+
+      
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/dashboard" element={<DashboardPage />}>
+
+
             <Route
               path="administration-page"
               element={<AdministrationPageLayout />}
@@ -42,9 +54,16 @@ function App() {
 
               <Route path="report" element={<ReportsPage />} />
               <Route path="roadSignReports" element={<RoadSignsReport />} />
+              {/*
+              <Route path="road_signs/:id/stats" element={<RoadSignStats />} />
+
+              */ }
+
 
               <Route path="box" element={<Box />} />
               <Route path="brokers" element={<BrokersPage />} />
+              <Route path="brokers/:id" element={<BrokerInfo />} />
+
 
             </Route>
             <Route path="payments" element={<PaymentsPages />} />
@@ -57,6 +76,12 @@ function App() {
             <Route path="models/:id" element={<TableTemplate />} />
             <Route path="road_signs" element={<RoadSignsPage />} />
             <Route path="road_signs/:id" element={<TableRoadSigns />} />
+            {/*
+            
+            */}
+            <Route path="road_signs/:id/stats" element={<RoadSignStats />} />
+
+            {/*<Route path="road_signs/:id/stats" element={<RoadSignStats />} />*/}
 
             <Route path="bookings" element={<BookingPage />} />
             <Route path="booking/add" element={<BookingForm />} />

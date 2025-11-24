@@ -16,6 +16,7 @@ const CalculationResult = () => {
     discountType,
     setDiscountType,
     setDiscountValue,
+    groupedBookings,
   } = useContext(BookingContext);
 
   return (
@@ -23,6 +24,39 @@ const CalculationResult = () => {
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 text-right">
         نتائج الحساب
       </h3>
+      
+      {/* Booking Summary */}
+      <div className="mb-4 p-3 bg-white dark:bg-gray-800 rounded-lg">
+        <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-2 text-right">
+          ملخص الحجوزات:
+        </h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <div className="text-center">
+            <div className="text-gray-600 dark:text-gray-300">عدد الحجوزات</div>
+            <div className="font-bold text-gray-900 dark:text-gray-100">{groupedBookings.length}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-600 dark:text-gray-300">فترات الحجز</div>
+            <div className="font-bold text-gray-900 dark:text-gray-100">
+              {groupedBookings.reduce((total, booking) => total + booking.dateRanges.length, 0)}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-600 dark:text-gray-300">إجمالي اللوحات</div>
+            <div className="font-bold text-gray-900 dark:text-gray-100">
+              {groupedBookings.reduce((total, booking) => total + booking.totalFaces, 0)}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-600 dark:text-gray-300">إجمالي الدورات</div>
+            <div className="font-bold text-gray-900 dark:text-gray-100">
+              {groupedBookings.reduce((total, booking) => total + booking.totalUnits, 0)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Calculation Results */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div className="flex flex-col">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -43,20 +77,27 @@ const CalculationResult = () => {
           </div>
         )}
         <div className="flex flex-col">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {/*
+           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             مساحة الإعلان:
           </span>
+
           <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
             {calculationResult?.amount?.total_advertising_space.toFixed(2)} متر
           </span>
         </div>
         <div className="flex flex-col">
+
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             مساحة الطباعة:
           </span>
+
           <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
             {calculationResult?.amount?.total_printing_space.toFixed(2)} متر
           </span>
+          */}
+         
+
         </div>
 
         <div className="flex flex-col">

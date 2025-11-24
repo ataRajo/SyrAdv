@@ -37,11 +37,25 @@ export const TemplateSlice = createApi({
       invalidatesTags: ["Templates"],
     }),
     UpdataTemplate: builder.mutation({
-      query: ({ id, data }) => ({
-        url: `/templates/${id}`,
-        method: "POST",
-        body: { ...data, _method: "PUT" },
-      }),
+      query: ({ id, data }) => {
+        // Check if data is FormData (file upload)
+        if (data instanceof FormData) {
+          // Add _method to FormData
+          data.append('_method', 'PUT');
+          return {
+            url: `/templates/${id}`,
+            method: "POST",
+            body: data,
+          };
+        }
+        
+        // Regular JSON data
+        return {
+          url: `/templates/${id}`,
+          method: "POST",
+          body: { ...data, _method: "PUT" },
+        };
+      },
       invalidatesTags: ["Templates"],
     }),
   }),

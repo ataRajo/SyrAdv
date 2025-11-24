@@ -28,23 +28,38 @@ import { Trash2, Edit, Plus, Loader2, Loader } from "lucide-react";
 import { RegionsCityContext } from "../../Context/RegionsCityContextApi";
 import { useAuth } from "../../Context/AuthProvider";
 import { Permissions } from "../../Static/StaticData";
-// import { RegionsCityContext } from "./RegionsCityContext";
 
 const CitiesTap = () => {
-  const {
-    cityForm,
-    setCityForm,
-    editCityId,
-    isCityDialogOpen,
-    setIsCityDialogOpen,
-    cities,
-    isCitiesLoading,
-    addCityLoading,
-    handleSubmit,
-    handleEdit,
-    handleDeleteDialog,
-  } = useContext(RegionsCityContext);
+  const context = useContext(RegionsCityContext);
   const { hasPermission } = useAuth();
+
+  // Safe fallback if context is undefined
+  if (!context) {
+    console.error("RegionsCityContext is not available. Make sure the component is wrapped in the provider.");
+    return (
+      <TabsContent value="cities">
+        <div className="w-full h-full flex-col flex justify-center items-center">
+          <Loader />
+          <p>جاري تحميل البيانات...</p>
+          <p className="text-sm text-red-500">خطأ في تحميل السياق</p>
+        </div>
+      </TabsContent>
+    );
+  }
+
+  const {
+    cityForm = { name: "", is_active: 1 }, // Default values
+    setCityForm = () => {},
+    editCityId = null,
+    isCityDialogOpen = false,
+    setIsCityDialogOpen = () => {},
+    cities = [],
+    isCitiesLoading = false,
+    addCityLoading = false,
+    handleSubmit = () => {},
+    handleEdit = () => {},
+    handleDeleteDialog = () => {},
+  } = context;
 
   return (
     <TabsContent value="cities">
@@ -73,7 +88,7 @@ const CitiesTap = () => {
                 }
               />
               <Select
-                value={cityForm.is_active.toString()}
+                value={cityForm.is_active?.toString() || "1"}
                 onValueChange={(value) =>
                   setCityForm({ ...cityForm, is_active: parseInt(value) })
                 }
@@ -88,9 +103,10 @@ const CitiesTap = () => {
               </Select>
               <Button
                 onClick={() => handleSubmit("city", editCityId, cityForm)}
+                disabled={addCityLoading}
               >
                 {addCityLoading ? (
-                  <Loader2 />
+                  <Loader2 className="animate-spin" />
                 ) : (
                   <>{editCityId ? "تعديل" : "إضافة"}</>
                 )}
@@ -101,7 +117,7 @@ const CitiesTap = () => {
       </div>
       {isCitiesLoading ? (
         <div className="w-full h-full flex-col flex justify-center items-center">
-          <Loader />
+          <Loader className="animate-spin" />
           <p> جاري التحميل ...</p>
         </div>
       ) : (

@@ -14,6 +14,7 @@ export const AuthSlice = createApi({
       }),
       invalidatesTags: ["profile"],
     }),
+    
     logout: builder.mutation({
       query: () => ({
         url: "/logout",

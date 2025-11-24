@@ -3,15 +3,28 @@ import { BASE_URL } from "../../Api/baseUrl";
 import { showToast } from "../../utils/Notifictions/showToast";
 
 const prepareHeaders = (headers) => {
-  const superAdminInfo = JSON.parse(localStorage.getItem("SuperAdminInfo")) || {};
-
-  if (superAdminInfo && superAdminInfo.token) {
-    headers.set("Authorization", `Bearer ${superAdminInfo.token}`);
+  try {
+    const superAdminInfo = JSON.parse(localStorage.getItem("SuperAdminInfo")) || {};
+    
+    console.log("🔍 Full SuperAdminInfo:", superAdminInfo);
+    
+    // The token is at the ROOT level, not inside user!
+    const token = superAdminInfo?.token; // ✅ This is the correct path
+    
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+      console.log("✅ Token set in header from superAdminInfo.token");
+    } else {
+      console.warn("⚠️ No token found at superAdminInfo.token");
+    }
+    
+    headers.set("Accept", "application/json");
+    return headers;
+  } catch (error) {
+    console.error("❌ Error preparing headers:", error);
+    return headers;
   }
-  headers.set("Accept", "application/json");
-  return headers;
 };
-
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: BASE_URL,
   prepareHeaders: prepareHeaders,
@@ -20,26 +33,24 @@ const rawBaseQuery = fetchBaseQuery({
 export const baseQueryWithReauth = async (args, api, extraOptions) => {
   let result = await rawBaseQuery(args, api, extraOptions);
 
-  console.log("args", args)
-  console.log("api", api)
-  console.log("extraOptions", extraOptions)
-
-
+  console.log("API Result:", result);
 
   if (result.error && result.error.status === 401) {
-    if (api?.endpoint == "logout" || api?.endpoint == "getProfile") {
+    if (api?.endpoint === "logout" || api?.endpoint === "getProfile") {
       return;
     } else {
       showToast(
         "error",
-        "Received 401 Unauthorized response from API. Redirecting to login."
+        "Received 401 Unauthorized response from API. Please login again."
       );
     }
+    
     localStorage.removeItem("SuperAdminInfo");
-
-    api?.endpoint == "logout" || api?.endpoint == "getProfile"
-      ? null
-      : (window.location.href = "/");
+    
+    // Temporarily comment out the redirect for debugging
+    // api?.endpoint === "logout" || api?.endpoint === "getProfile"
+    //   ? null
+    //   : (window.location.href = "/");
   }
   return result;
 };

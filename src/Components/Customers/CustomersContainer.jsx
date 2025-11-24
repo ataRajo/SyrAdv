@@ -26,6 +26,7 @@ const CustomersContainer = ({customers , isFetching}) => {
             phone_number={item.phone_number}
             remaining={item.remaining}
             createdAt={item.created_at}
+            status={item.status}
             updatedAt={item.updated_at}
           />
         );

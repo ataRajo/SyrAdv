@@ -11,6 +11,10 @@ export const BrokersSlice = createApi({
       query: () => "/brokers",
       providesTags: ["Brokers"],
     }),
+    getBrokersActivities: builder.query({
+      query: (id) =>  `/broker/${id}/activities`,
+      providesTags: ["Brokers"],
+    }),
     addNewBroker: builder.mutation({
       query: (data) => ({
         url: "brokers",
@@ -47,4 +51,6 @@ export const {
   useAddNewBrokerMutation,
   useDeleteBrokerMutation,
   useUpdataBrokerMutation,
+  useGetBrokersActivitiesQuery,
+  
 } = BrokersSlice;

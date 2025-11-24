@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Trash2, Calculator, Loader2 } from "lucide-react";
 import { BookingContext } from "../../../../Context/BookingContext";
 import { showToast } from "../../../../utils/Notifictions/showToast";
 import { Toaster } from "react-hot-toast";
@@ -31,8 +31,12 @@ const CartTable = () => {
     roadSigns,
     updateSignFaces,
     removeFromCart,
+    calculateTotal,
+    calculateBookingPrice,
     isEditMode,
     bookingData,
+    groupedBookings,
+    isLoadingCalculateReservation,
   } = useContext(BookingContext);
 
   const getSignColor = (roadSignId) => {
@@ -53,7 +57,7 @@ const CartTable = () => {
   };
 
   const getMaxAvailablePanels = (sign, startDate, endDate, rangeIndex) => {
-    const roadSign = roadSigns?.find((rs) => rs.id === sign.road_sign_id);
+    const roadSign = roadSigns?.data?.find((rs) => rs.id === sign.road_sign_id);
     if (!roadSign || !startDate || !endDate) return 0;
 
     let maxPanels = roadSign.panels_number;
@@ -61,6 +65,7 @@ const CartTable = () => {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
+    // Check availability ranges
     for (const range of roadSign.available_date_ranges) {
       const rangeStart = new Date(range.start_date);
       const rangeEnd = new Date(range.end_date);
@@ -70,36 +75,38 @@ const CartTable = () => {
       }
     }
 
+    // Check existing bookings
     for (const booked of roadSign.booking_dates) {
       const bookedStart = new Date(booked.start_date);
       const bookedEnd = new Date(booked.end_date);
 
-      if (
-        (start >= bookedStart && start < bookedEnd) ||
-        (end > bookedStart && end <= bookedEnd) ||
-        (start <= bookedStart && end >= bookedEnd)
-      ) {
-        const currentBookedSignInEditMode =
-          isEditMode &&
-          bookingData?.roadsigns.some((rs) => {
+      const currentBookedSignInEditMode =
+        isEditMode &&
+        bookingData?.roadsigns?.some(
+          (rs) =>
             rs.id === sign.road_sign_id &&
-              new Date(rs?.pivot?.start_date).getTime() ===
-                bookedStart?.getTime() &&
-              new Date(rs?.pivot?.end_date).getTime() === bookedEnd?.getTime();
-          });
+            new Date(rs.pivot.start_date).getTime() === bookedStart.getTime() &&
+            new Date(rs.pivot.end_date).getTime() === bookedEnd.getTime()
+        );
 
-        if (currentBookedSignInEditMode) {
+      if (!currentBookedSignInEditMode) {
+        if (
+          (start >= bookedStart && start < bookedEnd) ||
+          (end > bookedStart && end <= bookedEnd) ||
+          (start <= bookedStart && end >= bookedEnd)
+        ) {
           maxPanels = 0;
           break;
         }
       }
     }
 
+    // Add existing booking panels in edit mode
     if (isEditMode) {
       const existingBooking = bookingData?.roadsigns?.find(
         (rs) =>
           rs.id === sign.road_sign_id &&
-          new Date(rs.pivot?.start_date).toDateString() ===
+          new Date(rs.pivot.start_date).toDateString() ===
             new Date(sign.dateRanges[rangeIndex]?.startDate).toDateString() &&
           new Date(rs.pivot.end_date).toDateString() ===
             new Date(sign.dateRanges[rangeIndex]?.endDate).toDateString()
@@ -113,7 +120,7 @@ const CartTable = () => {
   };
 
   const validateDateRange = (sign, newStartDate, newEndDate, rangeIndex) => {
-    const roadSign = roadSigns?.find((rs) => rs.id === sign.road_sign_id);
+    const roadSign = roadSigns?.data?.find((rs) => rs.id === sign.road_sign_id);
     if (!roadSign || !newStartDate || !newEndDate) {
       showToast("error", "الرجاء تحديد تاريخ بداية ونهاية.");
       return false;
@@ -122,15 +129,13 @@ const CartTable = () => {
     const start = new Date(newStartDate);
     const end = new Date(newEndDate);
 
-     if (start.getTime() > end.getTime()) {
-      showToast(
-        "error",
-        "تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية."
-      );
+    if (start.getTime() > end.getTime()) {
+      showToast("error", "تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية.");
       return false;
     }
 
-     for (const booked of roadSign.booking_dates) {
+    // Check conflicts with booked dates
+    for (const booked of roadSign.booking_dates) {
       const bookedStart = new Date(booked.start_date);
       const bookedEnd = new Date(booked.end_date);
 
@@ -143,9 +148,7 @@ const CartTable = () => {
             new Date(rs.pivot.end_date).getTime() === bookedEnd.getTime()
         );
 
-      if (isCurrentBookingOriginal) {
-        continue; 
-      }
+      if (isCurrentBookingOriginal) continue;
 
       if (
         (start >= bookedStart && start < bookedEnd) ||
@@ -160,175 +163,257 @@ const CartTable = () => {
       }
     }
 
-     let isCoveredByAvailableRanges = false;
-
-     const availableDatesSet = new Set();
+    // Check availability ranges
+    const availableDatesSet = new Set();
     for (const range of roadSign.available_date_ranges) {
-       getDatesInRange(range.start_date, range.end_date).forEach((date) =>
+      getDatesInRange(range.start_date, range.end_date).forEach((date) =>
         availableDatesSet.add(date)
       );
     }
 
-     let currentCheckDate = new Date(newStartDate);
-    const finalEndDateInclusive = new Date(newEndDate);  
+    let currentCheckDate = new Date(newStartDate);
+    const finalEndDateInclusive = new Date(newEndDate);
 
-    isCoveredByAvailableRanges = true;  
     while (currentCheckDate <= finalEndDateInclusive) {
       if (!availableDatesSet.has(currentCheckDate.toDateString())) {
-        isCoveredByAvailableRanges = false;
-        break;
+        showToast(
+          "error",
+          "الفترة المطلوبة غير متاحة بالكامل ضمن النطاقات المعلنة."
+        );
+        return false;
       }
       currentCheckDate.setDate(currentCheckDate.getDate() + 1);
     }
 
-    if (!isCoveredByAvailableRanges) {
-      showToast(
-        "error",
-        "الفترة المطلوبة غير متاحة بالكامل ضمن النطاقات المعلنة."
-      );
-      return false;
-    }
-
-     return true;
+    return true;
   };
 
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="bg-gray-100 dark:bg-gray-800">
-          <TableHead className="text-right w-auto">رمز النموذج</TableHead>
-          <TableHead className="text-right w-auto">المنطقة</TableHead>
-          <TableHead className="text-right w-auto">المكان</TableHead>
-          <TableHead className="text-right w-auto">تاريخ البداية</TableHead>
-          <TableHead className="text-right w-auto">تاريخ النهاية</TableHead>
-          <TableHead className="text-right w-20">عدد اللوحات المطلوب</TableHead>
-          {/* <TableHead className="text-right w-20">عدد اللوحات المتاحة</TableHead> */}
-          {/* <TableHead className="text-right w-32">أمتار الطباعة</TableHead> */}
-          <TableHead className="text-right w-16">إجراء</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {selectedSigns.flatMap((sign) =>
-          sign.dateRanges.map((range, index) => {
-            const roadSign = roadSigns?.find(
-              (rs) => rs.id === sign.road_sign_id
-            );
-            const maxPanels = getMaxAvailablePanels(
-              sign,
-              range.startDate,
-              range.endDate,
-              index
-            );
-            const rowColor = getSignColor(sign.road_sign_id);
+  if (groupedBookings.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        لا توجد حجوزات في السلة
+      </div>
+    );
+  }
 
-            return (
-              <TableRow
-                key={`${sign.road_sign_id}-${index}`}
-                className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${rowColor}`}
-              >
-                <TableCell
-                  className={`truncate max-w-[120px] sm:max-w-[150px] ${rowColor}`}
-                >
-                  {roadSign?.template.model || "غير متوفر"}
-                </TableCell>
-                <TableCell
-                  className={`truncate max-w-[120px] sm:max-w-[150px] ${rowColor}`}
-                >
-                  {roadSign?.region.name || "غير متوفر"}
-                </TableCell>
-                <TableCell
-                  className={`truncate max-w-[120px] sm:max-w-[150px] ${rowColor}`}
-                >
-                  {roadSign?.place || "غير متوفر"}
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="date"
-                    value={range.startDate}
-                    onChange={(e) => {
-                      if (
-                        validateDateRange(
-                          sign,
-                          e.target.value,  
-                          range.endDate,  
-                          index
-                        )
-                      ) {
-                        updateSignFaces(sign.road_sign_id, index, {
-                          booking_faces: range.booking_faces,
-                          startDate: e.target.value,
-                          endDate: range.endDate,
-                        });
-                      } else {
-                        // showToast يتم استدعاؤه داخل validateDateRange
-                      }
-                    }}
-                    className={`w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md text-right ${rowColor}`}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="date"
-                    value={range.endDate}
-                    onChange={(e) => {
-                      if (
-                        validateDateRange(
-                          sign,
-                          range.startDate, // تاريخ البداية الأصلي للفترة الحالية
-                          e.target.value, // تاريخ النهاية المعدّل
-                          index
-                        )
-                      ) {
-                        updateSignFaces(sign.road_sign_id, index, {
-                          booking_faces: range.booking_faces,
-                          startDate: range.startDate,
-                          endDate: e.target.value,
-                        });
-                      } else {
-                        // showToast يتم استدعاؤه داخل validateDateRange
-                      }
-                    }}
-                    className={`w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md text-right ${rowColor}`}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    min="1"
-                    max={maxPanels}
-                    value={range.booking_faces}
-                    onChange={(e) =>
-                      updateSignFaces(sign.road_sign_id, index, {
-                        booking_faces: parseInt(e.target.value) || 1,
-                        startDate: range.startDate,
-                        endDate: range.endDate,
-                      })
-                    }
-                    className={`w-16 text-right ${rowColor}`}
-                  />
-                </TableCell>
-                {/* <TableCell className={rowColor}>{maxPanels || "0"}</TableCell>*/}
-                {/* <TableCell className={rowColor}>
-                  {roadSign?.template?.printing_space || "غير متوفر"}
-                </TableCell> */}
-                <TableCell>
+  return (
+    <div>
+      <Button
+        type="button"
+        onClick={calculateTotal}
+        disabled={isLoadingCalculateReservation}
+        className="mb-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+      >
+        {isLoadingCalculateReservation ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            جاري حساب التكلفة...
+          </>
+        ) : (
+          "حساب التكلفة الإجمالية"
+        )}
+      </Button>
+
+      {groupedBookings.map((bookingGroup, groupIndex) => {
+        const roadSign = bookingGroup.roadSign;
+        const rowColor = getSignColor(bookingGroup.road_sign_id);
+        const individualCalculation = bookingGroup.individualCalculation;
+        const isBookingLoading = bookingGroup.isLoading; // Individual loading state
+        
+        return (
+          <div key={bookingGroup.road_sign_id} className="mb-8 border rounded-lg overflow-hidden">
+            {/* Booking Header */}
+            <div className={`${rowColor} p-4 border-b`}>
+              <div className="flex justify-between items-center">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    الحجز {groupIndex + 1}: {roadSign?.template?.model || "غير متوفر"} - {roadSign?.template?.type || "غير محدد"}
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    المنطقة: {roadSign?.region.name || "غير متوفر"} | المكان: {roadSign?.place || "غير متوفر"}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    إجمالي اللوحات: {bookingGroup.totalFaces} | إجمالي الدورات: {bookingGroup.totalUnits}
+                  </p>
+                  
+                  {/* Individual Booking Calculation Result */}
+                  {individualCalculation && (
+                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-900 rounded border border-green-200 dark:border-green-700">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                          سعر هذا الحجز:
+                        </span>
+                        <span className="text-lg font-bold text-green-900 dark:text-green-100">
+                          {individualCalculation.price_per_period?.toFixed(2)} $
+                        </span>
+                      </div>
+                      <div className="text-xs text-green-700 dark:text-green-300 mt-1">
+                        مساحة الإعلان: {individualCalculation.amount?.total_advertising_space.toFixed(2)} متر | 
+                        مساحة الطباعة: {individualCalculation.amount?.total_printing_space.toFixed(2)} متر
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => calculateBookingPrice(bookingGroup.road_sign_id)}
+                    disabled={isBookingLoading || isLoadingCalculateReservation}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  >
+                    {isBookingLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        جاري الحساب...
+                      </>
+                    ) : (
+                      <>
+                        <Calculator className="h-4 w-4" />
+                        حساب سعر الحجز
+                      </>
+                    )}
+                  </Button>
                   <Button
                     type="button"
                     variant="destructive"
                     size="sm"
-                    onClick={() => removeFromCart(sign.road_sign_id, index)}
-                    className="bg-red-500 hover:bg-red-600"
+                    onClick={() => removeFromCart(bookingGroup.road_sign_id)}
+                    disabled={isBookingLoading || isLoadingCalculateReservation}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    حذف الحجز
                   </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })
-        )}
-      </TableBody>
+                </div>
+              </div>
+            </div>
+
+            {/* Booking Details Table */}
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-100 dark:bg-gray-800">
+                  <TableHead className="text-right w-auto">تاريخ البداية</TableHead>
+                  <TableHead className="text-right w-auto">تاريخ النهاية</TableHead>
+                  <TableHead className="text-right w-20">عدد اللوحات المطلوب</TableHead>
+                  <TableHead className="text-right w-16">عدد الدورات</TableHead>
+                  <TableHead className="text-right w-16">إجراء</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bookingGroup.dateRanges.map((range, index) => {
+                  const maxPanels = getMaxAvailablePanels(
+                    { road_sign_id: bookingGroup.road_sign_id },
+                    range.startDate,
+                    range.endDate,
+                    index
+                  );
+
+                  return (
+                    <TableRow
+                      key={`${bookingGroup.road_sign_id}-${index}`}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${rowColor}`}
+                    >
+                      <TableCell>
+                        <Input
+                          type="date"
+                          value={range.startDate}
+                          onChange={(e) => {
+                            if (
+                              validateDateRange(
+                                { road_sign_id: bookingGroup.road_sign_id },
+                                e.target.value,
+                                range.endDate,
+                                index
+                              )
+                            ) {
+                              updateSignFaces(bookingGroup.road_sign_id, index, {
+                                booking_faces: range.booking_faces,
+                                startDate: e.target.value,
+                                endDate: range.endDate,
+                                units: range.units,
+                              });
+                            }
+                          }}
+                          disabled={isBookingLoading || isLoadingCalculateReservation}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="date"
+                          value={range.endDate}
+                          onChange={(e) => {
+                            if (
+                              validateDateRange(
+                                { road_sign_id: bookingGroup.road_sign_id },
+                                range.startDate,
+                                e.target.value,
+                                index
+                              )
+                            ) {
+                              updateSignFaces(bookingGroup.road_sign_id, index, {
+                                booking_faces: range.booking_faces,
+                                startDate: range.startDate,
+                                endDate: e.target.value,
+                                units: range.units,
+                              });
+                            }
+                          }}
+                          disabled={isBookingLoading || isLoadingCalculateReservation}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min="1"
+                          max={maxPanels}
+                          value={range.booking_faces}
+                          onChange={(e) =>
+                            updateSignFaces(bookingGroup.road_sign_id, index, {
+                              booking_faces: parseInt(e.target.value) || 1,
+                              startDate: range.startDate,
+                              endDate: range.endDate,
+                              units: range.units,
+                            })
+                          }
+                          disabled={isBookingLoading || isLoadingCalculateReservation}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={range.units || 1}
+                          onChange={(e) =>
+                            updateSignFaces(bookingGroup.road_sign_id, index, {
+                              units: parseInt(e.target.value) || 1,
+                              startDate: range.startDate,
+                              endDate: range.endDate,
+                              booking_faces: range.booking_faces,
+                            })
+                          }
+                          disabled={isBookingLoading || isLoadingCalculateReservation}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => removeFromCart(bookingGroup.road_sign_id, index)}
+                          disabled={isBookingLoading || isLoadingCalculateReservation}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        );
+      })}
       <Toaster />
-    </Table>
+    </div>
   );
 };
 

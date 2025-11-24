@@ -35,7 +35,7 @@ const RoadSignsPdf = ({ roadSigns, endDate, startDate }) => {
     ];
 
     // Map data to table rows
-    const tableData = roadSigns.map((item) => [
+    const tableData = roadSigns?.data?.map((item) => [
       item.place,
       item.region.name,
       item.city.name,

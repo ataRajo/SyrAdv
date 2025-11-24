@@ -17,6 +17,7 @@ import { Toaster } from "react-hot-toast";
 import { showToast } from "../../utils/Notifictions/showToast";
 import { useFormik } from "formik";
 import * as Yup from "yup";
+import { useAuth } from "../../Context/AuthProvider";
 
 const LoginSchema = Yup.object().shape({
   username: Yup.string()
@@ -30,6 +31,7 @@ const LoginSchema = Yup.object().shape({
 export function Login({ className, ...props }) {
   const [login, { isLoading }] = useLoginMutation();
   const navigate = useNavigate();
+  const { loginUser } = useAuth();
 
   // State to manage password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -44,6 +46,8 @@ export function Login({ className, ...props }) {
       setSubmitting(true);
       try {
         const res = await login(values).unwrap();
+      //  loginUser(res); // updates context immediately
+
         localStorage.setItem("SuperAdminInfo", JSON.stringify(res));
         localStorage.setItem("permissions", JSON.stringify(res?.user?.roles[0]?.permissions));
 
@@ -66,26 +70,28 @@ export function Login({ className, ...props }) {
   }, [formik.errors, formik.touched]);
 
   return (
-    <div
-      className={cn(
-        "flex w-full min-h-screen justify-center flex-col items-center gap-6",
-        className
-      )}
-      {...props}
-    >
-      <Card className="w-full max-w-md">
+  <div
+  className={cn(
+    "flex w-full min-h-screen justify-center flex-col items-center gap-6",
+    "bg-gradient-to-r from-[oklch(0.35_0.05_265.755)] via-[oklch(0.25_0.045_265.755)] to-[oklch(0.18_0.04_265.755)]",
+    className
+  )}
+  {...props}
+>
+      <Card className="w-full max-w-md bg-[oklch(0.208_0.042_265.755)] shadow-xl">
         <CardHeader>
-          <CardTitle className="text-2xl text-center">Login</CardTitle>
+          <CardTitle className="text-2xl text-center text-white ">Login</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={formik.handleSubmit}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label className="text-right block" htmlFor="username">
+                <Label className="text-right block text-white" htmlFor="username">
                   اسم المستخدم
                 </Label>
                 <Input
                   id="username"
+                  className="text-white"
                   type="text"
                   name="username"
                   placeholder="اسم المستخدم"
@@ -97,7 +103,7 @@ export function Login({ className, ...props }) {
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
-                  <Label className="text-right block w-full" htmlFor="password">
+                  <Label className="text-right block w-full text-white" htmlFor="password">
                     كلمة المرور
                   </Label>
                 </div>
@@ -112,7 +118,7 @@ export function Login({ className, ...props }) {
                     required
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
-                    className="pl-10" // Add padding for the eye icon
+                    className="pl-10 text-white" // Add padding for the eye icon
                   />
                   <button
                     type="button"
@@ -126,7 +132,7 @@ export function Login({ className, ...props }) {
               <Button
                 type="submit"
                 disabled={formik.isSubmitting || isLoading}
-                className="w-full"
+                className="w-full bg-white text-black cursor-pointer"
               >
                 {formik.isSubmitting || isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -134,10 +140,12 @@ export function Login({ className, ...props }) {
                 تسجيل الدخول
               </Button>
 
+
+
               <Link
                 to="#"
                 onClick={() => showToast("error", "يرجى التواصل مع المدير")}
-                className="ml-auto text-center inline-block text-sm underline-offset-4 hover:underline"
+                className="ml-auto text-center text-white inline-block text-sm underline-offset-4 hover:underline"
               >
                 هل نسيت كلمة المرور ؟{" "}
               </Link>

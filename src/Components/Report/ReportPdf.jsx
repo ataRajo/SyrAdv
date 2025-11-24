@@ -73,7 +73,7 @@ export const ReportPdf = ({
         ],
       ];
 
-      const roadSignsData = customer.roadSigns.map((sign) => [
+      const roadSignsData = customer.roadSigns?.data?.map((sign) => [
         sign.total_advertising_space || "0.00",
         sign.template.advertising_space || "غير متوفر",
         sign.pivot.booking_faces || "غير متوفر",

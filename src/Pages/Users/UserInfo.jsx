@@ -47,7 +47,7 @@ const UserInfo = () => {
           تفاصيل المستخدم
         </h1>
         <div className="flex flex-1 flex-wrap gap-2">
-          {hasPermission(Permissions.EditUsers) && (
+          {hasPermission(Permissions?.EditUsers) && (
             <Button
               onClick={() => setOpen(true)}
               variant="outline"
@@ -85,38 +85,37 @@ const UserInfo = () => {
           <div className="flex flex-col items-center">
             <Avatar className="w-24 h-24 md:w-32 md:h-32 border-4 border-blue-100 dark:border-blue-900">
               {user.avatar ? (
-                <AvatarImage src={`https://road.levantmenu.ae/storage/${user.avatar}`} alt={user.full_name} />
+                <AvatarImage src={`https://road.levantmenu.ae/storage/${user?.avatar}`} alt={user?.full_name} />
               ) : (
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-300 text-3xl text-white">
-                  {user.full_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  {user?.full_name
+                    ?.split(" ")
+                    ?.map((n) => n[0])
+                    ?.join("")}
                 </AvatarFallback>
               )}
             </Avatar>
             <Badge variant="secondary" className="mt-4 text-sm">
-              User ID: {user.id}
+              User ID: {user?.id}
             </Badge>
           </div>
 
           <div className="flex-1 space-y-6">
             <div className="md:text-left text-center">
               <h2 className="text-xl md:text-2xl font-semibold">
-                {user.full_name}
+                {user?.full_name}
               </h2>
-              <p className="text-muted-foreground">@{user.username}</p>
+              <p className="text-muted-foreground">@{user?.username}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* البريد الالكتروني */}
-              <DetailCard
+               <DetailCard
                 icon="mdi:email"
                 title="البريد الالكتروني"
                 content={
                   <>
-                    <p className="font-medium">{user.email}</p>
-                    {user.email_verified_at && (
+                    <p className="font-medium">{user?.email}</p>
+                    {user?.email_verified_at && (
                       <Badge
                         variant="outline"
                         className="mt-1 text-green-600 dark:text-green-300"
@@ -129,28 +128,26 @@ const UserInfo = () => {
                 colorClass="bg-blue-50 dark:bg-blue-900/20"
               />
 
-              {/* رقم الهاتف */}
-              <DetailCard
+               <DetailCard
                 icon="mdi:phone"
                 title="رقم الهاتف"
-                content={user.phone_number || "غير متوفر"}
+                content={user?.phone_number || "غير متوفر"}
                 colorClass="bg-green-50 dark:bg-green-900/20"
               />
 
-              {/* الدور */}
-              <DetailCard
+               <DetailCard
                 icon="mdi:account-group"
                 title="الدور"
                 content={
                   user?.roles?.length > 0 ? (
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {user.roles?.map((role) => (
+                      {user?.roles?.map((role) => (
                         <Badge
-                          key={role.id}
+                          key={role?.id}
                           variant="outline"
                           className="text-purple-600 dark:text-purple-300"
                         >
-                          {role.name}
+                          {role?.name}
                         </Badge>
                       ))}
                     </div>
@@ -161,20 +158,18 @@ const UserInfo = () => {
                 colorClass="bg-purple-50 dark:bg-purple-900/20"
               />
 
-              {/* تاريخ التسجيل */}
-              <DetailCard
+               <DetailCard
                 icon="mdi:calendar-plus"
                 title="تاريخ التسجيل"
-                content={new Date(user.created_at).toLocaleDateString("en-US")}
+                content={new Date(user?.created_at).toLocaleDateString("en-US")}
                 colorClass="bg-orange-50 dark:bg-orange-900/20"
               />
 
-              {/* العنوان (إذا كان متوفراً) */}
-              {user.address && (
+               {user?.address && (
                 <DetailCard
                   icon="mdi:map-marker"
                   title="العنوان"
-                  content={user.address}
+                  content={user?.address}
                   colorClass="bg-amber-50 dark:bg-amber-900/20"
                 />
               )}

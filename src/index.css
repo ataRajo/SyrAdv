@@ -43,40 +43,52 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* Main background and text */
+  --background: #e0e4e8;          /* page background */
+  --foreground: #1a1a1a;          /* main text color */
+
+  /* Cards and popovers */
+  --card: #f5f6f7;                 /* card background */
+  --card-foreground: #1a1a1a;      /* card text */
+  --popover: #f5f6f7;              /* popover background */
+  --popover-foreground: #1a1a1a;   /* popover text */
+
+  /* Primary & secondary colors */
+  --primary: #4a6fa5;              /* buttons, highlights */
+  --primary-foreground: #ffffff;   /* text on primary */
+  --secondary: #7a8ca3;            /* secondary buttons or tags */
+  --secondary-foreground: #1a1a1a;
+
+  /* Muted / accent */
+  --muted: #cbd2d8;                /* disabled or subtle text */
+  --muted-foreground: #6b7280;     /* muted text color */
+  --accent: #f2b33d;               /* small accent, highlights */
+  --accent-foreground: #1a1a1a;
+
+  /* Destructive / errors */
+  --destructive: #e74c3c;
+  --border: #c1c7cd;               /* borders and inputs */
+  --input: #ffffff;                 /* input backgrounds */
+  --ring: #4a6fa5;                  /* focus ring color */
+
+  /* Charts (optional) */
+  --chart-1: #4a6fa5;
+  --chart-2: #7a8ca3;
+  --chart-3: #f2b33d;
+  --chart-4: #f28c6b;
+  --chart-5: #a1c181;
+
+  /* Sidebar */
+  --sidebar: #d3d8de;              /* sidebar bg, softer than white */
+  --sidebar-foreground: #1a1a1a;    /* text */
+  --sidebar-primary: #4a6fa5;        /* active menu item */
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f2b33d;         /* badges, highlights */
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: #c1c7cd;         /* sidebar border */
+  --sidebar-ring: #4a6fa5;
 }
-
-
 
 .dark {
   --background: oklch(0.129 0.042 264.695);

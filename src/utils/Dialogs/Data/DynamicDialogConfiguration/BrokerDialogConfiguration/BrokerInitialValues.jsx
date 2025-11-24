@@ -1,5 +1,7 @@
 export const BrokerInitialValues = {
-  name: "",
-  number: "",
+  username: "",
+  phone_number: "",
+  password:"",
+  email:"",
   discount: "",
 };

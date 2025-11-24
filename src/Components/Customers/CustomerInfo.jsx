@@ -34,8 +34,6 @@ const CustomerInfo = () => {
     refetch, 
   } = useShowOneCustomerQuery(id);
 
-
-
   const {
     setOpenAddPayment,
     showBookings,
@@ -67,7 +65,6 @@ const CustomerInfo = () => {
     openAddPayment
   } =  useCustomers({refetch , id})
 
-
   
   if (isFetching) {
     return (
@@ -82,7 +79,6 @@ const CustomerInfo = () => {
       </div>
     );
   }
-
 
   return (
     <div dir="rtl" className="p-4 md:p-6 max-w-7xl w-full mx-auto">
@@ -198,6 +194,16 @@ const CustomerInfo = () => {
                 colorClass="bg-blue-50 dark:bg-blue-900/20"
               />
 
+              {/* Customer Account - NEW FIELD */}
+             {/* Customer Account - FIXED: Show even when value is 0 */}
+<DetailCard
+  icon="mdi:account-cash"
+  title="دفعة بدائية"
+  content={`${customer.customer_account} $`}
+  colorClass="bg-purple-50 dark:bg-purple-900/20"
+/>
+
+      
               {/* Alternative Phone Numbers */}
               {customer.alt_phone_number &&
                 customer.alt_phone_number.length > 0 && (
@@ -231,13 +237,25 @@ const CustomerInfo = () => {
                 />
               )}
 
-              {/* Discount */}
-              {/* <DetailCard
-                icon="mdi:percent"
-                title="الخصم"
-                content={`${parseFloat(customer.discount).toFixed(2)}%`}
-                colorClass="bg-red-50 dark:bg-red-900/20"
-              /> */}
+              {/* Email */}
+              {customer.email && (
+                <DetailCard
+                  icon="mdi:email"
+                  title="البريد الإلكتروني"
+                  content={customer.email}
+                  colorClass="bg-indigo-50 dark:bg-indigo-900/20"
+                />
+              )}
+
+              {/* Username */}
+              {customer.username && (
+                <DetailCard
+                  icon="mdi:account"
+                  title="اسم المستخدم"
+                  content={customer.username}
+                  colorClass="bg-teal-50 dark:bg-teal-900/20"
+                />
+              )}
 
               {/* Total Paid */}
               <DetailCard

@@ -15,17 +15,27 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useParams } from "react-router";
 import { Permissions } from "../../Static/StaticData";
+// ============ ADD DIALOG IMPORT ============
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+
+import { useMoveBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
+
 
 const TableRoadSigns = ({ isLoading }) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [openShow, setOpenShow] = useState(false);
+  // ============ ADD EXCHANGE STATE ============
+  const [openExchange, setOpenExchange] = useState(false);
   const [selectedRoadSign, setSelectedRoadSign] = useState(null);
   const {id} = useParams()
 
   const [deleteRoadSign, { isLoading: isDeleting }] =
     useDeleteRoadSignMutation();
+
+      const [moveBooking, { isLoading: isMoving }] = useMoveBookingMutation();
+
   const {
     // startDate,
     // setStartDate,
@@ -49,6 +59,7 @@ const TableRoadSigns = ({ isLoading }) => {
 
   } = useGetRoadSignsByFilter();
 
+  console.log()
   useEffect(() => {
     setModel(id)
   } , [id])
@@ -68,6 +79,19 @@ const TableRoadSigns = ({ isLoading }) => {
     setSelectedRoadSign(roadSign);
     setOpenShow(true);
   };
+
+  const handleRoadSignAction = (roadSign) => {
+    console.log('Road Sign action triggered:', roadSign);
+    //alert(`Road Sign action for: ${roadSign.name || roadSign.id}`);
+  };
+
+  // ============ ADD EXCHANGE HANDLER ============
+  const handleExchange = (roadSign) => {
+    console.log('Exchange road sign:', roadSign);
+    setSelectedRoadSign(roadSign);
+    setOpenExchange(true);
+  };
+
 
   const handleConfirmDelete = async () => {
     if (selectedRoadSign) {
@@ -93,6 +117,8 @@ const TableRoadSigns = ({ isLoading }) => {
       delete : Permissions.DeleteRoadSigns,
       show : Permissions.ViewRegions,
       edit : Permissions.EditRoadSigns,
+      // ============ ADD EXCHANGE PERMISSION ============
+      exchange : Permissions.EditRoadSigns, // Use existing or create new permission
     }
 
   return (
@@ -195,15 +221,30 @@ const TableRoadSigns = ({ isLoading }) => {
         setShow={setOpen}
         permission={Permissions.CreateRoadSigns}
       />
+      
       <DynamicTable
         data={roadSigns || []}
         columns={RoadSignColumns}
         isLoading={isRoadSignsFetching}
         onEdit={handleEdit}
+        onRoadSignAction={handleRoadSignAction}
         onDelete={handleDelete}
         onShow={handleShow}
+        // ============ ADD EXCHANGE PROP ============
+        onExchange={handleExchange}
         permissions={permissions}
       />
+
+      {/* ============ ADD EXCHANGE DIALOG ============ */}
+      <ExchangeDialog 
+        open={openExchange}
+        onClose={() => setOpenExchange(false)}
+        roadSign={selectedRoadSign}
+        onMoveBooking={moveBooking}
+          roadSigns={roadSigns} // Pass all road signs
+          isMoving={isMoving}
+      />
+      
       <DialogEditRoadSign
         show={openEdit}
         handleClose={() => setOpenEdit(false)}
@@ -229,5 +270,186 @@ const TableRoadSigns = ({ isLoading }) => {
     </div>
   );
 };
+
+
+// ============ FIXED EXCHANGE DIALOG COMPONENT ============
+const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isMoving }) => {
+  const [selectedTargetSign, setSelectedTargetSign] = useState('');
+  const [availableTargetSigns, setAvailableTargetSigns] = useState([]);
+
+  // Check if road sign has active bookings for exchange
+  const hasActiveBookings = roadSign?.bookings && 
+                           roadSign.bookings.some(booking => booking.status === 1);
+
+  // Get the first active booking for exchange
+  const firstActiveBooking = roadSign?.bookings?.find(booking => booking.status === 1);
+
+  // Get compatible road signs for exchange (same template AND available)
+  useEffect(() => {
+    if (open && roadSign && roadSigns) {
+      const compatibleSigns = roadSigns.filter(sign => 
+        // Condition 1: Not the same road sign
+        sign.id !== roadSign.id &&
+        // Condition 2: Same template
+        sign.template_id === roadSign.template_id &&
+        // Condition 3: Has available panels OR we can ignore availability for exchange
+        (sign.available_date_ranges?.length > 0 || true) // Remove "|| true" if you want strict availability check
+      );
+      setAvailableTargetSigns(compatibleSigns);
+      setSelectedTargetSign(''); // Reset selection when dialog opens
+    }
+  }, [open, roadSign, roadSigns]);
+
+  const handleExchange = async () => {
+    if (!selectedTargetSign || !firstActiveBooking) {
+      alert('يرجى اختيار لوحة جديدة للتبديل');
+      return;
+    }
+
+    try {
+      const result = await onMoveBooking({
+        booking_id: firstActiveBooking.id,
+        old_roadsign_id: roadSign.id,
+        new_roadsign_id: selectedTargetSign
+      }).unwrap();
+      
+      console.log('Exchange successful:', result);
+      alert('تم تبديل الموقع بنجاح!');
+      onClose();
+      // Refresh the page or data
+      window.location.reload();
+    } catch (error) {
+      console.error('Exchange failed:', error);
+      alert('فشل تبديل الموقع: ' + (error.data?.message || 'حدث خطأ'));
+    }
+  };
+
+  // Return null if no roadSign
+  if (!roadSign) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-center">🔄 تبديل موقع اللوحة</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Current Road Sign Information */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+            <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-3">معلومات اللوحة الحالية</h4>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <InfoField label="اسم اللوحة" value={roadSign.name || `اللوحة #${roadSign.id}`} />
+              <InfoField label="الموقع" value={roadSign.place || 'غير محدد'} />
+              <InfoField label="المدينة" value={roadSign.city?.name || 'غير محدد'} />
+              <InfoField label="المنطقة" value={roadSign.region?.name || 'غير محدد'} />
+              <InfoField label="القالب" value={roadSign.template?.model || 'غير محدد'} />
+              <InfoField label="الحجوزات النشطة" value={roadSign.bookings?.filter(b => b.status === 1).length || 0} />
+            </div>
+          </div>
+
+          {/* Exchange Eligibility Status */}
+          {!hasActiveBookings ? (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-300 font-semibold">
+                    هذه اللوحة غير مؤهلة للتبديل
+                  </p>
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                    اللوحة يجب أن تحتوي على حجوزات نشطة
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✅</span>
+                <div>
+                  <p className="text-sm text-green-800 dark:text-green-300 font-semibold">
+                    اللوحة مؤهلة للتبديل
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                    {roadSign.bookings.filter(b => b.status === 1).length} حجز نشط
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Target Road Sign Selection */}
+          {hasActiveBookings && availableTargetSigns.length > 0 && (
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                اختر اللوحة الجديدة:
+              </label>
+              <select
+                value={selectedTargetSign}
+                onChange={(e) => setSelectedTargetSign(e.target.value)}
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="">-- اختر لوحة جديدة --</option>
+                {availableTargetSigns.map(sign => (
+                  <option key={sign.id} value={sign.id}>
+                    {sign.name || `اللوحة #${sign.id}`} - {sign.place} - {sign.city?.name}
+                    {sign.available_date_ranges?.[0]?.available_panels > 0 && 
+                      ` (متاح: ${sign.available_date_ranges[0].available_panels})`
+                    }
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                متاح {availableTargetSigns.length} لوحة بنفس القالب
+              </p>
+            </div>
+          )}
+
+          {hasActiveBookings && availableTargetSigns.length === 0 && (
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg text-center">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                ⚠️ لا توجد لوحات أخرى بنفس القالب متاحة للتبديل
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="flex gap-3 mt-6">
+          <Button 
+            variant="outline" 
+            onClick={onClose} 
+            disabled={isMoving}
+            className="flex-1"
+          >
+            إلغاء
+          </Button>
+          <Button 
+            onClick={handleExchange}
+            disabled={!hasActiveBookings || !selectedTargetSign || isMoving || availableTargetSigns.length === 0}
+            className="flex-1 bg-purple-600 hover:bg-purple-700"
+          >
+            {isMoving ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin">⟳</span>
+                جاري التبديل...
+              </span>
+            ) : (
+              'تبديل اللوحة'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Helper component for info fields
+const InfoField = ({ label, value }) => (
+  <div>
+    <span className="font-medium text-gray-600 dark:text-gray-400">{label}:</span>
+    <span className="text-gray-800 dark:text-white mr-2">{value}</span>
+  </div>
+);
 
 export default TableRoadSigns;

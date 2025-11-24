@@ -3,9 +3,18 @@ export const TemplateFields = [
   { name: "model", label: "النموذج", dir: "rtl" },
   { name: "size", label: "الحجم", dir: "rtl" },
   { name: "faces_number", label: "عدد الأوجه", dir: "rtl" , type: "number" },
+  { name: "color", label: "اللون ", dir: "rtl" , type: "color" },
+
 
   { name: "advertising_space", label: "مساحة الإعلان", dir: "rtl", type: "number" },
-  { name: "printing_space", label: "مساحة الطباعة", dir: "rtl", type: "number" },{
+  { name: "printing_space", label: "مساحة الطباعة", dir: "rtl", type: "number" },
+  {
+    name: "image",
+    label: "صورة النموذج",
+    type: "file",
+    accept: "image/*",
+  },
+  {
     name: "type",
     label: "النوع",
     type: "select",

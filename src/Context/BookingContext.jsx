@@ -32,7 +32,9 @@ export const BookingContextApi = ({ children, bookingId }) => {
   const [discountValue, setDiscountValue] = useState("");
   const [contractDialog, setContractDialog] = useState(false);
   const [notes, setNotes] = useState("");
-  const [queryParams, setQueryParams] = useState({ start_date: "2025-06-30" });
+  const [queryParams, setQueryParams] = useState({});
+  const [individualCalculations, setIndividualCalculations] = useState({});
+  const [individualLoadingStates, setIndividualLoadingStates] = useState({}); // New state for individual loading states
 
   // RTK Query hooks
   const { data: roadSigns, isLoading: isLoadingRoadSigns } =
@@ -85,6 +87,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
               number_of_reserved_panels: range.booking_faces,
               start_date: range.startDate,
               end_date: range.endDate,
+              units: range.units || 1,
             }))
           ),
           product_type: parseInt(values.product_type),
@@ -106,6 +109,8 @@ export const BookingContextApi = ({ children, bookingId }) => {
         setSelectedSigns([]);
         setAddedSignIds(new Set());
         setCalculationResult(null);
+        setIndividualCalculations({});
+        setIndividualLoadingStates({}); // Reset loading states
         setShowDiscount(false);
         setDiscountType("1");
         setDiscountValue("");
@@ -149,6 +154,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
           startDate: sign.pivot.start_date,
           endDate: sign.pivot.end_date,
           booking_faces: sign.pivot.number_of_reserved_panels,
+          units: sign.pivot.units || 1,
         });
         signsMap.set(sign.id, existingSign);
       });
@@ -161,6 +167,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
           total_advertising_space: bookingData?.total_advertising_space,
           total_printing_space: bookingData?.total_printing_space,
         },
+        units: bookingData?.units,
       });
     }
   }, [bookingData, isEditMode, isLoadingBooking]);
@@ -187,7 +194,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
   // Remove unavailable signs
   useEffect(() => {
     if (roadSigns && selectedSigns.length > 0) {
-      const availableSignIds = new Set(roadSigns.map((sign) => sign.id));
+      const availableSignIds = new Set(roadSigns?.data?.map((sign) => sign.id));
       const unavailableSigns = selectedSigns.filter(
         (sign) => !availableSignIds.has(sign.road_sign_id)
       );
@@ -258,6 +265,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
               startDate: formik.values.start_date,
               endDate: formik.values.end_date,
               booking_faces: 1,
+              units: 1,
             },
           ];
 
@@ -278,6 +286,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
               startDate: formik.values.start_date,
               endDate: formik.values.end_date,
               booking_faces: 1,
+              units: 1,
             },
           ];
 
@@ -307,6 +316,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
                       booking_faces: updates.booking_faces || range.booking_faces,
                       startDate: updates.startDate || range.startDate,
                       endDate: updates.endDate || range.endDate,
+                      units: updates.units || range.units || 1,
                     }
                   : range
               ),
@@ -349,6 +359,16 @@ export const BookingContextApi = ({ children, bookingId }) => {
       showToast("success", "تم إزالة اللوحة من السلة");
     }
     setCalculationResult(null);
+    setIndividualCalculations(prev => {
+      const newCalculations = { ...prev };
+      delete newCalculations[road_sign_id];
+      return newCalculations;
+    });
+    setIndividualLoadingStates(prev => {
+      const newLoadingStates = { ...prev };
+      delete newLoadingStates[road_sign_id];
+      return newLoadingStates;
+    });
     setShowDiscount(false);
     setDiscountValue("");
   };
@@ -364,6 +384,7 @@ export const BookingContextApi = ({ children, bookingId }) => {
             start_date: range.startDate,
             end_date: range.endDate,
             number_of_reserved_panels: range.booking_faces,
+            units: range.units || 1,
           }))
         ),
         start_date: formik.values.start_date,
@@ -380,6 +401,65 @@ export const BookingContextApi = ({ children, bookingId }) => {
       );
     } catch (error) {
       showToast("error", `${error.data.message}`);
+    }
+  };
+
+  // New function: Calculate individual booking price
+  const calculateBookingPrice = async (roadSignId) => {
+    try {
+      // Set loading state for this specific booking
+      setIndividualLoadingStates(prev => ({
+        ...prev,
+        [roadSignId]: true
+      }));
+
+      const bookingSign = selectedSigns.find(sign => sign.road_sign_id === roadSignId);
+      if (!bookingSign) {
+        showToast("error", "الحجز غير موجود");
+        setIndividualLoadingStates(prev => ({
+          ...prev,
+          [roadSignId]: false
+        }));
+        return;
+      }
+
+      const payload = {
+        product_type: parseInt(formik.values.product_type),
+        roadsigns: bookingSign.dateRanges.map((range) => ({
+          road_sign_id: roadSignId,
+          booking_faces: range.booking_faces,
+          start_date: range.startDate,
+          end_date: range.endDate,
+          number_of_reserved_panels: range.booking_faces,
+          units: range.units || 1,
+        })),
+        start_date: formik.values.start_date,
+        end_date: formik.values.end_date,
+      };
+
+      const response = await calculateReservation(payload).unwrap();
+
+      setIndividualCalculations(prev => ({
+        ...prev,
+        [roadSignId]: {
+          price_per_period: response.price_per_period,
+          amount: response.amount,
+          units: response.units,
+        }
+      }));
+
+      showToast(
+        "success",
+        `سعر الحجز: ${response?.price_per_period.toFixed(2)} $`
+      );
+    } catch (error) {
+      showToast("error", `خطأ في حساب سعر الحجز: ${error.data.message}`);
+    } finally {
+      // Clear loading state for this specific booking
+      setIndividualLoadingStates(prev => ({
+        ...prev,
+        [roadSignId]: false
+      }));
     }
   };
 
@@ -417,6 +497,38 @@ export const BookingContextApi = ({ children, bookingId }) => {
     [calculationResult, discountValue, discountType]
   );
 
+  // Group selected signs by booking (road_sign_id)
+  const groupedBookings = useMemo(() => {
+    const groups = {};
+    selectedSigns.forEach((sign) => {
+      const roadSign = roadSigns?.data?.find(rs => rs.id === sign.road_sign_id);
+      const signKey = sign.road_sign_id;
+      
+      if (!groups[signKey]) {
+        groups[signKey] = {
+          road_sign_id: sign.road_sign_id,
+          roadSign: roadSign,
+          dateRanges: [],
+          totalFaces: 0,
+          totalUnits: 0,
+          individualCalculation: individualCalculations[sign.road_sign_id] || null,
+          isLoading: individualLoadingStates[sign.road_sign_id] || false, // Add individual loading state
+        };
+      }
+      
+      sign.dateRanges.forEach(range => {
+        groups[signKey].dateRanges.push({
+          ...range,
+          bookingIndex: groups[signKey].dateRanges.length
+        });
+        groups[signKey].totalFaces += range.booking_faces;
+        groups[signKey].totalUnits += range.units || 1;
+      });
+    });
+    
+    return Object.values(groups);
+  }, [selectedSigns, roadSigns, individualCalculations, individualLoadingStates]);
+
   // Context value
   const contextValue = {
     isEditMode,
@@ -449,9 +561,13 @@ export const BookingContextApi = ({ children, bookingId }) => {
     updateSignFaces,
     removeFromCart,
     calculateTotal,
+    calculateBookingPrice,
     handleDiscountValueChange,
     calculateDiscountedPrice,
     isLoadingCalculateReservation,
+    groupedBookings,
+    individualCalculations,
+    individualLoadingStates, // Add individual loading states to context
   };
 
   return (

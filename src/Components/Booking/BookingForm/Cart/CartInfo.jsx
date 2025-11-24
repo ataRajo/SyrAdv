@@ -18,7 +18,7 @@ const CartInfo = () => {
       </div>
       <div className="flex flex-col">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          نوع الحجز:
+            :
         </span>
         <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
           {typeOptions.find((t) => t.value === parseInt(formik.values.type))

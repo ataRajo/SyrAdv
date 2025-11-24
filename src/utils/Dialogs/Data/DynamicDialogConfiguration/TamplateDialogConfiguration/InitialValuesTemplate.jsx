@@ -2,9 +2,11 @@ export const TemplateInitialValues = {
   model: "",
   type: "",
   size: "",
+  color:"",
   faces_number:"",
   advertising_space: "",
   printing_space: "",
+  image:null,
   products: [
     { price: "", type: 1 },
     { price: "", type: 2 },

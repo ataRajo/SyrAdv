@@ -40,11 +40,13 @@ export const RoadSignsSlice = createApi({
       providesTags: (result, error, id) => [{ type: "RoadSigns", id }],
     }),
     updateRoadSign: builder.mutation({
-      query: ({ id, ...data }) => ({
+      query: ({ id, data }) => {
+        console.log(data)
+        return ({
         url: `road-signs/${id}`,
-        method: "POST",
-        body: { ...data, _method: "PUT" },
-      }),
+        method: "PUT",
+        body: data,
+      })},
       invalidatesTags: ["RoadSigns"],
     }),
     addRoadSign: builder.mutation({

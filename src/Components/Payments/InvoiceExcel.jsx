@@ -150,7 +150,7 @@ const InvoiceExcel = ({
       onClick={generateExcel}
       type="button"
       dir="rtl"
-      className="bg-green-600 text-white px-4 py-2 cursor-pointer rounded-lg shadow-sm hover:bg-green-700 transition-colors duration-200"
+      className="bg-gray-800 text-white px-4 py-2 cursor-pointer rounded-lg shadow-sm hover:bg-gray-700 transition-colors duration-200"
     >
       تصدير كملف Excel
     </button>
