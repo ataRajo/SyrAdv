@@ -27,7 +27,11 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
   const [templateId, setTemplateId] = useState([]);
   const [faceNumber, setFaceNumber] = useState(1);
   const [selectedLocation, setSelectedLocation] = useState(null);
-  const [formInitialValues, setFormInitialValues] = useState(roadSignInitialValues);
+const [formInitialValues, setFormInitialValues] = useState({
+  ...roadSignInitialValues,
+  direction_two: "غير محدد", // Default value for removed direction_two field
+  panels_number: 1, // Default value for removed panels_number field
+});
 
   useEffect(() => {
     // Check token on component mount
@@ -36,25 +40,27 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
   }, []);
 
 
- const handleLocationSelect = (locationData) => {
-    setSelectedLocation(locationData);
+const handleLocationSelect = (locationData) => {
+  setSelectedLocation(locationData);
 
-    const updatedValues = {
-      ...roadSignInitialValues,
-      latitudeX: locationData.lat.toString(),    // Auto-fill latitude
-      longitudeY: locationData.lng.toString(),   // Auto-fill longitude  
-      place: locationData.address                // Auto-fill address
-    };
-    
-    setFormInitialValues(updatedValues);
-    
-    showToast("success", "تم اختيار الموقع وتعبئة الحقول تلقائياً");
-    console.log("✅ تم تعبئة الحقول:", {
-      latitudeX: locationData.lat,
-      longitudeY: locationData.lng,
-      place: locationData.address
-    });
+  const updatedValues = {
+    ...roadSignInitialValues,
+    direction_two: "غير محدد", // Default value for removed field
+    panels_number: 1, // Default value for removed field
+    latitudeX: locationData.lat.toString(),
+    longitudeY: locationData.lng.toString(),  
+    place: locationData.address
   };
+  
+  setFormInitialValues(updatedValues);
+  
+  showToast("success", "تم اختيار الموقع وتعبئة الحقول تلقائياً");
+  console.log("✅ تم تعبئة الحقول:", {
+    latitudeX: locationData.lat,
+    longitudeY: locationData.lng,
+    place: locationData.address
+  });
+};
 
 
 
@@ -108,27 +114,27 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
     },
   };
 
-  const onSubmitTransform = (values) => {
+const onSubmitTransform = (values) => {
+  const formData = new FormData();
 
-    const formData = new FormData();
+  formData.append('city_id', values?.city_id);
+  formData.append('direction_one', values?.direction_one);
+  formData.append('direction_two', values?.direction_two || "غير محدد"); // Default value for removed field
+  formData.append('panels_number', values?.panels_number || 1); // Default value for removed field
+  formData.append('place', values?.place);
+  formData.append('region_id', values?.region_id);
+  formData.append('template_id', values?.template_id);
 
-    formData.append('city_id', values?.city_id);
-    formData.append('direction_one', values?.direction_one);
-    formData.append('direction_two', values?.direction_two);
-    formData.append('panels_number', values?.panels_number);
-    formData.append('place', values?.place);
-    formData.append('region_id', values?.region_id);
-    formData.append('template_id', values?.template_id);
-
-    if (values?.image)
-      formData.append('image', values?.image);
-
-    
-
-    formData.append('latitudeX', values?.latitudeX);
-    formData.append('longitudeY', values?.longitudeY);
-    return formData;
+  // Keep image upload - user will select photo
+  if (values?.image) {
+    formData.append('image', values?.image);
   }
+
+  formData.append('latitudeX', values?.latitudeX);
+  formData.append('longitudeY', values?.longitudeY);
+  
+  return formData;
+}
   const handleCityChange = (value) => {
     setCityId(value);
     console.log(value);

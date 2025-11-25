@@ -41,53 +41,64 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ------------------------------------------------------ */
+/* IMPROVED LIGHT MODE COLORS (brighter, cleaner, modern) */
+/* ------------------------------------------------------ */
 :root {
   --radius: 0.625rem;
 
-  /* Main background and text */
-  --background: #e0e4e8;          /* page background */
-  --foreground: #1a1a1a;          /* main text color */
+  /* Background / Text */
+  --background: #f0f2f5;             /* brighter clean UI */
+  --foreground: #111827;             /* richer dark gray */
 
-  /* Cards and popovers */
-  --card: #f5f6f7;                 /* card background */
-  --card-foreground: #1a1a1a;      /* card text */
-  --popover: #f5f6f7;              /* popover background */
-  --popover-foreground: #1a1a1a;   /* popover text */
+  /* Cards */
+  --card: #ffffff;                   /* pure white cards for contrast */
+  --card-foreground: #111827;
 
-  /* Primary & secondary colors */
-  --primary: #4a6fa5;              /* buttons, highlights */
-  --primary-foreground: #ffffff;   /* text on primary */
-  --secondary: #7a8ca3;            /* secondary buttons or tags */
-  --secondary-foreground: #1a1a1a;
+  /* Popovers */
+  --popover: #ffffff;
+  --popover-foreground: #111827;
 
-  /* Muted / accent */
-  --muted: #cbd2d8;                /* disabled or subtle text */
-  --muted-foreground: #6b7280;     /* muted text color */
-  --accent: #f2b33d;               /* small accent, highlights */
-  --accent-foreground: #1a1a1a;
+  /* Primary Colors */
+  --primary: #3b82f6;                /* modern tailwind-blue */
+  --primary-foreground: #ffffff;
 
-  /* Destructive / errors */
-  --destructive: #e74c3c;
-  --border: #c1c7cd;               /* borders and inputs */
-  --input: #ffffff;                 /* input backgrounds */
-  --ring: #4a6fa5;                  /* focus ring color */
+  /* Secondary */
+  --secondary: #64748b;              /* cool gray */
+  --secondary-foreground: #ffffff;
 
-  /* Charts (optional) */
-  --chart-1: #4a6fa5;
-  --chart-2: #7a8ca3;
-  --chart-3: #f2b33d;
-  --chart-4: #f28c6b;
-  --chart-5: #a1c181;
+  /* Muted */
+  --muted: #d5dce3;
+  --muted-foreground: #6b7280;
+
+  /* Accent */
+  --accent: #f59e0b;                 /* tailwind amber */
+  --accent-foreground: #111827;
+
+  /* Error */
+  --destructive: #ef4444;
+
+  /* Borders / Inputs */
+  --border: #d1d5db;
+  --input: #ffffff;
+  --ring: #3b82f6;
+
+  /* Charts */
+  --chart-1: #3b82f6;
+  --chart-2: #64748b;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #10b981;
 
   /* Sidebar */
-  --sidebar: #d3d8de;              /* sidebar bg, softer than white */
-  --sidebar-foreground: #1a1a1a;    /* text */
-  --sidebar-primary: #4a6fa5;        /* active menu item */
+  --sidebar: #e5e9ef;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #3b82f6;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f2b33d;         /* badges, highlights */
-  --sidebar-accent-foreground: #1a1a1a;
-  --sidebar-border: #c1c7cd;         /* sidebar border */
-  --sidebar-ring: #4a6fa5;
+  --sidebar-accent: #f59e0b;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #d1d5db;
+  --sidebar-ring: #3b82f6;
 }
 
 .dark {
@@ -133,8 +144,6 @@
   }
 }
 
-
-
 body {
   --sb-track-color: #e2ebef;
   --sb-thumb-color: #4961f5;
@@ -153,16 +162,13 @@ body::-webkit-scrollbar-track  , .dialog-content::-webkit-scrollbar-track {
 body::-webkit-scrollbar-thumb , .dialog-content::-webkit-scrollbar-thumb{
   background: var(--sb-thumb-color);
   border-radius: 12px;
-  
 }
 
 @supports not selector(::-webkit-scrollbar) {
   body {
-    scrollbar-color: var(--sb-thumb-color)
-                     var(--sb-track-color);
+    scrollbar-color: var(--sb-thumb-color) var(--sb-track-color);
   }
 }
-
 
 main{
  width: calc(100% - 256px) !important;
@@ -178,13 +184,47 @@ td div{
   display: inline-flex !important;
 }
 
-
 #radix-«r4»{
   max-width: 900px !important;
-    width: 90%;
+  width: 90%;
 } 
 
- /* #radix-«r8»{
-   max-width: 1900px !important;
-    width: 80% !important;
-} */
+
+/* ------------------------------------------------------ */
+/* ⭐ NEW ADDITIONS BELOW (NO DELETIONS)                  */
+/* ------------------------------------------------------ */
+
+/* ------------------------------------------------------ */
+/* RESPONSIVE SIDE MAIN CONTENT                           */
+/* ------------------------------------------------------ */
+@media (max-width: 1024px) {
+  main {
+    width: 100% !important;
+  }
+}
+
+/* ------------------------------------------------------ */
+/* DARK MODE CARD HOVER EFFECT                            */
+/* ------------------------------------------------------ */
+.dark .card,
+.dark .card-hover,
+.dark [class*="card"] {
+  transition: 0.3s ease;
+}
+
+.dark .card:hover,
+.dark .card-hover:hover,
+.dark [class*="card"]:hover {
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.18);
+  opacity: 0.95;
+  transform: translateY(-2px);
+}
+
+/* Light mode subtle card hover */
+.card:hover,
+.card-hover:hover,
+[class*="card"]:hover {
+  transition: 0.25s ease;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+  transform: translateY(-1px);
+}

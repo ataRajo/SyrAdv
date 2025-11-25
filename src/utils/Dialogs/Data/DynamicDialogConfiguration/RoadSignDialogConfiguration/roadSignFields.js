@@ -57,7 +57,7 @@ export const roadSignFields2 = [
     valueKey: "id",
     displayKey: "model",
   },
-   {
+  {
     name: "city_id",
     label: "المدينة",
     type: "select",
@@ -77,14 +77,9 @@ export const roadSignFields2 = [
   },
   { name: "place", label: "مكان التموضع", type: "text", dir: "rtl" },
   { name: "direction_one", label: "الإتجاه الأول ", type: "text", dir: "rtl" },
-  {
-    name: "direction_two",
-    label: "الإتجاه الثاني ",
-    type: "text",
-    dir: "rtl",
-  },
-
-  { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
+  // Removed only these two fields from UI
+  // { name: "direction_two", label: "الإتجاه الثاني ", type: "text", dir: "rtl" },
+  // { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
 
   {
     name: "image",
@@ -92,11 +87,10 @@ export const roadSignFields2 = [
     type: "file",
     accept: "image/*",
   },
-   {
+  {
     name: "map",
-    type:"map"
+    type: "map"
   },
- 
 ];
 
 export const roadSignFieldsEdit = [

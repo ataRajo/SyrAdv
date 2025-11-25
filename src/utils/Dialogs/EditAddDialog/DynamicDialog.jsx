@@ -247,14 +247,29 @@ const DynamicDialog = ({
         );
       }
 
-      case "map":
-        return (
-          <MapDialog
-            onLocationSelect={handleLocationSelect}
-            buttonText={selectedLocation ? "تغيير الموقع" : "اختر موقعك"}
-            buttonVariant={selectedLocation ? "outline" : "default"}
-          />
-        );
+   case "map":
+  return (
+    <div key={field.name} className="space-y-2">
+      <Label htmlFor={field.name}>موقع اللوحة الطرقية</Label>
+      {selectedLocation && (
+        <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-md">
+          <p className="text-sm text-green-700">
+            <strong>الموقع المحدد:</strong> {selectedLocation.address}
+          </p>
+          <p className="text-xs text-gray-600">
+            الإحداثيات: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+          </p>
+        </div>
+      )}
+      <MapDialog
+        onLocationSelect={handleLocationSelect}
+        buttonText={selectedLocation ? "تغيير الموقع" : "اختر موقع اللوحة"}
+        buttonVariant={selectedLocation ? "outline" : "default"}
+        enableSatelliteView={true} // ✅ Added satellite map option
+        defaultMapType="satellite" // ✅ Default to satellite view for road signs
+      />
+    </div>
+  );
 
       default:
         return (

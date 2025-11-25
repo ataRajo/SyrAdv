@@ -1,4 +1,4 @@
-// MapDialog.jsx - COMPLETE FIXED VERSION
+// MapDialog.jsx - UPDATED VERSION WITH SATELLITE MAP
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,16 +36,35 @@ export function MapDialog({
   buttonVariant = "default",
   className = "",
   initialLocation = null,
+  enableSatelliteView = false, // ✅ NEW: Enable satellite view
+  defaultMapType = "roadmap" // ✅ NEW: Default map type
 }) {
   const [open, setOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [cityQuery, setCityQuery] = useState("");
   const [cityResults, setCityResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [mapType, setMapType] = useState(defaultMapType); // ✅ NEW: Map type state
   const mapRef = useRef(null);
   const markerIcon = useRef(createMarkerIcon()).current;
 
-  // ✅ FIXED: BETTER ARABIC CITY SEARCH
+  // ✅ SATELLITE MAP TILES
+  const satelliteTiles = {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community'
+  };
+
+  // ✅ STANDARD MAP TILES
+  const standardTiles = {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; OpenStreetMap contributors'
+  };
+
+  // ✅ TOGGLE BETWEEN MAP TYPES
+  const toggleMapType = () => {
+    setMapType(prev => prev === "roadmap" ? "satellite" : "roadmap");
+  };
+
   const handleCitySearch = async () => {
     if (!cityQuery.trim()) {
       showToast("error", "الرجاء إدخال اسم المدينة أو المنطقة");
@@ -54,7 +73,6 @@ export function MapDialog({
     
     setIsSearching(true);
     try {
-      // ✅ IMPROVED SEARCH: Remove country restriction and better Arabic support
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?` +
         `format=json&` +
@@ -62,7 +80,7 @@ export function MapDialog({
         `addressdetails=1&` +
         `limit=10&` +
         `accept-language=ar&` +
-        `countrycodes=SY,SA,JO,LB,EG,AE,QA,BH,OM,KW,IQ&` + // Arab countries
+        `countrycodes=SY,SA,JO,LB,EG,AE,QA,BH,OM,KW,IQ&` +
         `featureType=city|town|suburb|neighbourhood`
       );
       
@@ -74,8 +92,6 @@ export function MapDialog({
       
       if (results.length > 0) {
         showToast("success", `تم العثور على ${results.length} نتيجة`);
-        
-        // Auto-select first result and move map
         const firstResult = results[0];
         handleSelectCity(firstResult);
       } else {
@@ -89,7 +105,6 @@ export function MapDialog({
     }
   };
 
-  // ✅ SELECT CITY FROM SEARCH RESULTS
   const handleSelectCity = (city) => {
     const lat = parseFloat(city.lat);
     const lng = parseFloat(city.lon);
@@ -103,7 +118,6 @@ export function MapDialog({
     
     setSelectedLocation(locationData);
     
-    // ✅ FIX: Ensure map is ready before setting view
     if (mapRef.current) {
       mapRef.current.setView([lat, lng], 13);
     }
@@ -128,17 +142,14 @@ export function MapDialog({
     }
   };
 
-  // ✅ FIX: MAP RENDERING ISSUE - Reset map when dialog opens
   useEffect(() => {
     if (open && mapRef.current) {
-      // Force map to invalidate size and re-render
       setTimeout(() => {
         mapRef.current.invalidateSize();
       }, 100);
     }
-  }, [open]);
+  }, [open, mapType]); // ✅ Added mapType dependency to refresh on change
 
-  // Keep internal selectedLocation in sync with initialLocation prop
   useEffect(() => {
     if (initialLocation) {
       setSelectedLocation(initialLocation);
@@ -180,18 +191,40 @@ export function MapDialog({
           <DialogTitle>اختر الموقع على الخريطة</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 flex flex-col min-h-0"> {/* ✅ FIX: Better flex layout */}
-          {/* ✅ IMPROVED SEARCH SECTION */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* ✅ UPDATED: MAP CONTROLS SECTION */}
           <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex-shrink-0">
-            <h4 className="font-semibold text-blue-800 mb-2">🔍 ابحث عن مدينة أو منطقة:</h4>
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="font-semibold text-blue-800">🗺️ تحكم في الخريطة:</h4>
+              
+              {/* ✅ MAP TYPE TOGGLE BUTTON */}
+              {enableSatelliteView && (
+                <Button 
+                  onClick={toggleMapType}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {mapType === "satellite" ? (
+                    <>
+                      <span className="text-md text-gray-500">🌍 عرض عادي</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-md text-gray-500">🛰️ عرض ساتلايت</span>
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
             
             {/* SEARCH INPUT */}
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-2">
               <input
                 type="text"
                 value={cityQuery}
                 onChange={(e) => setCityQuery(e.target.value)}
-                placeholder="ابحث (مثال: سوريا، دمشق، حلب، باب توما)......"
+                placeholder="ابحث عن مدينة أو منطقة..."
                 className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-800"
                 onKeyPress={(e) => e.key === 'Enter' && handleCitySearch()}
               />
@@ -218,9 +251,6 @@ export function MapDialog({
                       <div className="font-medium text-gray-800">
                         {city.display_name}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        نوع: {city.type} | أهمية: {city.importance?.toFixed(2)}
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -231,12 +261,12 @@ export function MapDialog({
           {/* SELECTED LOCATION PREVIEW */}
           {selectedLocation && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex-shrink-0">
-              <h4 className="font-semibold text-green-800">الموقع المختار:</h4>
+              <h4 className="font-semibold text-green-800">📍 الموقع المختار:</h4>
               <p className="text-sm text-green-700">
                 <strong>الموقع:</strong> {selectedLocation.cityName}
               </p>
               <p className="text-sm text-green-700">
-                <strong>العنوان الكامل:</strong> {selectedLocation.address}
+                <strong>العنوان:</strong> {selectedLocation.address}
               </p>
               <p className="text-xs text-green-600">
                 <strong>الإحداثيات:</strong> {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
@@ -254,28 +284,27 @@ export function MapDialog({
             </Button>
 
             <p className="text-sm text-gray-600 text-center">
-              💡 ابحث عن المدينة أو المنطقة ثم انقر على الخريطة للتحديد الدقيق
+              💡 {mapType === "satellite" ? "استخدم الخريطة الساتلايتية للتحديد الدقيق" : "انقر على الخريطة للتحديد الدقيق"}
             </p>
           </div>
 
-          {/* ✅ FIX: MAP CONTAINER WITH BETTER SIZING */}
+          {/* ✅ UPDATED: MAP CONTAINER */}
           <div className="flex-1 rounded-lg overflow-hidden border border-gray-300 min-h-0">
             <MapContainer
               whenCreated={(mapInstance) => {
                 mapRef.current = mapInstance;
-                // Fix initial rendering
                 setTimeout(() => {
                   mapInstance.invalidateSize();
                 }, 100);
               }}
-              center={initialLocation ? [initialLocation.lat, initialLocation.lng] : [33.5138, 36.2765]} // Damascus default
+              center={initialLocation ? [initialLocation.lat, initialLocation.lng] : [33.5138, 36.2765]}
               zoom={initialLocation ? 16 : 10}
               style={{ height: "100%", width: "100%" }}
-              className="z-0" // Ensure proper z-index
+              className="z-0"
             >
               <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; OpenStreetMap contributors'
+                url={mapType === "satellite" ? satelliteTiles.url : standardTiles.url}
+                attribution={mapType === "satellite" ? satelliteTiles.attribution : standardTiles.attribution}
               />
               <LocationPicker
                 onLocationSelect={handleLocationSelect}
