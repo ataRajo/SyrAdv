@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { MapPin, Edit } from "lucide-react";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Select from "react-select";
@@ -36,7 +38,6 @@ const DynamicDialog = ({
   handleLocationSelect,
   selectedLocation,
 }) => {
-  // --- robustly call the provided mutation hook and extract mutate + isLoading ---
   const mutationReturn = mutationHook();
   let mutate = null;
   let isLoading = false;
@@ -65,52 +66,51 @@ const DynamicDialog = ({
 
   const renderField = (field, formik) => {
     switch (field.type) {
-      case "select": {
-        const options = field.options || (selectData[field.dataKey]?.data || []);
-        const selectOptions = options.map((opt) => {
-          const value = opt[field.valueKey] ?? opt.value ?? opt;
-          const label = opt[field.displayKey] ?? opt.label ?? opt;
-          return { value, label };
-        });
+case "select": {
+  const options = field.options || (selectData[field.dataKey]?.data || []);
+  const selectOptions = options.map((opt) => {
+    const value = opt[field.valueKey] ?? opt.value ?? opt;
+    const label = opt[field.displayKey] ?? opt.label ?? opt;
+    return { value, label };
+  });
 
-        return (
-          <div key={field.name} className="space-y-2">
-            <Label htmlFor={field.name}>{field.label}</Label>
-            <Select className="text-red-600"
-              options={selectOptions}
-              value={
-                selectOptions.find((opt) => opt.value === formik.values[field.name]) || null
-              }
-              onChange={(selectedOption) => {
-                const value = selectedOption ? selectedOption.value : "";
-                formik.setFieldValue(field.name, value);
-                onFieldChange(field.name, value);
-              }}
-              onBlur={() => formik.setFieldTouched(field.name, true)}
-              placeholder={`اختر ${field.label}`}
-              isSearchable
-              noOptionsMessage={() => "لا توجد خيارات مطابقة"}
-              styles={{
-                control: (base) => ({
-                  ...base,
-                  borderColor:
-                    formik.touched[field.name] && formik.errors[field.name]
-                      ? "red"
-                      : base.borderColor,
-                  direction: "rtl",
-                  textAlign: "right",
-                
-                }),
-                menu: (base) => ({ ...base, direction: "rtl", zIndex: 9999 }),
-              }}
-            />
-            {formik.touched[field.name] && formik.errors[field.name] && (
-              <p className="text-sm text-destructive">{formik.errors[field.name]}</p>
-            )}
-          </div>
-        );
-      }
-
+  return (
+    <div key={field.name} className="space-y-2">
+      <Label htmlFor={field.name}>{field.label}</Label>
+      <Select
+        className="text-red-600"
+        options={selectOptions}
+        value={
+          selectOptions.find((opt) => opt.value === formik.values[field.name]) || null
+        }
+        onChange={(selectedOption) => {
+          const value = selectedOption ? selectedOption.value : "";
+          formik.setFieldValue(field.name, value);
+          onFieldChange(field.name, value);
+        }}
+        onBlur={() => formik.setFieldTouched(field.name, true)}
+        placeholder={`اختر ${field.label}`}
+        isSearchable
+        noOptionsMessage={() => "لا توجد خيارات مطابقة"}
+        styles={{
+          control: (base) => ({
+            ...base,
+            borderColor:
+              formik.touched[field.name] && formik.errors[field.name]
+                ? "red"
+                : base.borderColor,
+            direction: "rtl",
+            textAlign: "right",
+          }),
+          menu: (base) => ({ ...base, direction: "rtl", zIndex: 9999 }),
+        }}
+      />
+      {formik.touched[field.name] && formik.errors[field.name] && (
+        <p className="text-sm text-destructive">{formik.errors[field.name]}</p>
+      )}
+    </div>
+  );
+}
       case "array":
         return (
           <div key={field.name} className="space-y-2">
@@ -140,19 +140,31 @@ const DynamicDialog = ({
           </div>
         );
 
-  case "file": {
+case "file": {
   const currentVal = formik.values[field.name];
   const initialVal = formik.initialValues?.[field.name];
+  
+  // Get the full image URL if it's stored as a path
+  const getImageUrl = (imageValue) => {
+    if (!imageValue) return null;
+    
+    if (imageValue instanceof File) {
+      return URL.createObjectURL(imageValue);
+    }
+    
+    if (typeof imageValue === 'string') {
+      // Check if it's already a full URL
+      if (imageValue.startsWith('http') || imageValue.startsWith('/')) {
+        return imageValue;
+      }
+      // If it's just a filename, you might want to prepend your base URL
+      return `${process.env.REACT_APP_API_URL || ''}/storage/${imageValue}`;
+    }
+    
+    return null;
+  };
 
-  // Compute preview URL (File or string)
-  const previewSrc =
-    currentVal instanceof File
-      ? URL.createObjectURL(currentVal)
-      : typeof currentVal === "string"
-      ? currentVal
-      : typeof initialVal === "string"
-      ? initialVal
-      : null;
+  const previewSrc = getImageUrl(currentVal) || getImageUrl(initialVal);
 
   return (
     <div key={field.name} className="space-y-2">
@@ -165,6 +177,9 @@ const DynamicDialog = ({
             src={previewSrc}
             alt="Preview"
             className="h-24 w-24 object-cover rounded border"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
           />
         </div>
       )}
@@ -177,17 +192,39 @@ const DynamicDialog = ({
         onChange={(e) => {
           const file = e.currentTarget.files?.[0];
           if (file) {
-            // ✅ only update when user actually selects a file
             formik.setFieldValue(field.name, file);
           }
         }}
       />
 
-      {typeof currentVal === "string" && (
-        <p className="text-xs text-gray-500">
-          الملف الحالي: {currentVal.split("/").pop()}
-        </p>
-      )}
+      <div className="flex gap-2 mt-2">
+        {previewSrc && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Clear the file input
+                const fileInput = document.getElementById(field.name);
+                if (fileInput) fileInput.value = '';
+                // Clear the field value
+                formik.setFieldValue(field.name, null);
+              }}
+            >
+              إزالة الصورة
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(previewSrc, '_blank')}
+            >
+              عرض بالحجم الكامل
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -247,13 +284,16 @@ const DynamicDialog = ({
         );
       }
 
-   case "map":
+case "map":
   return (
     <div key={field.name} className="space-y-2">
       <Label htmlFor={field.name}>موقع اللوحة الطرقية</Label>
+      
+      {/* عرض الموقع المحدد */}
       {selectedLocation && (
         <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-sm text-green-700">
+          <p className="text-sm text-green-700 flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
             <strong>الموقع المحدد:</strong> {selectedLocation.address}
           </p>
           <p className="text-xs text-gray-600">
@@ -261,12 +301,31 @@ const DynamicDialog = ({
           </p>
         </div>
       )}
+      
+      {/* زر فتح الخريطة */}
       <MapDialog
-        onLocationSelect={handleLocationSelect}
-        buttonText={selectedLocation ? "تغيير الموقع" : "اختر موقع اللوحة"}
+        onLocationSelect={(locationData) => {
+          // ✅ تحديث الموقع المختار
+          if (typeof handleLocationSelect === 'function') {
+            handleLocationSelect(locationData);
+          }
+        }}
+        buttonText={selectedLocation ? "تغيير الموقع من الخريطة" : "اختر موقع من الخريطة"}
         buttonVariant={selectedLocation ? "outline" : "default"}
-        enableSatelliteView={true} // ✅ Added satellite map option
-        defaultMapType="satellite" // ✅ Default to satellite view for road signs
+        enableSatelliteView={true}
+        defaultMapType="satellite"
+      />
+      
+      {/* ✅ ADD HIDDEN FIELDS FOR COORDINATES */}
+      <input
+        type="hidden"
+        name="latitudeX"
+        value={formik.values.latitudeX || ''}
+      />
+      <input
+        type="hidden"
+        name="longitudeY"
+        value={formik.values.longitudeY || ''}
       />
     </div>
   );
@@ -293,80 +352,121 @@ const DynamicDialog = ({
         <DialogHeader>
           <DialogTitle className="text-center">{title}</DialogTitle>
         </DialogHeader>
-        <Formik
-          initialValues={initialValues}
-          validationSchema={validationSchema}
-          enableReinitialize
-          onSubmit={async (values, { setSubmitting }) => {
-            try {
-              setSubmitting(true);
+   <Formik
+  initialValues={initialValues}
+  validationSchema={validationSchema}
+  enableReinitialize={false} // Disable auto-reinitialize
+  onSubmit={async (values, { setSubmitting, resetForm }) => {
+    try {
+      setSubmitting(true);
 
-              const transformed = onSubmitTransform(values);
-              const payload = transformed instanceof FormData ? transformed : { ...transformed };
+      // Debug: Log the original values
+      console.log("📝 Original form values:", values);
+      console.log("📍 LatitudeX:", values.latitudeX, "Type:", typeof values.latitudeX);
+      console.log("📍 LongitudeY:", values.longitudeY, "Type:", typeof values.longitudeY);
 
-              // debug: log FormData entries when using FormData
-              if (payload instanceof FormData) {
-                for (const pair of payload.entries()) {
-                  console.log("FormData entry:", pair[0], pair[1]);
-                }
-              } else {
-                console.log("JSON payload:", payload);
-              }
+      const transformed = onSubmitTransform(values);
+      const payload = transformed instanceof FormData ? transformed : { ...transformed };
 
-              if (!mutate || typeof mutate !== "function") {
-                throw new Error("Mutation function is not available. Ensure mutationHook is the correct RTK Query hook.");
-              }
+      // debug: log FormData entries when using FormData
+      if (payload instanceof FormData) {
+        console.log("📤 FormData entries:");
+        for (const pair of payload.entries()) {
+          console.log(pair[0], ":", pair[1], "(type:", typeof pair[1], ")");
+        }
+        
+        // Ensure latitude and longitude are always included
+        if (!payload.has('latitudeX')) {
+          console.log("⚠️ latitudeX not in FormData, adding default 0");
+          payload.append('latitudeX', 0);
+        }
+        if (!payload.has('longitudeY')) {
+          console.log("⚠️ longitudeY not in FormData, adding default 0");
+          payload.append('longitudeY', 0);
+        }
+      } else {
+        console.log("📤 JSON payload:", payload);
+        
+        // Ensure latitude and longitude are always included in JSON
+        if (payload.latitudeX === undefined || payload.latitudeX === null || payload.latitudeX === '') {
+          console.log("⚠️ latitudeX not in payload, adding default 0");
+          payload.latitudeX = 0;
+        }
+        if (payload.longitudeY === undefined || payload.longitudeY === null || payload.longitudeY === '') {
+          console.log("⚠️ longitudeY not in payload, adding default 0");
+          payload.longitudeY = 0;
+        }
+        
+        // Convert to numbers
+        if (typeof payload.latitudeX !== 'number') {
+          payload.latitudeX = Number(payload.latitudeX) || 0;
+        }
+        if (typeof payload.longitudeY !== 'number') {
+          payload.longitudeY = Number(payload.longitudeY) || 0;
+        }
+      }
 
-              // call the mutation in a way that supports RTK Query trigger (promise), react-query mutate/mutateAsync, and callback-style mutate
-              let callResult;
-              const callArg = id ? { id, data: payload } : payload;
-              const maybePromise = mutate(callArg);
+      if (!mutate || typeof mutate !== "function") {
+        throw new Error("Mutation function is not available. Ensure mutationHook is the correct RTK Query hook.");
+      }
 
-              if (maybePromise && typeof maybePromise.then === "function") {
-                // RTK Query trigger returns a promise; it may have unwrap
-                if (typeof maybePromise.unwrap === "function") {
-                  callResult = await maybePromise.unwrap();
-                } else {
-                  callResult = await maybePromise;
-                }
-              } else {
-                // callback-style mutate (react-query mutate)
-                callResult = await new Promise((resolve, reject) => {
-                  try {
-                    mutate(callArg, {
-                      onSuccess: (data) => resolve(data),
-                      onError: (err) => reject(err),
-                    });
-                  } catch (e) {
-                    reject(e);
-                  }
-                });
-              }
+      // call the mutation in a way that supports RTK Query trigger (promise), react-query mutate/mutateAsync, and callback-style mutate
+      let callResult;
+      const callArg = id ? { id, data: payload } : payload;
+      const maybePromise = mutate(callArg);
 
-              console.log("API response:", callResult);
-              showToast("success", "تمت المهمة بنجاح");
-              handleClose();
-            } catch (err) {
-              console.error("Mutation error:", err);
-              showToast("error", `حدث خطأ: ${err?.data?.message || err.message}`);
-            } finally {
-              setSubmitting(false);
-            }
-          }}
-        >
+      if (maybePromise && typeof maybePromise.then === "function") {
+        // RTK Query trigger returns a promise; it may have unwrap
+        if (typeof maybePromise.unwrap === "function") {
+          callResult = await maybePromise.unwrap();
+        } else {
+          callResult = await maybePromise;
+        }
+      } else {
+        // callback-style mutate (react-query mutate)
+        callResult = await new Promise((resolve, reject) => {
+          try {
+            mutate(callArg, {
+              onSuccess: (data) => resolve(data),
+              onError: (err) => reject(err),
+            });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+
+      console.log("✅ API response:", callResult);
+      showToast("success", "تمت المهمة بنجاح");
+      resetForm(); // ✅ Reset form only on successful submission
+      handleClose();
+    } catch (err) {
+      console.error("❌ Mutation error:", err);
+      showToast("error", `حدث خطأ: ${err?.data?.message || err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }}
+>
           {(formik) => (
             <Form className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 {fields.map((field) => renderField(field, formik))}
               </div>
               <DialogFooter className="mt-6">
-                <Button type="button" variant="outline" onClick={() => { handleClose(); formik.resetForm(); }}>
-                  إلغاء
-                </Button>
-                <Button type="submit" disabled={isLoading || formik.isSubmitting}>
-                  {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "حفظ"}
-                </Button>
-              </DialogFooter>
+  <Button 
+    type="button" 
+    variant="outline" 
+    onClick={() => { 
+      handleClose(); 
+    }}
+  >
+    إلغاء
+  </Button>
+  <Button type="submit" disabled={isLoading || formik.isSubmitting}>
+    {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "حفظ"}
+  </Button>
+</DialogFooter>
             </Form>
           )}
         </Formik>

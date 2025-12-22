@@ -100,18 +100,46 @@ export const BookingSlice = createApi({
       invalidatesTags: (result, error, { id }) => [{ type: "bookings", id }],
     }),
 
-    // ✅ Calculate reservation
-    calculateReservation: builder.mutation({
-      query: (data) => ({
-        url: "get-calculate-Amount",
-        method: "POST",
+ extendBooking: builder.mutation({
+      query: ({ id, ...data }) => ({
+        url: `bookings/${id}/extendBooking`,
+        method: 'POST',
         body: data,
       }),
-      invalidatesTags: ["reservations"],
+      invalidatesTags: ['bookings'],
     }),
+
+      
+ calculateReservation: builder.mutation({
+  query: ({ is_extend = false, ...restData }) => ({
+    url: "get-calculate-Amount",
+    method: "POST",
+    body: {
+      ...restData,
+      is_extend,
+    },
+  }),
+  invalidatesTags: ["reservations"],
+}),
+
+
+    confirmBooking: builder.mutation({
+  query: (id) => ({
+    url: `bookings/${id}/confirm-booking`,
+    method: "POST",
+    body: {},
+  }),
+  invalidatesTags: (result, error, id) => [
+    { type: "bookings", id },
+    { type: "bookings", id: "LIST" },
+  ],
+}),
   }),
   
+
+  
 });
+
 
 export const {
   useGetBookingQuery,
@@ -122,5 +150,8 @@ export const {
   useCancelBookingMutation,
   useCalculateReservationMutation,
   useUpdateBookingStatusMutation,
-  useMoveBookingMutation
+  useMoveBookingMutation ,
+  useExtendBookingMutation,
+  useConfirmBookingMutation, 
+  //useCalculateExtendedPriceMutation
 } = BookingSlice;

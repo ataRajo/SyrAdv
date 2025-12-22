@@ -70,6 +70,7 @@ useEffect(() => {
       edit: Permissions.EditBookings,
       delete: Permissions.DeleteBookings,
       unConfirm: Permissions.EditBookings,
+      extend: Permissions.ExtendBookings,
     };
   }, [Permissions]);
 

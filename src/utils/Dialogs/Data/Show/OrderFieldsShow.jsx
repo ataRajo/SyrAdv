@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { productTypeMap } from "../../../../Static/StaticData";
 
 export const OrderFieldsShow = [
-  { label: 'النوع', key: 'type', icon: 'mdi:format-list-bulleted-type', format: (value) => productTypeMap[value] || 'Unknown' },
+ // { label: 'النوع', key: 'type', icon: 'mdi:format-list-bulleted-type', format: (value) => productTypeMap[value] || 'Unknown' },
   { label: 'التاريخ', key: 'action_date', icon: 'mdi:calendar', format: (value) => format(new Date(value), 'MMM dd, yyyy') },
   { label: 'الملاحظات', key: 'notes', icon: 'mdi:note-text' },
   { label: 'تم الإنشاء في', key: 'created_at', icon: 'mdi:calendar-plus', format: (value) => format(new Date(value), 'MMM dd, yyyy HH:mm') },

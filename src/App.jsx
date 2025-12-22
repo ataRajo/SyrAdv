@@ -27,6 +27,10 @@ import BrokerInfo from "./Components/Brokers/BrokerInfo";
 import RoadSignStats from "./Components/RoadSigns/RoadSignStats/RoadSignStats";
 
 import axios from "axios";
+import ExtendBooking from "./Components/Booking/BookingForm/Cart/ExtendBooking";
+import LandingPage from "./Pages/LandingPage/LandingPage";
+import PrintPrice from "./Components/PrintPrice/PrintPrice"
+
 
 function App() {
 
@@ -39,9 +43,11 @@ function App() {
       
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/dashboard" element={<DashboardPage />}>
 
+          <Route path="/Login" element={<Login />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/dashboard" element={<DashboardPage />}>
+          
 
             <Route
               path="administration-page"
@@ -95,6 +101,12 @@ function App() {
 
             <Route path="regions-city" element={<RegionsCityPage />} />
             <Route path="profile" element={<ProfilePage />} />
+              {/*New Routes*/}
+
+              <Route path="booking/extend/:id" element={<ExtendBooking />} />
+              <Route path ='/dashboard/PrintPrice' element ={<PrintPrice />} />
+              
+
           </Route>
         </Routes>
       </BrowserRouter>

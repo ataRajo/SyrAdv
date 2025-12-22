@@ -9,7 +9,7 @@ import L from "leaflet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NavigationIcon, FilterIcon, LocateIcon, Loader2, Calendar, MapPin, Type, Ruler } from "lucide-react";
+import { NavigationIcon, FilterIcon, LocateIcon, Loader2, Calendar, MapPin, Type, Ruler, Search, X } from "lucide-react";
 import { showToast } from "../../utils/Notifictions/showToast";
 
 // Fix for default markers
@@ -38,6 +38,17 @@ const UserLocationIcon = L.icon({
   iconAnchor: [12, 12],
 });
 
+const SearchMarkerIcon = L.icon({
+  iconUrl: "data:image/svg+xml;base64," + btoa(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" width="28" height="28">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+    </svg>
+  `),
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -28]
+});
+
 // Component to handle user location
 function UserLocation() {
   const map = useMap();
@@ -45,7 +56,6 @@ function UserLocation() {
   const locationFoundRef = useRef(false);
   const locationAttemptRef = useRef(false);
 
-  // Improved location reasonableness check - much more permissive
   const checkLocationReasonableness = (latlng) => {
     const inaccurateLocations = [
       { lat: 48.8566, lng: 2.3522, name: "Paris" },
@@ -55,13 +65,11 @@ function UserLocation() {
       { lat: 37.7749, lng: -122.4194, name: "San Francisco" },
     ];
     
-    // Check if it's one of the known inaccurate locations (with tighter bounds)
     const isInaccurate = inaccurateLocations.some(inaccurate => 
-      Math.abs(latlng.lat - inaccurate.lat) < 0.5 && // Reduced from 1.0 to 0.5
+      Math.abs(latlng.lat - inaccurate.lat) < 0.5 &&
       Math.abs(latlng.lng - inaccurate.lng) < 0.5
     );
     
-    // Allow any valid coordinates except inaccurate ones
     const isValidCoordinate = 
       latlng.lat >= -90 && latlng.lat <= 90 && 
       latlng.lng >= -180 && latlng.lng <= 180;
@@ -69,7 +77,6 @@ function UserLocation() {
     return !isInaccurate && isValidCoordinate;
   };
 
-  // Improved IP location services
   const getIPBasedLocation = async () => {
     const services = [
       'https://ipapi.co/json/',
@@ -120,7 +127,6 @@ function UserLocation() {
       }
     }
     
-    // Fallback to default position
     const defaultPosition = { lat: 24.7136, lng: 46.6753 };
     setUserPosition(defaultPosition);
     map.flyTo(defaultPosition, 10);
@@ -140,7 +146,7 @@ function UserLocation() {
       setView: true,
       maxZoom: 14,
       enableHighAccuracy: true,
-      timeout: 15000, // Increased timeout
+      timeout: 15000,
       watch: false
     });
 
@@ -175,7 +181,7 @@ function UserLocation() {
         console.log("GPS timeout, trying IP location...");
         getIPBasedLocation();
       }
-    }, 8000); // Increased fallback timeout
+    }, 8000);
 
     return () => {
       clearTimeout(fallbackTimeout);
@@ -235,29 +241,80 @@ function UserLocation() {
   );
 }
 
+// Component to handle map zoom for search results
+function MapZoomToLocation({ location }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (location) {
+      console.log("Zooming to:", location.name, "Type:", location.type, "Zoom:", location.zoom);
+      
+      // Ensure minimum zoom level based on type
+      let finalZoom = location.zoom;
+      
+      // Force minimum zoom levels for better visibility
+      if (location.type === "دولة") {
+        finalZoom = Math.max(finalZoom, 9); // At least zoom 9 for countries
+      } else if (location.type === "مدينة") {
+        finalZoom = Math.max(finalZoom, 14); // At least zoom 14 for cities
+      } else {
+        finalZoom = Math.max(finalZoom, 12); // Minimum zoom 12 for other types
+      }
+      
+      console.log("Final zoom level:", finalZoom);
+      
+      // Use flyTo with smooth animation
+      map.flyTo([location.coords[0], location.coords[1]], finalZoom, {
+        duration: 2,
+        easeLinearity: 0.25,
+        animate: true
+      });
+      
+      // Add a temporary marker for the searched location
+      const marker = L.marker([location.coords[0], location.coords[1]], {
+        icon: SearchMarkerIcon
+      }).addTo(map);
+      
+      marker.bindPopup(`
+        <div class="text-center p-2 min-w-[200px]">
+          <b class="text-lg">${location.name}</b><br/>
+          <span class="text-sm text-gray-600">${location.type}</span><br/>
+          <span class="text-xs text-gray-500">${location.coords[0].toFixed(4)}°, ${location.coords[1].toFixed(4)}°</span>
+        </div>
+      `).openPopup();
+      
+      // Remove marker after 15 seconds
+      setTimeout(() => {
+        if (marker && map.hasLayer(marker)) {
+          marker.remove();
+        }
+      }, 15000);
+      
+      // Removed the red circle/zone highlight
+    }
+  }, [location, map]);
+
+  return null;
+}
 // Component to display road sign details in popup
 const RoadSignDetails = ({ roadSignId }) => {
   const { data: roadSignDetails, isLoading, error } = useGetRoadSignByIdQuery(roadSignId);
 
-  // Helper function to get the latest end date from bookings
   const getLatestEndDate = (details) => {
     if (!details?.bookings || details.bookings.length === 0) return null;
     
-    // Get the latest end date from all bookings
     const latestBooking = details.bookings.reduce((latest, booking) => {
       const bookingDate = new Date(booking.end_date);
       const latestDate = latest ? new Date(latest.end_date) : null;
       return !latestDate || bookingDate > latestDate ? booking : latest;
     }, null);
     
-    // Extract just the date part (YYYY-MM-DD)
     if (latestBooking?.end_date) {
-      return latestBooking.end_date.split('T')[0]; // Get only "2026-11-19"
+      return latestBooking.end_date.split('T')[0];
     }
     return null;
   };
 
-  // Helper function to check if road sign is available
   const isRoadSignAvailable = (details) => {
     const latestEndDate = getLatestEndDate(details);
     if (!latestEndDate) return true;
@@ -289,7 +346,6 @@ const RoadSignDetails = ({ roadSignId }) => {
 
   return (
     <div className="min-w-[250px] max-w-[80vw] w-auto">
-      {/* Header */}
       <div className="flex justify-between items-start mb-3 pb-2 border-b">
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-base text-gray-800 truncate">
@@ -302,7 +358,6 @@ const RoadSignDetails = ({ roadSignId }) => {
         </Badge>
       </div>
       
-      {/* Road Sign Image */}
       {roadSignDetails.image ? (
         <div className="mb-3">
           <img 
@@ -317,9 +372,7 @@ const RoadSignDetails = ({ roadSignId }) => {
         </div>
       )}
       
-      {/* Main Information */}
       <div className="space-y-2">
-        {/* Model Type */}
         {roadSignDetails.template?.type && (
           <div className="flex items-start gap-2">
             <Type className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -330,7 +383,6 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
-        {/* Size */}
         {roadSignDetails.template?.size && (
           <div className="flex items-start gap-2">
             <Ruler className="w-3 h-3 text-green-600 mt-0.5 flex-shrink-0" />
@@ -341,7 +393,6 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
-        {/* End Date */}
         {latestEndDate && (
           <div className="flex items-start gap-2">
             <Calendar className="w-3 h-3 text-red-600 mt-0.5 flex-shrink-0" />
@@ -356,7 +407,6 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
-        {/* City */}
         <div className="flex items-start gap-2">
           <MapPin className="w-3 h-3 text-purple-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -367,7 +417,6 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         </div>
 
-        {/* Region */}
         {roadSignDetails.region?.name && (
           <div className="flex items-start gap-2 ml-5">
             <div className="flex-1 min-w-0">
@@ -377,7 +426,6 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
-        {/* Location Details */}
         {roadSignDetails.place && (
           <div className="mt-2 p-2 bg-gray-50 rounded border">
             <span className="text-xs font-medium text-gray-700 block mb-1">الموقع:</span>
@@ -385,7 +433,6 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
-        {/* Advertising Space */}
         {roadSignDetails.template?.advertising_space && (
           <div className="text-center pt-2 border-t">
             <span className="text-xs font-medium text-gray-700 block">مساحة الإعلان</span>
@@ -401,41 +448,279 @@ const RoadSignDetails = ({ roadSignId }) => {
 
 const RoadSignsMapView = ({ viewType }) => {
   const { data: roadSignsResponse, isLoading, error } = useGetRoadSignsQuery();
+  
+  // Search functionality state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [searchHistory, setSearchHistory] = useState([]);
+  
+  // Existing state
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("");
   const [showFilters, setShowFilters] = useState(true);
   const [selectedRoadSignId, setSelectedRoadSignId] = useState(null);
 
-  // Debug: Log the raw response
-  useEffect(() => {
-    if (roadSignsResponse) {
-      console.log("🚨 RAW ROAD SIGNS RESPONSE:", roadSignsResponse);
-      console.log("📊 Response type:", typeof roadSignsResponse);
-      console.log("🔍 Is array?", Array.isArray(roadSignsResponse));
+// Function to search ANY location using OpenStreetMap Nominatim API
+const searchLocation = async (query) => {
+  if (!query.trim()) return [];
+  
+  setIsSearching(true);
+  showToast("info", "جاري البحث...");
+  
+  try {
+    // Encode the query for URL
+    const encodedQuery = encodeURIComponent(query);
+    
+    // Use OpenStreetMap Nominatim API for geocoding
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodedQuery}&format=json&accept-language=ar&limit=10`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+    
+    const data = await response.json();
+    
+    // Format results
+    const formattedResults = data.map((item, index) => {
+      let locationType = "موقع";
+      let displayName = item.display_name;
       
-      if (Array.isArray(roadSignsResponse)) {
-        console.log("📍 First road sign sample:", roadSignsResponse[0]);
-        console.log("📈 Total road signs:", roadSignsResponse.length);
+      // Determine type based on class and type
+      if (item.class === "boundary" && item.type === "administrative") {
+        locationType = item.type.includes("city") ? "مدينة" : 
+                      item.type.includes("state") ? "ولاية" : 
+                      item.type.includes("country") ? "دولة" : "منطقة";
+      } else if (item.class === "place") {
+        locationType = item.type === "city" ? "مدينة" :
+                      item.type === "town" ? "بلدة" :
+                      item.type === "village" ? "قرية" :
+                      item.type === "hamlet" ? "حي" : "مكان";
+      } else if (item.class === "highway") {
+        locationType = "طريق";
+      } else if (item.class === "amenity") {
+        locationType = "مركز";
+      }
+      
+      // Extract Arabic name if available
+      const arabicMatch = displayName.match(/[\u0600-\u06FF\s]+/g);
+      const arabicName = arabicMatch ? arabicMatch.join(' ') : item.display_name.split(',')[0];
+      
+      // DETERMINE ZOOM LEVEL - ALL INCREASED FOR BETTER VISIBILITY
+      let zoomLevel;
+      
+      // Set MINIMUM zoom levels (higher numbers = more zoomed in)
+      switch(locationType) {
+        case "دولة": // Country - zoom in to see major cities
+          zoomLevel = 9; // Increased from 6
+          break;
+        case "ولاية": // State
+        case "منطقة": // Region
+          zoomLevel = 10; // Increased from 8
+          break;
+        case "مدينة": // City
+          zoomLevel = 14; // Increased from 12
+          break;
+        case "بلدة": // Town
+          zoomLevel = 15; // Increased from 14
+          break;
+        case "قرية": // Village
+        case "حي": // Neighborhood
+          zoomLevel = 16; // Increased from 14/16
+          break;
+        case "طريق": // Highway/Street
+          zoomLevel = 18; // Already high
+          break;
+        case "مركز": // Center/Amenity
+        case "مكان": // Place
+          zoomLevel = 17; // High zoom
+          break;
+        default:
+          // Use importance but with higher baseline
+          zoomLevel = item.importance > 0.7 ? 15 : item.importance > 0.5 ? 13 : 11;
+      }
+      
+      // SPECIAL CASES - Force higher zoom for specific important locations
+      const importantCities = [
+        "paris", "london", "new york", "tokyo", "dubai", "riyadh",
+        "دمشق", "حلب", "القاهرة", "الرياض", "دبي", "بيروت", "عمان"
+      ];
+      
+      const lowerName = (arabicName || item.display_name).toLowerCase();
+      if (importantCities.some(city => lowerName.includes(city))) {
+        zoomLevel = Math.max(zoomLevel, 15); // Ensure at least zoom 15
+      }
+      
+      // Adjust based on bounding box size if available
+      if (item.boundingbox) {
+        const [south, north, west, east] = item.boundingbox.map(parseFloat);
+        const latDiff = north - south;
+        const lonDiff = east - west;
         
-        // Check coordinates for first few items
-        roadSignsResponse.slice(0, 3).forEach((sign, index) => {
-          console.log(`📍 Road Sign ${index + 1} coordinates:`, {
-            id: sign.id,
-            latitudeX: sign.latitudeX,
-            longitudeY: sign.longitudeY,
-            latitude: sign.latitude,
-            longitude: sign.longitude,
-            lat: sign.lat,
-            lng: sign.lng,
-            latX: sign.latX,
-            lngY: sign.lngY,
-          });
-        });
-      } else if (typeof roadSignsResponse === 'object') {
-        console.log("🔑 Object keys:", Object.keys(roadSignsResponse));
+        // If it's a large area (like a country), zoom in more
+        if (latDiff > 20 || lonDiff > 20) { // Very large (country)
+          zoomLevel = 8; // Still need some overview for countries
+        } else if (latDiff > 10 || lonDiff > 10) { // Large (state/big region)
+          zoomLevel = 10;
+        } else if (latDiff > 5 || lonDiff > 5) { // Medium (region)
+          zoomLevel = 12;
+        } else if (latDiff > 2 || lonDiff > 2) { // Small (city area)
+          zoomLevel = 14;
+        } else { // Very small (specific location)
+          zoomLevel = 16;
+        }
+      }
+      
+      return {
+        id: index,
+        name: arabicName || item.display_name.split(',')[0],
+        fullName: item.display_name,
+        coords: [parseFloat(item.lat), parseFloat(item.lon)],
+        type: locationType,
+        importance: item.importance,
+        country: item.address?.country || "",
+        city: item.address?.city || item.address?.town || "",
+        zoom: zoomLevel,
+        boundingbox: item.boundingbox
+      };
+    });
+    
+    // Sort by importance AND zoom level preference
+    formattedResults.sort((a, b) => {
+      // Prefer locations that are more specific (higher zoom level)
+      const aScore = b.importance + (a.zoom / 20);
+      const bScore = a.importance + (b.zoom / 20);
+      return bScore - aScore;
+    });
+    
+    setSearchResults(formattedResults);
+    
+    if (formattedResults.length > 0) {
+      // Add to search history
+      const newSearch = {
+        query,
+        timestamp: new Date().toISOString(),
+        results: formattedResults.length
+      };
+      
+      setSearchHistory(prev => {
+        const filtered = prev.filter(item => item.query !== query);
+        return [newSearch, ...filtered].slice(0, 10);
+      });
+      
+      showToast("success", `تم العثور على ${formattedResults.length} نتيجة`);
+      
+      // Auto-select first result
+      if (formattedResults.length === 1) {
+        handleResultClick(formattedResults[0]);
+      }
+    } else {
+      showToast("warning", "لم يتم العثور على نتائج");
+    }
+    
+    return formattedResults;
+  } catch (error) {
+    console.error("Error searching location:", error);
+    showToast("error", "حدث خطأ في البحث");
+    return [];
+  } finally {
+    setIsSearching(false);
+  }
+};
+  // Handle search
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      showToast("warning", "الرجاء إدخال كلمة البحث");
+      return;
+    }
+    
+    await searchLocation(searchQuery);
+  };
+
+  // Handle search result click
+const handleResultClick = (location) => {
+  setSelectedLocation(location);
+  setSearchQuery(location.name);
+  setIsSearching(false);
+  
+  // Show different messages based on location type
+  let message = `تم التوجه إلى ${location.name}`;
+  if (location.type === "دولة") {
+    message = `تم التوجه إلى ${location.name} (البلد)`;
+  } else if (location.type === "مدينة") {
+    message = `تم التوجه إلى ${location.name} (المدينة)`;
+  } else if (location.type === "طريق") {
+    message = `تم التوجه إلى ${location.name} (الطريق)`;
+  }
+  
+  showToast("success", message);
+};
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setIsSearching(false);
+    setSelectedLocation(null);
+  };
+
+  // Handle Enter key press in search
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  // Handle search from history
+  const handleSearchFromHistory = async (query) => {
+    setSearchQuery(query);
+    await searchLocation(query);
+  };
+
+  // Debug: Log the raw response
+  // Debug: Log the raw response
+useEffect(() => {
+  if (roadSignsResponse) {
+    console.log("🚨 RAW ROAD SIGNS RESPONSE:", roadSignsResponse);
+    
+    // Check the structure
+    if (Array.isArray(roadSignsResponse)) {
+      console.log("✅ Response is array, count:", roadSignsResponse.length);
+      console.log("✅ First item structure:", roadSignsResponse[0]);
+      console.log("✅ First item keys:", Object.keys(roadSignsResponse[0]));
+    } else if (roadSignsResponse?.data) {
+      console.log("✅ Response has data property");
+      console.log("✅ Data structure:", roadSignsResponse.data);
+      if (Array.isArray(roadSignsResponse.data)) {
+        console.log("✅ Data is array, count:", roadSignsResponse.data.length);
+        console.log("✅ First item in data:", roadSignsResponse.data[0]);
       }
     }
-  }, [roadSignsResponse]);
+    
+    // Check coordinates for first few items
+    const sampleItems = Array.isArray(roadSignsResponse) 
+      ? roadSignsResponse.slice(0, 3) 
+      : roadSignsResponse?.data 
+        ? roadSignsResponse.data.slice(0, 3)
+        : [];
+        
+    sampleItems.forEach((item, index) => {
+      console.log(`📍 Item ${index} coordinates check:`, {
+        id: item.id,
+        latitudeX: item.latitudeX,
+        longitudeY: item.longitudeY,
+        lat: item.lat,
+        lng: item.lng,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        allKeys: Object.keys(item)
+      });
+    });
+  }
+}, [roadSignsResponse]);
 
   // Safely extract road signs array from response
   const roadSigns = useMemo(() => {
@@ -461,68 +746,51 @@ const RoadSignsMapView = ({ viewType }) => {
   }, [roadSignsResponse]);
 
   // Enhanced coordinate parsing with more field names
-  const getCoordinates = (roadSign) => {
-    try {
-      // Try all possible coordinate field names
-      const coordinateFields = [
-        'latitudeX', 'longitudeY',
-        'latitude', 'longitude', 
-        'lat', 'lng',
-        'latX', 'lngY',
-        'x', 'y',
-        'coord_x', 'coord_y',
-        'location_x', 'location_y',
-        'position_lat', 'position_lng'
-      ];
+  // Enhanced coordinate parsing with debugging
+const getCoordinates = (roadSign) => {
+  try {
+    console.log("🔍 Checking coordinates for:", roadSign.id, roadSign);
+    
+    // Try all possible coordinate field combinations
+    const coordinateCandidates = [
+      [roadSign.latitudeX, roadSign.longitudeY],
+      [roadSign.lat, roadSign.lng],
+      [roadSign.latitude, roadSign.longitude],
+      [roadSign.x, roadSign.y],
+      [roadSign.coord_x, roadSign.coord_y],
+      [roadSign.location_x, roadSign.location_y],
+      [roadSign.position_lat, roadSign.position_lng],
+      
+      // Try as strings (might be in nested objects)
+      [roadSign.location?.latitude, roadSign.location?.longitude],
+      [roadSign.coordinates?.lat, roadSign.coordinates?.lng],
+      [roadSign.position?.latitude, roadSign.position?.longitude],
+    ];
 
-      let lat, lng;
-
-      for (let i = 0; i < coordinateFields.length; i += 2) {
-        const latField = coordinateFields[i];
-        const lngField = coordinateFields[i + 1];
+    for (const [lat, lng] of coordinateCandidates) {
+      if (lat !== undefined && lng !== undefined) {
+        const latNum = parseFloat(lat);
+        const lngNum = parseFloat(lng);
         
-        if (roadSign[latField] !== undefined && roadSign[lngField] !== undefined) {
-          lat = roadSign[latField];
-          lng = roadSign[lngField];
-          console.log(`📍 Found coordinates in fields: ${latField}=${lat}, ${lngField}=${lng}`);
-          break;
+        console.log(`📍 Found candidate: lat=${lat}, lng=${lng}, parsed: lat=${latNum}, lng=${lngNum}`);
+        
+        if (!isNaN(latNum) && !isNaN(lngNum) && 
+            latNum >= -90 && latNum <= 90 && 
+            lngNum >= -180 && lngNum <= 180) {
+          console.log(`✅ Valid coordinates found for ${roadSign.id}: [${latNum}, ${lngNum}]`);
+          return [latNum, lngNum];
         }
       }
-
-      // If no coordinates found, log it for debugging
-      if (!lat || !lng) {
-        console.log("❌ No coordinates found for road sign:", {
-          id: roadSign.id,
-          model: roadSign.model,
-          availableFields: Object.keys(roadSign).filter(key => 
-            key.toLowerCase().includes('lat') || key.toLowerCase().includes('lng') || 
-            key.toLowerCase().includes('x') || key.toLowerCase().includes('y')
-          )
-        });
-        return null;
-      }
-
-      const latNum = parseFloat(lat);
-      const lngNum = parseFloat(lng);
-      
-      // Validate coordinates
-      if (isNaN(latNum) || isNaN(lngNum)) {
-        console.log("❌ Invalid coordinates (NaN):", lat, lng);
-        return null;
-      }
-      if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
-        console.log("❌ Coordinates out of range:", latNum, lngNum);
-        return null;
-      }
-      
-      console.log("✅ Valid coordinates:", latNum, lngNum);
-      return [latNum, lngNum];
-      
-    } catch (error) {
-      console.warn("❌ Error parsing coordinates for road sign:", roadSign.id, error);
-      return null;
     }
-  };
+
+    console.warn(`❌ No valid coordinates found for road sign ${roadSign.id}`);
+    return null;
+    
+  } catch (error) {
+    console.error(`❌ Error parsing coordinates for road sign ${roadSign.id}:`, error);
+    return null;
+  }
+};
 
   // Filter road signs based on selection
   const filteredRoadSigns = useMemo(() => {
@@ -565,7 +833,6 @@ const RoadSignsMapView = ({ viewType }) => {
       }
     });
     
-    console.log("🏙️ Cities found:", uniqueCities);
     return uniqueCities;
   }, [roadSigns]);
 
@@ -585,7 +852,6 @@ const RoadSignsMapView = ({ viewType }) => {
       }
     });
     
-    console.log("🗺️ Regions found:", uniqueRegions);
     return uniqueRegions;
   }, [roadSigns]);
 
@@ -630,14 +896,153 @@ const RoadSignsMapView = ({ viewType }) => {
 
   return (
     <div className="space-y-4">
+      {/* Search Bar */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="ابحث عن أي دولة، مدينة، منطقة، شارع... (مثال: حلب، دمشق، فرنسا، نيويورك)"
+                  className="w-full pr-10 pl-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-right text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Search History */}
+              {searchHistory.length > 0 && !searchQuery && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">عمليات البحث السابقة:</span>
+                    <button 
+                      onClick={() => setSearchHistory([])}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      مسح السجل
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {searchHistory.slice(0, 5).map((item, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSearchFromHistory(item.query)}
+                        className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                      >
+                        {item.query}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSearch}
+                disabled={!searchQuery.trim() || isSearching}
+                className="flex items-center gap-2"
+              >
+                {isSearching ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                {isSearching ? "جاري البحث..." : "بحث"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={clearSearch}
+                className="flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                إعادة تعيين
+              </Button>
+            </div>
+          </div>
+
+          {/* Search Results */}
+          {searchResults.length > 0 && (
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold">{searchResults.length}</span> نتيجة:
+                </p>
+                <button 
+                  onClick={() => setSearchResults([])}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  إخفاء النتائج
+                </button>
+              </div>
+              <div className="max-h-96 overflow-y-auto border rounded-lg divide-y">
+                {searchResults.map((result) => (
+                  <div
+                    key={result.id}
+                    className="p-3 hover:bg-blue-50 cursor-pointer transition-colors border-b last:border-b-0"
+                    onClick={() => handleResultClick(result)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="text-right flex-1">
+                        <p className="font-medium text-gray-800 text-sm">{result.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{result.fullName}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge 
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {result.type}
+                          </Badge>
+                          {result.country && (
+                            <span className="text-xs text-gray-500">🇸🇾 {result.country}</span>
+                          )}
+                          {result.city && (
+                            <span className="text-xs text-gray-500">🏙️ {result.city}</span>
+                          )}
+                          <span className="text-xs text-gray-500">
+                            {result.coords[0].toFixed(4)}°, {result.coords[1].toFixed(4)}°
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-3">
+                        <NavigationIcon className="w-4 h-4 text-blue-500" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-gray-500 text-center">
+                <p>انقر على أي نتيجة للانتقال إليها على الخريطة</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Map */}
-      <div className="h-96 rounded-lg overflow-hidden border shadow-sm">
+      <div className="h-96 rounded-lg overflow-hidden border shadow-sm relative">
         <MapContainer
           center={[24.7136, 46.6753]}
           zoom={10}
           style={{ height: "100%", width: "100%" }}
           zoomControl={true}
         >
+          {/* Zoom to searched location */}
+          {selectedLocation && (
+            <MapZoomToLocation location={selectedLocation} />
+          )}
+
+          {/* Tile Layer */}
           {viewType === "satellite" ? (
             <TileLayer
               url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
@@ -652,17 +1057,55 @@ const RoadSignsMapView = ({ viewType }) => {
             />
           )}
 
+          {/* User Location */}
           <UserLocation />
 
+          {/* Road Signs Markers */}
           {roadSignsWithCoordinates.map((roadSign) => {
             const coordinates = getCoordinates(roadSign);
             if (!coordinates) return null;
+
+            const hasActiveBookings = roadSign.bookings && roadSign.bookings.some(booking => {
+              if (!booking.end_date) return false;
+              const endDate = new Date(booking.end_date);
+              const today = new Date();
+              return endDate >= today;
+            });
+
+            const markerColor = hasActiveBookings ? '#dc2626' : '#3388ff';
+
+            const CustomIcon = L.divIcon({
+              className: 'custom-marker',
+              html: `
+                <div style="
+                  background-color: ${markerColor};
+                  width: 25px;
+                  height: 41px;
+                  border-radius: 50% 50% 50% 0;
+                  transform: rotate(-45deg);
+                  position: relative;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                ">
+                  <div style="
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%) rotate(45deg);
+                    color: white;
+                    font-size: 12px;
+                    font-weight: bold;
+                  ">🚸</div>
+                </div>
+              `,
+              iconSize: [25, 41],
+              iconAnchor: [12, 41],
+            });
 
             return (
               <Marker
                 key={roadSign.id}
                 position={coordinates}
-                icon={RoadSignIcon}
+                icon={CustomIcon}
                 eventHandlers={{
                   click: () => handleMarkerClick(roadSign.id)
                 }}
@@ -715,20 +1158,28 @@ const RoadSignsMapView = ({ viewType }) => {
               <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
               <span>موقعك الحالي</span>
             </div>
-            
             <div className="flex items-center gap-2">
-              <img 
-                src="https://unpkg.com/leaflet@1.9.3/dist/images/marker-icon.png" 
-                alt="Road Sign" 
-                className="w-4 h-6"
-              />
-              <span>اللوحات الطرقية</span>
+              <div className="w-4 h-6 bg-blue-500 rounded-sm transform rotate-45"></div>
+              <span>اللوحات المتاحة</span>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-6 w-6 p-0">
-                <LocateIcon className="w-3 h-3" />
-              </Button>
-              <span>زر تحديد الموقع</span>
+              <div className="w-4 h-6 bg-red-500 rounded-sm transform rotate-45"></div>
+              <span className="text-red-600 font-medium">اللوحات المحجوزة</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-red-500 rounded-full"></div>
+              <span className="text-red-600 font-medium">نتيجة البحث</span>
+            </div>
+          </div>
+          
+          {/* Search Tips */}
+          <div className="mt-4 pt-3 border-t">
+            <h5 className="font-medium text-sm mb-2">نصائح للبحث:</h5>
+            <div className="text-xs text-gray-600 space-y-1">
+              <p>• ابحث بأي لغة: العربية، الإنجليزية، الفرنسية، إلخ</p>
+              <p>• ابحث عن أي دولة: فرنسا، ألمانيا، السعودية، مصر</p>
+              <p>• ابحث عن أي مدينة: حلب، دمشق، ركن الدين، نيويورك</p>
+              <p>• ابحث عن شوارع ومناطق: شارع الحمرا، وسط البلد</p>
             </div>
           </div>
         </CardContent>

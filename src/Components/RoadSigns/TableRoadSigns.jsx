@@ -15,36 +15,53 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useParams } from "react-router";
 import { Permissions } from "../../Static/StaticData";
-// ============ ADD DIALOG IMPORT ============
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-
 import { useMoveBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
-
+import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi"; 
 
 const TableRoadSigns = ({ isLoading }) => {
   const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [openShow, setOpenShow] = useState(false);
-  // ============ ADD EXCHANGE STATE ============
   const [openExchange, setOpenExchange] = useState(false);
   const [selectedRoadSign, setSelectedRoadSign] = useState(null);
-  const {id} = useParams()
+  const { id } = useParams();
 
-  const [deleteRoadSign, { isLoading: isDeleting }] =
-    useDeleteRoadSignMutation();
+  const [deleteRoadSign, { isLoading: isDeleting }] = useDeleteRoadSignMutation();
+  const [moveBooking, { isLoading: isMoving }] = useMoveBookingMutation();
 
-      const [moveBooking, { isLoading: isMoving }] = useMoveBookingMutation();
+  // Get customers for the dropdown
+  const { 
+    data: customersData, 
+    isLoading: isCustomersLoading,
+    error: customersError,
+    isSuccess: isCustomersSuccess
+  } = useGetCustomersQuery();
 
+  // Debug customers API
+  useEffect(() => {
+    console.log("📊 Customers API Debug:");
+    console.log("📦 customersData:", customersData);
+    
+    if (customersData) {
+      console.log("👥 Customers data structure:", typeof customersData);
+      
+      // Check if it's an array or has data property
+      if (Array.isArray(customersData)) {
+        console.log("👥 Customers is array, count:", customersData.length);
+      } else if (customersData.data && Array.isArray(customersData.data)) {
+        console.log("👥 Customers has data property, count:", customersData.data.length);
+      } else if (customersData.customers && Array.isArray(customersData.customers)) {
+        console.log("👥 Customers has customers property, count:", customersData.customers.length);
+      }
+    }
+  }, [customersData]);
+
+  // Get hook with ALL filter states including customer_id
   const {
-    // startDate,
-    // setStartDate,
-    // endDate,
-    // setEndDate,
     cityId,
-    // setCityId,
     regionId,
-    // setRegionId,
     roadSigns,
     isRoadSignsFetching,
     isError,
@@ -52,18 +69,29 @@ const TableRoadSigns = ({ isLoading }) => {
     isCitiesLoading,
     regions,
     isRegionsLoading,
-    setModel ,
-    handleCityChange ,
-    handleRegionChange ,
-
-
+    setModel,
+    handleCityChange,
+    handleRegionChange,
+    // ✅ Get customer-related values from hook
+    customerId, // current customer_id value in hook
+    setCustomerId, // function to update customer_id in hook
+    handleCustomerChange, // function to handle customer change
   } = useGetRoadSignsByFilter();
 
-  console.log()
   useEffect(() => {
-    setModel(id)
-  } , [id])
+    setModel(id);
+  }, [id]);
 
+  // ✅ Debug: Log when API call is made
+  useEffect(() => {
+    console.log("🔍 API REQUEST DEBUG:");
+    console.log("City ID:", cityId);
+    console.log("Region ID:", regionId);
+    console.log("Customer ID:", customerId);
+    console.log("Model:", id);
+    console.log("Road Signs Data:", roadSigns);
+    console.log("Is Loading:", isRoadSignsFetching);
+  }, [cityId, regionId, customerId, id, roadSigns, isRoadSignsFetching]);
 
   const handleEdit = (roadSign) => {
     setSelectedRoadSign(roadSign);
@@ -82,16 +110,13 @@ const TableRoadSigns = ({ isLoading }) => {
 
   const handleRoadSignAction = (roadSign) => {
     console.log('Road Sign action triggered:', roadSign);
-    //alert(`Road Sign action for: ${roadSign.name || roadSign.id}`);
   };
 
-  // ============ ADD EXCHANGE HANDLER ============
   const handleExchange = (roadSign) => {
     console.log('Exchange road sign:', roadSign);
     setSelectedRoadSign(roadSign);
     setOpenExchange(true);
   };
-
 
   const handleConfirmDelete = async () => {
     if (selectedRoadSign) {
@@ -105,6 +130,39 @@ const TableRoadSigns = ({ isLoading }) => {
     }
   };
 
+  // ✅ Get customers list from API response
+  const getCustomersList = () => {
+    if (!customersData) return [];
+    
+    // Try different response structures
+    if (Array.isArray(customersData)) {
+      return customersData;
+    } else if (customersData.data && Array.isArray(customersData.data)) {
+      return customersData.data;
+    } else if (customersData.customers && Array.isArray(customersData.customers)) {
+      return customersData.customers;
+    } else if (customersData.items && Array.isArray(customersData.items)) {
+      return customersData.items;
+    }
+    
+    return [];
+  };
+
+  const customersList = getCustomersList();
+  
+  // ✅ Simple handler for customer filter change
+  const handleCustomerFilterChange = (e) => {
+    const value = e.target.value;
+    console.log("🎯 Customer filter changed to:", value);
+    
+    // Update customer_id in hook (this will trigger API call)
+    if (setCustomerId) {
+      setCustomerId(value);
+    } else {
+      console.error("❌ setCustomerId function not found in hook!");
+    }
+  };
+
   if (isError) {
     return (
       <div className="text-center p-4 text-red-500">
@@ -113,22 +171,20 @@ const TableRoadSigns = ({ isLoading }) => {
     );
   }
 
-   const permissions = {
-      delete : Permissions.DeleteRoadSigns,
-      show : Permissions.ViewRegions,
-      edit : Permissions.EditRoadSigns,
-      // ============ ADD EXCHANGE PERMISSION ============
-      exchange : Permissions.EditRoadSigns, // Use existing or create new permission
-    }
+  const permissions = {
+    delete: Permissions.DeleteRoadSigns,
+    show: Permissions.ViewRegions,
+    edit: Permissions.EditRoadSigns,
+    exchange: Permissions.EditRoadSigns,
+  };
 
   return (
-    <div dir="rtl" className="p-4 sm:p-6 w-full  mx-auto space-y-6 overflow-x-auto">
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="flex-1">
-          <Label
-            htmlFor="city"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
+    <div dir="rtl" className="p-4 sm:p-6 w-full mx-auto space-y-6 overflow-x-auto">
+      {/* Filter Section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {/* City Filter */}
+        <div>
+          <Label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
             المدينة
           </Label>
           <select
@@ -147,11 +203,10 @@ const TableRoadSigns = ({ isLoading }) => {
             ))}
           </select>
         </div>
-        <div className="flex-1">
-          <Label
-            htmlFor="region"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
+
+        {/* Region Filter */}
+        <div>
+          <Label htmlFor="region" className="block text-sm font-medium text-gray-700 mb-1">
             المنطقة
           </Label>
           <select
@@ -163,7 +218,7 @@ const TableRoadSigns = ({ isLoading }) => {
               isRegionsLoading || !cityId
                 ? `dark:bg-gray-700`
                 : `dark:bg-gray-900`
-            } p-2 border border-gray-300 rounded-md  focus:outline-none focus:ring-2 focus:ring-blue-500 `}
+            } p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
           >
             <option value="">اختر منطقة</option>
             {isRegionsLoading && <option>جاري تحميل المناطق ...</option>}
@@ -174,37 +229,67 @@ const TableRoadSigns = ({ isLoading }) => {
             ))}
           </select>
         </div>
-        {/* <div className="flex-1">
-          <Label
-            htmlFor="startDate"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            تاريخ البدء
+
+        {/* Customer Filter */}
+        <div>
+          <Label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
+            العميل
           </Label>
-          <Input
-            id="startDate"
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md"
-          />
+          <select
+            id="customer"
+            value={customerId || ""} // ✅ Use customerId from hook
+            onChange={handleCustomerFilterChange}
+            disabled={isCustomersLoading}
+            className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">جميع العملاء</option>
+            <option value="none">لوحات بدون حجوزات</option>
+            
+            {isCustomersLoading && <option>جاري تحميل العملاء ...</option>}
+            
+            {customersError && <option className="text-red-500">خطأ في تحميل العملاء</option>}
+            
+            {customersList.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.full_name || customer.name || customer.username || `العميل #${customer.id}`}
+                {customer.company_name && ` - ${customer.company_name}`}
+              </option>
+            ))}
+            
+            {/* Show message if no customers */}
+            {!isCustomersLoading && !customersError && customersList.length === 0 && (
+              <option disabled>لا توجد عملاء</option>
+            )}
+          </select>
+          
+          {/* Debug info */}
+          <div className="mt-1 text-xs text-gray-500">
+            {isCustomersLoading ? 'جاري التحميل...' : 
+             customersError ? 'خطأ!' : 
+             customersList.length > 0 ? `تم تحميل ${customersList.length} عميل` : 'لا توجد بيانات'}
+          </div>
         </div>
-        <div className="flex-1">
-          <Label
-            htmlFor="endDate"
-            className="block text-sm font-medium text-gray-700 mb-1"
+
+        {/* Reset Filters Button */}
+        <div className="flex items-end">
+          <Button
+            variant="outline"
+            onClick={() => {
+              // Reset all filters
+              handleCityChange({ target: { value: "" } });
+              handleRegionChange({ target: { value: "" } });
+              setCustomerId(""); // Reset customer filter
+            }}
+            className="w-full mb-5 border-gray-300 hover:bg-gray-100"
           >
-            تاريخ الانتهاء
-          </Label>
-          <Input
-            id="endDate"
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md"
-          />
-        </div> */}
+            مسح الفلاتر
+          </Button>
+        </div>
       </div>
+
+     
+
+      {/* PDF Export Button */}
       <Button
         onClick={() => {
           const { generatePDF } = RoadSignsPdf({ roadSigns: roadSigns || [] });
@@ -213,50 +298,78 @@ const TableRoadSigns = ({ isLoading }) => {
         className="mb-6 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
         disabled={isRoadSignsFetching || !roadSigns?.length}
       >
-        تحميل ملف تموضع اللوحات
+        تحميل ملف تموضع اللوحات ({roadSigns?.length || 0})
       </Button>
+
       <HeaderComponent
         title={"اللوحات الطرقية"}
         titleBtn={"إضافة لوحة"}
         setShow={setOpen}
         permission={Permissions.CreateRoadSigns}
       />
-      
+
+      {/* Road Signs Count */}
+      <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+        <div className="flex justify-between items-center">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">عدد اللوحات:</span> {roadSigns?.length || 0}
+            {customerId && customerId !== "none" && (
+              <span className="mr-4">
+                <span className="font-medium"> | تم التصفية حسب العميل:</span> {
+                  customersList.find(c => c.id == customerId)?.full_name || `#${customerId}`
+                }
+              </span>
+            )}
+            {customerId === "none" && (
+              <span className="mr-4">
+                <span className="font-medium"> | تم التصفية:</span> لوحات بدون حجوزات
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       <DynamicTable
-        data={roadSigns || []}
+        data={roadSigns}
         columns={RoadSignColumns}
         isLoading={isRoadSignsFetching}
         onEdit={handleEdit}
         onRoadSignAction={handleRoadSignAction}
         onDelete={handleDelete}
         onShow={handleShow}
-        // ============ ADD EXCHANGE PROP ============
         onExchange={handleExchange}
         permissions={permissions}
+        hideDeleteIcon={true}
       />
 
-      {/* ============ ADD EXCHANGE DIALOG ============ */}
-      <ExchangeDialog 
+      {/* Dialogs */}
+      <ExchangeDialog
         open={openExchange}
         onClose={() => setOpenExchange(false)}
         roadSign={selectedRoadSign}
         onMoveBooking={moveBooking}
-          roadSigns={roadSigns} // Pass all road signs
-          isMoving={isMoving}
+        roadSigns={roadSigns}
+        isMoving={isMoving}
       />
-      
+
       <DialogEditRoadSign
         show={openEdit}
         handleClose={() => setOpenEdit(false)}
         initData={selectedRoadSign}
       />
-      <DialogAddRoadSign show={open} handleClose={() => setOpen(false)} />
+
+      <DialogAddRoadSign
+        show={open}
+        handleClose={() => setOpen(false)}
+      />
+
       <DeleteDialog
         open={openDelete}
         onClose={() => setOpenDelete(false)}
         onConfirm={handleConfirmDelete}
         loading={isDeleting}
       />
+
       <DialogShow
         show={openShow}
         handleClose={() => {
@@ -271,32 +384,43 @@ const TableRoadSigns = ({ isLoading }) => {
   );
 };
 
+// Helper function for customer filter
+const filterRoadSignsByCustomer = (roadSigns, customerId) => {
+  if (!customerId || customerId === "") return roadSigns;
+  
+  if (customerId === "none") {
+    // Show road signs without bookings
+    return roadSigns.filter(roadSign => 
+      !roadSign.bookings || roadSign.bookings.length === 0
+    );
+  }
+  
+  // Show road signs with bookings for this specific customer
+  return roadSigns.filter(roadSign => {
+    return roadSign.bookings?.some(booking => 
+      booking.customer_id == customerId
+    );
+  });
+};
 
-// ============ FIXED EXCHANGE DIALOG COMPONENT ============
 const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isMoving }) => {
   const [selectedTargetSign, setSelectedTargetSign] = useState('');
   const [availableTargetSigns, setAvailableTargetSigns] = useState([]);
 
-  // Check if road sign has active bookings for exchange
   const hasActiveBookings = roadSign?.bookings && 
                            roadSign.bookings.some(booking => booking.status === 1);
 
-  // Get the first active booking for exchange
   const firstActiveBooking = roadSign?.bookings?.find(booking => booking.status === 1);
 
-  // Get compatible road signs for exchange (same template AND available)
   useEffect(() => {
     if (open && roadSign && roadSigns) {
       const compatibleSigns = roadSigns.filter(sign => 
-        // Condition 1: Not the same road sign
         sign.id !== roadSign.id &&
-        // Condition 2: Same template
         sign.template_id === roadSign.template_id &&
-        // Condition 3: Has available panels OR we can ignore availability for exchange
-        (sign.available_date_ranges?.length > 0 || true) // Remove "|| true" if you want strict availability check
+        (sign.available_date_ranges?.length > 0 || true)
       );
       setAvailableTargetSigns(compatibleSigns);
-      setSelectedTargetSign(''); // Reset selection when dialog opens
+      setSelectedTargetSign('');
     }
   }, [open, roadSign, roadSigns]);
 
@@ -316,7 +440,6 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
       console.log('Exchange successful:', result);
       alert('تم تبديل الموقع بنجاح!');
       onClose();
-      // Refresh the page or data
       window.location.reload();
     } catch (error) {
       console.error('Exchange failed:', error);
@@ -324,7 +447,6 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
     }
   };
 
-  // Return null if no roadSign
   if (!roadSign) return null;
 
   return (
@@ -335,7 +457,6 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Current Road Sign Information */}
           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
             <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-3">معلومات اللوحة الحالية</h4>
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -348,7 +469,6 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
             </div>
           </div>
 
-          {/* Exchange Eligibility Status */}
           {!hasActiveBookings ? (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
               <div className="flex items-center gap-2">
@@ -379,27 +499,31 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
             </div>
           )}
 
-          {/* Target Road Sign Selection */}
           {hasActiveBookings && availableTargetSigns.length > 0 && (
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 اختر اللوحة الجديدة:
               </label>
-              <select
-                value={selectedTargetSign}
-                onChange={(e) => setSelectedTargetSign(e.target.value)}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="">-- اختر لوحة جديدة --</option>
-                {availableTargetSigns.map(sign => (
-                  <option key={sign.id} value={sign.id}>
-                    {sign.name || `اللوحة #${sign.id}`} - {sign.place} - {sign.city?.name}
-                    {sign.available_date_ranges?.[0]?.available_panels > 0 && 
-                      ` (متاح: ${sign.available_date_ranges[0].available_panels})`
-                    }
-                  </option>
-                ))}
-              </select>
+        <select
+  value={selectedTargetSign}
+  onChange={(e) => setSelectedTargetSign(e.target.value)}
+  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+>
+  <option value="">-- اختر لوحة جديدة --</option>
+  {availableTargetSigns.map(sign => (
+    <option key={sign.id} value={sign.id}>
+      {/* كود اللوحة و كود الاتجاه */}
+      كود اللوحة: {sign.code || sign.road_sign_code || sign.roadsign_code || `RS-${sign.id}`} | 
+      كود الاتجاه: {sign.direction_code || sign.direction?.code || 'N/A'} | 
+      {/* الموقع والمدينة */}
+      الموقع: {sign.place} | المدينة: {sign.city?.name}
+      {/* اللوحات المتاحة */}
+      {sign.available_date_ranges?.[0]?.available_panels > 0 && 
+        ` (متاح: ${sign.available_date_ranges[0].available_panels})`
+      }
+    </option>
+  ))}
+</select>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 متاح {availableTargetSigns.length} لوحة بنفس القالب
               </p>
@@ -444,7 +568,6 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
   );
 };
 
-// Helper component for info fields
 const InfoField = ({ label, value }) => (
   <div>
     <span className="font-medium text-gray-600 dark:text-gray-400">{label}:</span>

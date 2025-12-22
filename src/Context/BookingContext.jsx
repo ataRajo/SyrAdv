@@ -63,115 +63,88 @@ export const BookingContextApi = ({ children, bookingId }) => {
     product_type: Yup.string().required("حقل نوع المنتج مطلوب"),
   });
 
-  // Formik setup
-  const formik = useFormik({
-    initialValues: {
-      customer_id: "",
-      type: "",
-      start_date: "",
-      end_date: "",
-      product_type: "",
-    },
-    validationSchema,
-    onSubmit: async (values, { resetForm }) => {
-      try {
-        const bookingPayload = {
-          customer_id: parseInt(values.customer_id),
-          type: parseInt(values.type),
-          start_date: values.start_date,
-          end_date: values.end_date,
-          roadsigns: selectedSigns.flatMap((sign) =>
-            sign.dateRanges.map((range) => ({
-              road_sign_id: sign.road_sign_id,
-              booking_faces: range.booking_faces,
-              number_of_reserved_panels: range.booking_faces,
-              start_date: range.startDate,
-              end_date: range.endDate,
-              units: range.units || 1,
-            }))
-          ),
-          product_type: parseInt(values.product_type),
-          notes,
-          discount_type: discountValue ? parseInt(discountType) : null,
-          value: discountValue ? parseInt(discountValue) : null,
-        };
+// Formik setup
+const formik = useFormik({
+  initialValues: {
+    customer_id: "",
+    type: "",
+    start_date: "",
+    end_date: "",
+    product_type: "",
+    printing_id: "", // Add this
+    units: "1", // Add this
+  },
+  validationSchema,
+  onSubmit: async (values, { resetForm }) => { // REMOVE THE COLON BEFORE async
+    try {
+      const bookingPayload = {
+        customer_id: parseInt(values.customer_id),
+        type: parseInt(values.type),
+        start_date: values.start_date,
+        end_date: values.end_date,
+        roadsigns: selectedSigns.flatMap((sign) =>
+          sign.dateRanges.map((range) => ({
+            road_sign_id: sign.road_sign_id,
+            booking_faces: range.booking_faces,
+            number_of_reserved_panels: range.booking_faces,
+            start_date: range.startDate,
+            end_date: range.endDate,
+            units: range.units || 1,
+          }))
+        ),
+        product_type: parseInt(values.product_type),
+        printing_id: parseInt(values.printing_id),
+        notes,
+        discount_type: discountValue ? parseInt(discountType) : null,
+        value: discountValue ? parseInt(discountValue) : null,
+      };
 
-        if (isEditMode) {
-          bookingPayload.id = id;
-          await updateBookings(bookingPayload).unwrap();
-          showToast("success", "تم تعديل الحجز بنجاح");
-        } else {
-          await addNewBooking(bookingPayload).unwrap();
-          showToast("success", "تم إضافة الحجز بنجاح");
-        }
-
-        resetForm();
-        setSelectedSigns([]);
-        setAddedSignIds(new Set());
-        setCalculationResult(null);
-        setIndividualCalculations({});
-        setIndividualLoadingStates({}); // Reset loading states
-        setShowDiscount(false);
-        setDiscountType("1");
-        setDiscountValue("");
-        setNotes("");
-        setOpenDialog(false);
-        setContractDialog(false);
-        navigate("/dashboard/bookings");
-      } catch (error) {
-        showToast(
-          "error",
-          error.data?.message || "حدث خطأ ما، يرجى المحاولة مرة أخرى"
-        );
+      if (isEditMode) {
+        bookingPayload.id = id;
+        await updateBookings(bookingPayload).unwrap();
+        showToast("success", "تم تعديل الحجز بنجاح");
+      } else {
+        await addNewBooking(bookingPayload).unwrap();
+        showToast("success", "تم إضافة الحجز بنجاح");
       }
-    },
-  });
+
+      resetForm();
+      setSelectedSigns([]);
+      setAddedSignIds(new Set());
+      setCalculationResult(null);
+      setIndividualCalculations({});
+      setIndividualLoadingStates({});
+      setShowDiscount(false);
+      setDiscountType("1");
+      setDiscountValue("");
+      setNotes("");
+      setOpenDialog(false);
+      setContractDialog(false);
+      navigate("/dashboard/bookings");
+    } catch (error) {
+      showToast(
+        "error",
+        error.data?.message || "حدث خطأ ما، يرجى المحاولة مرة أخرى"
+      );
+    }
+  },
+});
 
   // Populate form with booking data in edit mode
-  useEffect(() => {
-    if (isEditMode && bookingData && !isLoadingBooking) {
-      formik.setValues({
-        customer_id: bookingData.customer_id.toString(),
-        type: bookingData.type.toString(),
-        start_date: bookingData.start_date.split("T")[0],
-        end_date: bookingData.end_date.split("T")[0],
-        product_type: bookingData.product_type.toString(),
-      });
-      setNotes(bookingData.notes || "");
-      setDiscountType(bookingData.discount_type?.toString() || "1");
-      setDiscountValue(bookingData.value?.toString() || "");
-      setShowDiscount(!!bookingData.value);
-
-      // تجميع التواريخ حسب road_sign_id
-      const signsMap = new Map();
-      bookingData.roadsigns.forEach((sign) => {
-        const existingSign = signsMap.get(sign.id) || {
-          road_sign_id: sign.id,
-          max_faces: sign.panels_number,
-          dateRanges: [],
-        };
-        existingSign.dateRanges.push({
-          startDate: sign.pivot.start_date,
-          endDate: sign.pivot.end_date,
-          booking_faces: sign.pivot.number_of_reserved_panels,
-          units: sign.pivot.units || 1,
-        });
-        signsMap.set(sign.id, existingSign);
-      });
-
-      setSelectedSigns(Array.from(signsMap.values()));
-      setAddedSignIds(new Set(signsMap.keys()));
-      setCalculationResult({
-        price_per_period: bookingData?.total_price,
-        amount: {
-          total_advertising_space: bookingData?.total_advertising_space,
-          total_printing_space: bookingData?.total_printing_space,
-        },
-        units: bookingData?.units,
-      });
-    }
-  }, [bookingData, isEditMode, isLoadingBooking]);
-
+ useEffect(() => {
+  if (isEditMode && bookingData && !isLoadingBooking) {
+    formik.setValues({
+      customer_id: bookingData.customer_id.toString(),
+      type: bookingData.type.toString(),
+      start_date: bookingData.start_date.split("T")[0],
+      end_date: bookingData.end_date.split("T")[0],
+      product_type: bookingData.product_type.toString(),
+      printing_id: bookingData.printing_id?.toString() || "", // Add this
+      units: bookingData.units?.toString() || "1", // Add this
+    });
+    // ... rest of the code
+  }
+}, [bookingData, isEditMode, isLoadingBooking]);
   // Set notes for new bookings
   useEffect(() => {
     if (!isEditMode) {
@@ -223,85 +196,74 @@ export const BookingContextApi = ({ children, bookingId }) => {
   }, [isCompanyFetching]);
 
   // Handlers
-  const addToCart = (sign) => {
-    // Check for start_date
-    if (!formik.values.start_date) {
-      showToast("error", "يرجى إدخال تاريخ البدء.");
-      return;
-    }
+ const addToCart = (sign) => {
+  // Check for start_date
+  if (!formik.values.start_date) {
+    showToast("error", "يرجى إدخال تاريخ البدء.");
+    return;
+  }
 
-    // Check for end_date
-    if (!formik.values.end_date) {
-      showToast("error", "يرجى إدخال تاريخ الانتهاء.");
-      return;
-    }
+  // Check for end_date
+  if (!formik.values.end_date) {
+    showToast("error", "يرجى إدخال تاريخ الانتهاء.");
+    return;
+  }
 
-    // Check for customer_id
-    if (!formik.values.customer_id) {
-      showToast("error", "يرجى اختيار العميل.");
-      return;
-    }
+  // Check for customer_id
+  if (!formik.values.customer_id) {
+    showToast("error", "يرجى اختيار العميل.");
+    return;
+  }
 
-    // Check for type
-    if (!formik.values.type) {
-      showToast("error", "يرجى إدخال نوع الحجز.");
-      return;
-    }
+  // Check for type
+  if (!formik.values.type) {
+    showToast("error", "يرجى إدخال نوع الحجز.");
+    return;
+  }
 
-    // Check for product_type
-    if (!formik.values.product_type) {
-      showToast("error", "يرجى إدخال نوع المنتج.");
-      return;
-    }
+  // Check for product_type
+  if (!formik.values.product_type) {
+    showToast("error", "يرجى إدخال نوع المنتج.");
+    return;
+  }
 
-    const existingSign = selectedSigns.find((s) => s.road_sign_id === sign.id);
-    if (existingSign) {
-      // إذا كانت اللوحة موجودة، أضف التواريخ الجديدة إلى dateRanges
-      const newDateRanges = sign.customDateRanges
-        ? [...existingSign.dateRanges, ...sign.customDateRanges]
-        : [
-            ...existingSign.dateRanges,
-            {
-              startDate: formik.values.start_date,
-              endDate: formik.values.end_date,
-              booking_faces: 1,
-              units: 1,
-            },
-          ];
+  // Check for printing_id
+  if (!formik.values.printing_id) {
+    showToast("error", "يرجى إدخال رقم الطباعة.");
+    return;
+  }
 
-      setSelectedSigns(
-        selectedSigns.map((s) =>
-          s.road_sign_id === sign.id
-            ? { ...s, dateRanges: newDateRanges }
-            : s
-        )
-      );
-      showToast("success", `تم إضافة تواريخ جديدة للوحة`);
-    } else {
-      // إذا لم تكن اللوحة موجودة، أضفها مع التواريخ
-      const dateRanges = sign.customDateRanges
-        ? sign.customDateRanges
-        : [
-            {
-              startDate: formik.values.start_date,
-              endDate: formik.values.end_date,
-              booking_faces: 1,
-              units: 1,
-            },
-          ];
-
-      setSelectedSigns([
-        ...selectedSigns,
+  // Use cartId if provided (for individual bookings), otherwise create one
+  const uniqueCartId = sign.cartId || `cart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  const dateRanges = sign.customDateRanges
+    ? sign.customDateRanges
+    : [
         {
-          road_sign_id: sign.id,
-          max_faces: sign.panels_number,
-          dateRanges,
+          startDate: formik.values.start_date,
+          endDate: formik.values.end_date,
+          booking_faces: 1,
+          units: 1,
         },
-      ]);
-      setAddedSignIds(new Set([...addedSignIds, sign.id]));
-      showToast("success", `تم إضافة عنصر إلى السلة`);
-    }
+      ];
+
+  // Create a new booking with unique ID
+  const newBooking = {
+    cartId: uniqueCartId, // Use unique cart ID instead of road_sign_id for grouping
+    road_sign_id: sign.id,
+    max_faces: sign.panels_number,
+    dateRanges,
+    // Store the original sign data for display
+    template: sign.template,
+    region: sign.region,
+    place: sign.place,
+    directions: sign.directions,
   };
+
+  setSelectedSigns(prev => [...prev, newBooking]);
+  setAddedSignIds(new Set([...addedSignIds, sign.id]));
+  showToast("success", `تم إضافة عنصر إلى السلة`);
+};
 
   const updateSignFaces = (road_sign_id, rangeIndex, updates) => {
     setSelectedSigns(
@@ -326,143 +288,127 @@ export const BookingContextApi = ({ children, bookingId }) => {
     );
   };
 
-  const removeFromCart = (road_sign_id, rangeIndex = null) => {
-    if (rangeIndex !== null) {
-      setSelectedSigns(
-        selectedSigns
-          .map((sign) =>
-            sign.road_sign_id === road_sign_id
-              ? {
-                  ...sign,
-                  dateRanges: sign.dateRanges.filter((_, index) => index !== rangeIndex),
-                }
-              : sign
-          )
-          .filter((sign) => sign.dateRanges.length > 0)
-      );
-      if (
-        selectedSigns.find((sign) => sign.road_sign_id === road_sign_id)?.dateRanges
-          .length === 1
-      ) {
-        setAddedSignIds(
-          new Set([...addedSignIds].filter((id) => id !== road_sign_id))
-        );
-      }
-      showToast("success", "تم إزالة المدى الزمني من السلة");
-    } else {
-      setSelectedSigns(
-        selectedSigns.filter((sign) => sign.road_sign_id !== road_sign_id)
-      );
-      setAddedSignIds(
-        new Set([...addedSignIds].filter((id) => id !== road_sign_id))
-      );
-      showToast("success", "تم إزالة اللوحة من السلة");
+const removeFromCart = (cartId) => {
+  console.log("Removing cartId:", cartId);
+  
+  const bookingToRemove = selectedSigns.find(sign => sign.cartId === cartId);
+  
+  if (bookingToRemove) {
+    setSelectedSigns(prev => prev.filter(sign => sign.cartId !== cartId));
+    setAddedSignIds(prev => new Set([...prev].filter(id => id !== bookingToRemove.road_sign_id)));
+    showToast("success", "تم إزالة الحجز من السلة");
+  }
+  
+  setCalculationResult(null);
+  setShowDiscount(false);
+  setDiscountValue("");
+};
+
+
+ const calculateTotal = async () => {
+  try {
+    // Check if printing_id is provided
+    if (!formik.values.printing_id) {
+      showToast("error", "يرجى إدخال رقم الطباعة قبل الحساب");
+      return;
     }
-    setCalculationResult(null);
-    setIndividualCalculations(prev => {
-      const newCalculations = { ...prev };
-      delete newCalculations[road_sign_id];
-      return newCalculations;
-    });
-    setIndividualLoadingStates(prev => {
-      const newLoadingStates = { ...prev };
-      delete newLoadingStates[road_sign_id];
-      return newLoadingStates;
-    });
-    setShowDiscount(false);
-    setDiscountValue("");
-  };
 
-  const calculateTotal = async () => {
-    try {
-      const payload = {
-        product_type: parseInt(formik.values.product_type),
-        roadsigns: selectedSigns.flatMap((sign) =>
-          sign.dateRanges.map((range) => ({
-            road_sign_id: sign.road_sign_id,
-            booking_faces: range.booking_faces,
-            start_date: range.startDate,
-            end_date: range.endDate,
-            number_of_reserved_panels: range.booking_faces,
-            units: range.units || 1,
-          }))
-        ),
-        start_date: formik.values.start_date,
-        end_date: formik.values.end_date,
-      };
-      const response = await calculateReservation(payload).unwrap();
-
-      setCalculationResult(response);
-      showToast(
-        "success",
-        `السعر الإجمالي: ${
-          response?.price_per_period.toFixed(2) || "غير متوفر"
-        }`
-      );
-    } catch (error) {
-      showToast("error", `${error.data.message}`);
-    }
-  };
-
-  // New function: Calculate individual booking price
-  const calculateBookingPrice = async (roadSignId) => {
-    try {
-      // Set loading state for this specific booking
-      setIndividualLoadingStates(prev => ({
-        ...prev,
-        [roadSignId]: true
-      }));
-
-      const bookingSign = selectedSigns.find(sign => sign.road_sign_id === roadSignId);
-      if (!bookingSign) {
-        showToast("error", "الحجز غير موجود");
-        setIndividualLoadingStates(prev => ({
-          ...prev,
-          [roadSignId]: false
-        }));
-        return;
-      }
-
-      const payload = {
-        product_type: parseInt(formik.values.product_type),
-        roadsigns: bookingSign.dateRanges.map((range) => ({
-          road_sign_id: roadSignId,
+    const payload = {
+      product_type: parseInt(formik.values.product_type),
+      roadsigns: selectedSigns.flatMap((sign) =>
+        sign.dateRanges.map((range) => ({
+          road_sign_id: sign.road_sign_id,
           booking_faces: range.booking_faces,
           start_date: range.startDate,
           end_date: range.endDate,
           number_of_reserved_panels: range.booking_faces,
           units: range.units || 1,
-        })),
-        start_date: formik.values.start_date,
-        end_date: formik.values.end_date,
-      };
+        }))
+      ),
+      start_date: formik.values.start_date,
+      end_date: formik.values.end_date,
+      printing_id: parseInt(formik.values.printing_id), // Add this line
+    };
+    
+    const response = await calculateReservation(payload).unwrap();
 
-      const response = await calculateReservation(payload).unwrap();
+    setCalculationResult(response);
+    showToast(
+      "success",
+      `السعر الإجمالي: ${
+        response?.price_per_period.toFixed(2) || "غير متوفر"
+      } (رقم الطباعة: ${formik.values.printing_id})`
+    );
+  } catch (error) {
+    showToast("error", `${error.data?.message || error.message}`);
+  }
+};
+  // New function: Calculate individual booking price
+const calculateBookingPrice = async (cartId) => {
+  try {
+    // Check if printing_id is provided
+    if (!formik.values.printing_id) {
+      showToast("error", "يرجى إدخال رقم الطباعة قبل حساب سعر الحجز الفردي");
+      return;
+    }
 
-      setIndividualCalculations(prev => ({
-        ...prev,
-        [roadSignId]: {
-          price_per_period: response.price_per_period,
-          amount: response.amount,
-          units: response.units,
-        }
-      }));
+    // Set loading state for this specific booking
+    setIndividualLoadingStates(prev => ({
+      ...prev,
+      [cartId]: true
+    }));
 
-      showToast(
-        "success",
-        `سعر الحجز: ${response?.price_per_period.toFixed(2)} $`
-      );
-    } catch (error) {
-      showToast("error", `خطأ في حساب سعر الحجز: ${error.data.message}`);
-    } finally {
-      // Clear loading state for this specific booking
+    // Find the booking by cartId
+    const bookingSign = selectedSigns.find(sign => sign.cartId === cartId);
+    if (!bookingSign) {
+      showToast("error", "الحجز غير موجود");
       setIndividualLoadingStates(prev => ({
         ...prev,
-        [roadSignId]: false
+        [cartId]: false
       }));
+      return;
     }
-  };
 
+    const payload = {
+      product_type: parseInt(formik.values.product_type),
+      roadsigns: bookingSign.dateRanges.map((range) => ({
+        road_sign_id: bookingSign.road_sign_id,
+        booking_faces: range.booking_faces,
+        start_date: range.startDate,
+        end_date: range.endDate,
+        number_of_reserved_panels: range.booking_faces,
+        units: range.units || 1,
+      })),
+      start_date: formik.values.start_date,
+      end_date: formik.values.end_date,
+      printing_id: parseInt(formik.values.printing_id), // Add this line
+    };
+
+    const response = await calculateReservation(payload).unwrap();
+
+    setIndividualCalculations(prev => ({
+      ...prev,
+      [cartId]: {
+        price_per_period: response.price_per_period,
+        amount: response.amount,
+        units: response.units,
+      }
+    }));
+
+    showToast(
+      "success",
+      `سعر الحجز: ${response?.price_per_period.toFixed(2)} $ (رقم الطباعة: ${formik.values.printing_id})`
+    );
+  } catch (error) {
+    showToast("error", `خطأ في حساب سعر الحجز: ${error.data?.message || error.message}`);
+  } finally {
+    // Clear loading state for this specific booking
+    setIndividualLoadingStates(prev => ({
+      ...prev,
+      [cartId]: false
+    }));
+  }
+};
   const handleDiscountValueChange = (e) => {
     const value = e.target.value;
     if (discountType === "1" && calculationResult) {
@@ -498,36 +444,38 @@ export const BookingContextApi = ({ children, bookingId }) => {
   );
 
   // Group selected signs by booking (road_sign_id)
-  const groupedBookings = useMemo(() => {
-    const groups = {};
-    selectedSigns.forEach((sign) => {
-      const roadSign = roadSigns?.data?.find(rs => rs.id === sign.road_sign_id);
-      const signKey = sign.road_sign_id;
-      
-      if (!groups[signKey]) {
-        groups[signKey] = {
-          road_sign_id: sign.road_sign_id,
-          roadSign: roadSign,
-          dateRanges: [],
-          totalFaces: 0,
-          totalUnits: 0,
-          individualCalculation: individualCalculations[sign.road_sign_id] || null,
-          isLoading: individualLoadingStates[sign.road_sign_id] || false, // Add individual loading state
-        };
-      }
-      
-      sign.dateRanges.forEach(range => {
-        groups[signKey].dateRanges.push({
-          ...range,
-          bookingIndex: groups[signKey].dateRanges.length
-        });
-        groups[signKey].totalFaces += range.booking_faces;
-        groups[signKey].totalUnits += range.units || 1;
-      });
-    });
+// Group selected signs by cartId (each booking is separate)
+const groupedBookings = useMemo(() => {
+  const groups = {};
+  selectedSigns.forEach((sign) => {
+    const roadSign = roadSigns?.data?.find(rs => rs.id === sign.road_sign_id);
+    const signKey = sign.cartId; // Use cartId instead of road_sign_id
     
-    return Object.values(groups);
-  }, [selectedSigns, roadSigns, individualCalculations, individualLoadingStates]);
+    if (!groups[signKey]) {
+      groups[signKey] = {
+        cartId: sign.cartId, // Use cartId as identifier
+        road_sign_id: sign.road_sign_id,
+        roadSign: roadSign || sign, // Use stored sign data if roadSign not found
+        dateRanges: [],
+        totalFaces: 0,
+        totalUnits: 0,
+        individualCalculation: individualCalculations[sign.cartId] || null,
+        isLoading: individualLoadingStates[sign.cartId] || false,
+      };
+    }
+    
+    sign.dateRanges.forEach(range => {
+      groups[signKey].dateRanges.push({
+        ...range,
+        bookingIndex: groups[signKey].dateRanges.length
+      });
+      groups[signKey].totalFaces += range.booking_faces;
+      groups[signKey].totalUnits += range.units || 1;
+    });
+  });
+  
+  return Object.values(groups);
+}, [selectedSigns, roadSigns, individualCalculations, individualLoadingStates]);
 
   // Context value
   const contextValue = {

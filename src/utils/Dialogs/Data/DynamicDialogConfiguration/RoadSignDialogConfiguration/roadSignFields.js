@@ -8,8 +8,7 @@ export const roadSignFields1 = [
     valueKey: "id",
     displayKey: "model",
   },
-
-    {
+  {
     name: "city_id",
     label: "المدينة",
     type: "select",
@@ -28,23 +27,17 @@ export const roadSignFields1 = [
     displayKey: "name",
   },
   { name: "place", label: "مكان التموضع", type: "text", dir: "rtl" },
-
-  { name: "direction_one", label: "الإتجاه للوجه الأول ", type: "text", dir: "rtl" },
-
- // { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
-
-
+  { name: "direction_one", label: "الإتجاه الأول ", type: "text", dir: "rtl" },
   {
     name: "image",
     label: "صورة اللوحة",
     type: "file",
     accept: "image/*",
   },
-   {
+  {
     name: "map",
     type:"map"
   },
-
 ];
 
 export const roadSignFields2 = [
@@ -77,19 +70,22 @@ export const roadSignFields2 = [
   },
   { name: "place", label: "مكان التموضع", type: "text", dir: "rtl" },
   { name: "direction_one", label: "الإتجاه الأول ", type: "text", dir: "rtl" },
-  // Removed only these two fields from UI
-  // { name: "direction_two", label: "الإتجاه الثاني ", type: "text", dir: "rtl" },
-  // { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
-
+  {
+    name: "direction_two",
+    label: "الإتجاه الثاني ",
+    type: "text",
+    dir: "rtl",
+  },
+  // ONLY ONE IMAGE FIELD - Will be used for both faces
   {
     name: "image",
-    label: "صورة اللوحة",
+    label: "صورة اللوحة (ستستخدم لكلا الوجهين)",
     type: "file",
     accept: "image/*",
   },
   {
     name: "map",
-    type: "map"
+    type:"map"
   },
 ];
 
@@ -114,6 +110,12 @@ export const roadSignFieldsEdit = [
     valueKey: "id",
     displayKey: "name",
   },
+    {
+    name: "image",
+    label: "صورة اللوحة",
+    type: "file",
+    accept: "image/*",
+  },
 
   // { name: "panels_number", label: "عدد اللوحات", type: "number", dir: "rtl" },
   // {
@@ -132,10 +134,11 @@ export const roadSignFieldsEdit = [
   //   type: "file",
   //   accept: "image/*",
   // },
-  // {
-  //   name: "map",
-  //   type:"map"
-  // },
+  
+   {
+     name: "map",
+     type:"map"
+   },
 
 
 ];

@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ShoppingCart, Trash2 } from "lucide-react";
+import { ShoppingCart, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -43,177 +43,113 @@ const BookingTable = () => {
   } = useGetRoadSignsByFilter();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedSign, setSelectedSign] = useState(null);
-  const [dateRanges, setDateRanges] = useState([]);
-  const [isSignAvailable, setIsSignAvailable] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   useEffect(() => {
     setStartDate(formik.values.start_date);
     setEndDate(formik.values.end_date);
   }, [formik.values.start_date, formik.values.end_date]);
 
-  console.log(roadSigns);
-  const handleShowDialog = (sign) => {
-    setSelectedSign(sign);
+  // Group similar road signs
+  const groupedRoadSigns = React.useMemo(() => {
+    if (!roadSigns) return [];
 
-    const mainStartDate = new Date(formik.values.start_date);
-    const mainEndDate = new Date(formik.values.end_date);
-    const bookedRanges = sign.booking_dates.map((range) => ({
-      start: new Date(range.start_date),
-      end: new Date(range.end_date),
-    }));
-
-    let isAvailable = true;
-    let availablePanels = sign.panels_number - sign.total_panels_on_date;
-    for (const booked of bookedRanges) {
-      if (
-        (mainStartDate >= booked.start && mainStartDate <= booked.end) ||
-        (mainEndDate >= booked.start && mainEndDate <= booked.end) ||
-        (mainStartDate <= booked.start && mainEndDate >= booked.end)
-      ) {
-        isAvailable = false;
-        break;
+    const groups = {};
+    
+    roadSigns.forEach(sign => {
+      const key = `${sign.template?.model}_${sign.place}_${sign.region?.name}`;
+      
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          template: sign.template,
+          place: sign.place,
+          region: sign.region,
+          signs: [],
+          totalAvailable: 0,
+          totalPanels: 0,
+          similarSignsCount: 0
+        };
       }
-    }
+      
+      groups[key].signs.push(sign);
+      groups[key].totalAvailable += (sign.panels_number - sign.total_panels_on_date);
+      groups[key].totalPanels += sign.panels_number;
+      groups[key].similarSignsCount += 1;
+    });
 
-    setIsSignAvailable(isAvailable);
-    setDateRanges(
-      isAvailable
-        ? [
-            {
-              startDate: formik.values.start_date,
-              endDate: formik.values.end_date,
-              booking_faces: 1,
-            },
-          ]
-        : [{ startDate: "", endDate: "", booking_faces: 1 }]
-    );
+    return Object.values(groups);
+  }, [roadSigns]);
+
+  const toggleGroup = (groupId) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(groupId)) {
+      newExpanded.delete(groupId);
+    } else {
+      newExpanded.add(groupId);
+    }
+    setExpandedGroups(newExpanded);
+  };
+
+  const handleShowDialog = (group) => {
+    setSelectedGroup(group);
+    setSelectedQuantity(1);
     setIsDialogOpen(true);
   };
 
-  const addDateRange = () => {
-    console.log("addDateRange");
-    setDateRanges([
-      ...dateRanges,
-      { startDate: "", endDate: "", booking_faces: 1 },
-    ]);
-  };
+  const handleAddToCart = () => {
+    if (!selectedGroup) return;
 
-  const removeDateRange = (index) => {
-    console.log("removeDateRange");
-    if (dateRanges.length > 1) {
-      setDateRanges(dateRanges.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateDateRange = (index, field, value) => {
-    const newRanges = [...dateRanges];
-    newRanges[index][field] = value;
-    setDateRanges(newRanges);
-  };
-
-  const updateBookingFaces = (index, value) => {
-    const newRanges = [...dateRanges];
-    const maxPanels = getMaxAvailablePanels(
-      newRanges[index].startDate,
-      newRanges[index].endDate
+    // Calculate available signs (not in cart)
+    const availableSigns = selectedGroup.signs.filter(sign => 
+      !addedSignIds?.has?.(sign.id)
     );
-    const parsedValue = parseInt(value) || 1;
-    newRanges[index].booking_faces = Math.min(parsedValue, maxPanels);
-    setDateRanges(newRanges);
-  };
 
-  const getMaxAvailablePanels = (startDate, endDate) => {
-    if (!selectedSign || !startDate || !endDate) return 0;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    let maxPanels = selectedSign.panels_number;
-    console.log(maxPanels);
-
-    for (const range of selectedSign.available_date_ranges) {
-      const rangeStart = new Date(range.start_date);
-      const rangeEnd = new Date(range.end_date);
-      if (
-        (start >= rangeStart && start <= rangeEnd) ||
-        (end >= rangeStart && end <= rangeEnd) ||
-        (start <= rangeStart && end >= rangeEnd)
-      ) {
-        maxPanels = Math.min(maxPanels, range.available_panels);
-      }
+    if (selectedQuantity > availableSigns.length) {
+      alert(`عذراً، لا يتوفر ${selectedQuantity} لوحات. العدد المتاح هو ${availableSigns.length}`);
+      return;
     }
 
-    // for (const booked of selectedSign.booking_dates) {
-    //   const bookedStart = new Date(booked.start_date);
-    //   const bookedEnd = new Date(booked.end_date);
-    //   if (
-    //     (start >= bookedStart && start <= bookedEnd) ||
-    //     (end >= bookedStart && end <= bookedEnd) ||
-    //     (start <= bookedStart && end >= bookedEnd)
-    //   ) {
-    //     maxPanels = 0; // غير متاح إذا كان هناك تعارض
-    //   }
-    // }
+    if (selectedQuantity < 1) {
+      alert("يرجى اختيار عدد صحيح من اللوحات");
+      return;
+    }
 
-    return maxPanels;
+    // Add EACH sign as a separate booking item with unique cartId
+    const signsToAdd = availableSigns.slice(0, selectedQuantity);
+    
+    signsToAdd.forEach((sign, index) => {
+      const uniqueBooking = {
+        ...sign,
+        // Create unique cart ID to prevent grouping
+        cartId: `sign-${sign.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        customDateRanges: [
+          {
+            startDate: formik.values.start_date,
+            endDate: formik.values.end_date,
+            booking_faces: 1,
+          },
+        ],
+      };
+      
+      addToCart(uniqueBooking);
+    });
+
+    setIsDialogOpen(false);
+    setSelectedQuantity(1);
   };
 
-  const validateDateRanges = () => {
-    if (!selectedSign) return false;
-
-    const bookedRanges = selectedSign.booking_dates.map((range) => ({
-      start: new Date(range.start_date),
-      end: new Date(range.end_date),
-    }));
-
-    for (const range of dateRanges) {
-      if (!range.startDate || !range.endDate || !range.booking_faces) {
-        return false;
-      }
-
-      const start = new Date(range.startDate);
-      const end = new Date(range.endDate);
-      const maxPanels = getMaxAvailablePanels(range.startDate, range.endDate);
-
-      if (
-        start >= end ||
-        range.booking_faces > maxPanels ||
-        range.booking_faces < 1
-      ) {
-        return false;
-      }
-
-      // for (const booked of bookedRanges) {
-      //   if (
-      //     (start >= booked.start && start <= booked.end) ||
-      //     (end >= booked.start && end <= booked.end) ||
-      //     (start <= booked.start && end >= booked.end)
-      //   ) {
-      //     return false;
-      //   }
-      // }
-    }
-    return true;
+  const isSignAdded = (signId) => {
+    return addedSignIds?.has?.(signId);
   };
 
-  const handleAddToCartWithDates = () => {
-    if (isSignAvailable || validateDateRanges()) {
-      const validRanges = dateRanges.filter(
-        (range) => range.startDate && range.endDate && range.booking_faces
-      );
-      if (validRanges.length > 0) {
-        addToCart({
-          ...selectedSign,
-          customDateRanges: validRanges,
-        });
-        setIsDialogOpen(false);
-      } else {
-        alert("يرجى إدخال تواريخ وعدد لوحات صالحة على الأقل لمدى زمني واحد");
-      }
-    } else {
-      alert(
-        "يرجى اختيار تواريخ وعدد لوحات صالحة دون تعارض مع الحجوزات الحالية"
-      );
-    }
+  // Fix: Check if any sign in the group is added
+  const isGroupAdded = (groupId) => {
+    const group = groupedRoadSigns.find(g => g.id === groupId);
+    if (!group) return false;
+    return group.signs.some(sign => addedSignIds?.has?.(sign.id));
   };
 
   return (
@@ -222,12 +158,10 @@ const BookingTable = () => {
         اللوحات الطرقية
       </h2>
 
+      {/* Filter controls */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1">
-          <Label
-            htmlFor="city"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
+          <Label htmlFor="city" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             المدينة
           </Label>
           <select
@@ -247,10 +181,7 @@ const BookingTable = () => {
           </select>
         </div>
         <div className="flex-1">
-          <Label
-            htmlFor="region"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
+          <Label htmlFor="region" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             المنطقة
           </Label>
           <select
@@ -259,9 +190,7 @@ const BookingTable = () => {
             onChange={handleRegionChange}
             disabled={isRegionsLoading || !cityId}
             className={`w-full ${
-              isRegionsLoading || !cityId
-                ? `dark:bg-gray-700`
-                : `dark:bg-gray-900`
+              isRegionsLoading || !cityId ? `dark:bg-gray-700` : `dark:bg-gray-900`
             } p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 `}
           >
             {isRegionsLoading || !cityId ? (
@@ -279,10 +208,7 @@ const BookingTable = () => {
           </select>
         </div>
         <div className="flex-1">
-          <Label
-            htmlFor="model"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
+          <Label htmlFor="model" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             القياس
           </Label>
           <select
@@ -304,292 +230,211 @@ const BookingTable = () => {
           </select>
         </div>
       </div>
+
       <div className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-100 dark:bg-gray-800">
+              <TableHead className="text-right">عدد اللوحات المتماثلة</TableHead>
               <TableHead className="text-right">نموذج</TableHead>
               <TableHead className="text-right">نوع النموذج</TableHead>
               <TableHead className="text-right">عدد الوجوه</TableHead>
-              {/* <TableHead className="text-right">عدد الوجوه المحجوزة</TableHead> */}
               <TableHead className="text-right">عدد الأمتار</TableHead>
               <TableHead className="text-right">القياس</TableHead>
               <TableHead className="text-right">المنطقة</TableHead>
               <TableHead className="text-right">مكان التموضع</TableHead>
               <TableHead className="text-right">الاتجاه</TableHead>
-              {/* <TableHead className="text-right">الوجوه المتاحة</TableHead>
-              <TableHead className="text-right">اللوحات المتاحة</TableHead> */}
               <TableHead className="text-right">إجراء</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isRoadSignsFetching ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center py-4">
+                <TableCell colSpan={10} className="text-center py-4">
                   جاري التحميل...
                 </TableCell>
               </TableRow>
-            ) : !roadSigns || roadSigns?.length === 0 ? (
+            ) : !groupedRoadSigns || groupedRoadSigns.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center py-4">
+                <TableCell colSpan={10} className="text-center py-4">
                   لا توجد لوحات متوفرة لهذه الفترة
                 </TableCell>
               </TableRow>
             ) : (
-              roadSigns?.map((sign) => (
-                <TableRow
-                  key={sign.id}
-                  className={` ${
-                    addedSignIds?.has?.(sign.id)
-                      ? "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
-                    {sign.template?.model || "غير متوفر"}
-                  </TableCell>
-                  <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
-                    {sign.template?.type || "غير محدد"}
-                  </TableCell>
-                  <TableCell>{sign.panels_number || 0}</TableCell>
-                  {/* <TableCell>{sign.total_panels_on_date || 0}</TableCell> */}
-                  <TableCell>{sign.template.printing_space || 0}</TableCell>
-                  <TableCell>{sign.template?.size || "غير متوفر"}</TableCell>
-                  <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
-                    {sign.region?.name || "غير متوفر"}
-                  </TableCell>
-                  <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
-                    {sign.place || "غير متوفر"}
-                  </TableCell>
-                  <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
-                    {sign.directions || "غير متوفر"}
-                  </TableCell>
-                  {/* <TableCell>
-                    {sign.panels_number - sign.total_panels_on_date === 0
-                      ? "لا يوجد أي لوحات متاحة"
-                      : `${
-                          sign.panels_number - sign.total_panels_on_date
-                        } لوحة متاحة`}
-                  </TableCell> */}
-                  {/* <TableCell>
-                    {sign.available_date_ranges?.reduce(
-                      (sum, range) => sum + (range.available_panels || 0),
-                      0
-                    ) || 0}{" "}
-                    لوحة
-                  </TableCell> */}
-                  <TableCell className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleShowDialog(sign)}
-                      className={`flex items-center gap-2 ${
-                        addedSignIds?.has?.(sign.id)
-                          ? "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300"
-                          : "bg-white dark:bg-gray-700"
-                      }`}
-                      // disabled={addedSignIds?.has?.(sign.id)}
-                    >
-                      <ShoppingCart className="h-4 w-4" />
-                      <span>إضافة</span>
-                    </Button>
-                  </TableCell>
-                </TableRow>
+              groupedRoadSigns.map((group) => (
+                <React.Fragment key={group.id}>
+                  {/* Main Group Row */}
+                  <TableRow
+                    className={`${
+                      isGroupAdded(group.id)
+                        ? "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                    } cursor-pointer`}
+                    onClick={() => toggleGroup(group.id)}
+                  >
+                    <TableCell className="font-semibold">
+                      <div className="flex items-center justify-between">
+                        <span>{group.similarSignsCount} لوحة متماثلة</span>
+                        {expandedGroups.has(group.id) ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
+                      {group.template?.model || "غير متوفر"}
+                    </TableCell>
+                    <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
+                      {group.template?.type || "غير محدد"}
+                    </TableCell>
+                    <TableCell>{group.totalPanels || 0}</TableCell>
+                    <TableCell>{group.template?.printing_space || 0}</TableCell>
+                    <TableCell>{group.template?.size || "غير متوفر"}</TableCell>
+                    <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
+                      {group.region?.name || "غير متوفر"}
+                    </TableCell>
+                    <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
+                      {group.place || "غير متوفر"}
+                    </TableCell>
+                    <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
+                      {group.signs[0]?.directions || "غير متوفر"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleShowDialog(group);
+                        }}
+                        className={`flex items-center gap-2 ${
+                          isGroupAdded(group.id)
+                            ? "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300"
+                            : "bg-white dark:bg-gray-700"
+                        }`}
+                      >
+                        <ShoppingCart className="h-4 w-4" />
+                        <span>إضافة</span>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  
+                  {/* Expanded view showing individual signs - FIXED */}
+                  {expandedGroups.has(group.id) && (
+                    <>
+                      {group.signs.map((sign, index) => {
+                        const isAdded = isSignAdded(sign.id);
+                        return (
+                          <TableRow
+                            key={sign.id}
+                            className={`bg-gray-50 dark:bg-gray-800 ${
+                              isAdded ? "bg-green-50 dark:bg-green-900/20" : ""
+                            }`}
+                          >
+                            <TableCell className="text-center text-sm text-gray-500">
+                              #{index + 1}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[120px] sm:max-w-[150px] text-sm">
+                              {sign.template?.model || "غير متوفر"}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[120px] sm:max-w-[150px] text-sm">
+                              {sign.template?.type || "غير محدد"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {sign.panels_number || 0}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {sign.template?.printing_space || 0}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {sign.template?.size || "غير متوفر"}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[120px] sm:max-w-[150px] text-sm">
+                              {sign.region?.name || "غير متوفر"}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[120px] sm:max-w-[150px] text-sm">
+                              {sign.place || "غير متوفر"}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[120px] sm:max-w-[150px] text-sm">
+                              {sign.directions || "غير متوفر"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <span className={`px-2 py-1 rounded ${
+                                isAdded
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                                  : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                              }`}>
+                                {isAdded ? "مضاف" : "غير مضاف"}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </>
+                  )}
+                </React.Fragment>
               ))
             )}
           </TableBody>
         </Table>
       </div>
 
+      {/* Quantity Selection Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent
-          dir="rtl"
-          className="sm:max-w-[600px] overflow-y-auto dark:bg-gray-800"
-        >
+        <DialogContent dir="rtl" className="sm:max-w-[500px] dark:bg-gray-800">
           <DialogHeader>
             <DialogTitle className="text-right text-gray-800 dark:text-gray-100">
-              اختيار تواريخ وعدد اللوحات
+              اختيار عدد اللوحات
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
-                التواريخ المتاحة
-              </h3>
-              {selectedSign?.available_date_ranges?.length > 0 ? (
-                <ul className="list-disc pr-4 text-gray-600 dark:text-gray-300">
-                  {selectedSign?.available_date_ranges.map((range, index) => (
-                    <li key={index}>
-                      من {range.start_date} إلى {range.end_date} ({range.days}{" "}
-                      أيام، {range.available_panels} لوحات متاحة)
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-600 dark:text-gray-300">
-                  لا توجد تواريخ متاحة
-                </p>
-              )}
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2">
+                معلومات المجموعة:
+              </h4>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                <strong>النموذج:</strong> {selectedGroup?.template?.model}
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                <strong>المنطقة:</strong> {selectedGroup?.region?.name}
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                <strong>مكان التموضع:</strong> {selectedGroup?.place}
+              </p>
             </div>
+
             <div>
-              <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
-                التواريخ المحجوزة
-              </h3>
-              {selectedSign?.booking_dates?.length > 0 ? (
-                <ul className="list-disc pr-4 text-gray-600 dark:text-gray-300">
-                  {selectedSign?.booking_dates.map((range, index) => (
-                    <li key={index}>
-                      من {range.start_date} إلى {range.end_date} ({range.days}{" "}
-                      أيام، {range.panels_reserved} لوحات محجوزة)
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-600 dark:text-gray-300">
-                  لا توجد تواريخ محجوزة
+              <Label htmlFor="quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                عدد اللوحات المطلوبة
+              </Label>
+              <Input
+                id="quantity"
+                type="number"
+                min="1"
+                max={selectedGroup?.totalAvailable}
+                value={selectedQuantity}
+                onChange={(e) => setSelectedQuantity(parseInt(e.target.value) || 1)}
+                className="w-full text-right"
+              />
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                العدد المتاح: <strong>{selectedGroup?.totalAvailable}</strong> لوحة
+              </p>
+              {selectedQuantity > selectedGroup?.totalAvailable && (
+                <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                  ⚠️ العدد المطلوب يتجاوز العدد المتاح
                 </p>
-              )}
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">
-                تواريخ الحجز وعدد اللوحات
-              </h3>
-              {isSignAvailable ? (
-                <div className="flex flex-col sm:flex-row gap-4 mb-4 items-center">
-                  <div className="flex-1">
-                    <Label className="text-gray-700 dark:text-gray-300">
-                      تاريخ البداية
-                    </Label>
-                    <input
-                      type="date"
-                      value={dateRanges[0].startDate}
-                      disabled
-                      className="w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-gray-700 dark:text-gray-300">
-                      تاريخ النهاية
-                    </Label>
-                    <input
-                      type="date"
-                      value={dateRanges[0].endDate}
-                      disabled
-                      className="w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-gray-700 dark:text-gray-300">
-                      عدد اللوحات
-                    </Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max={
-                        selectedSign?.panels_number -
-                        selectedSign?.total_panels_on_date
-                      }
-                      value={dateRanges[0].booking_faces}
-                      onChange={(e) => updateBookingFaces(0, e.target.value)}
-                      className="w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md text-right"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {dateRanges.map((range, index) => (
-                    <div
-                      key={index}
-                      className="flex flex-col sm:flex-row gap-4 mb-4 items-center"
-                    >
-                      <div className="flex-1">
-                        <Label className="text-gray-700 dark:text-gray-300">
-                          تاريخ البداية
-                        </Label>
-                        <input
-                          type="date"
-                          value={range.startDate}
-                          
-                          onChange={(e) =>
-                            updateDateRange(index, "startDate", e.target.value)
-                          }
-                          disabled={
-                            selectedSign?.available_date_ranges?.length == 0
-                          }
-                          className="w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label className="text-gray-700 dark:text-gray-300">
-                          تاريخ النهاية
-                        </Label>
-                        <input
-                          type="date"
-                          value={range.endDate}
-                          onChange={(e) =>
-                            updateDateRange(index, "endDate", e.target.value)
-                          }
-                          disabled={
-                            selectedSign?.available_date_ranges?.length == 0
-                          }
-                          className="w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label className="text-gray-700 dark:text-gray-300">
-                          عدد اللوحات
-                        </Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max={getMaxAvailablePanels(
-                            range.startDate,
-                            range.endDate
-                          )}
-                          value={range.booking_faces}
-                          onChange={(e) =>
-                            updateBookingFaces(index, e.target.value)
-                          }
-                          className="w-full p-2 border border-gray-300 dark:bg-gray-900 rounded-md text-right"
-                          disabled={
-                            selectedSign?.available_date_ranges?.length == 0
-                          }
-                        />
-                      </div>
-                      {dateRanges.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => removeDateRange(index)}
-                          className="mt-6"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addDateRange}
-                    className="mt-2"
-                    disabled={selectedSign?.available_date_ranges?.length == 0}
-                  >
-                    إضافة مدى تاريخي آخر
-                  </Button>
-                </>
               )}
             </div>
           </div>
           <DialogFooter>
             <Button
               type="button"
-              onClick={handleAddToCartWithDates}
-              disabled={!isSignAvailable && !validateDateRanges()}
+              onClick={handleAddToCart}
+              disabled={selectedQuantity > selectedGroup?.totalAvailable || selectedQuantity < 1}
             >
-              إضافة إلى السلة
+              إضافة إلى السلة ({selectedQuantity} لوحة)
             </Button>
             <Button
               type="button"

@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@iconify/react";
@@ -11,14 +12,12 @@ import { Permissions } from "../../Static/StaticData";
 import DetailCard from "../../utils/DetailCard";
 import SkeletonLoader from "../../utils/SkeletonLoader";
 import useUsers from "../../hooks/useUsers";
+import { useGetActivitiesQuery } from '../../RtkQuery/Slice/Users/UsersApi';
 
 const UserInfo = () => {
-
   const {
     user,
     isFetching,
-    activities,
-    isFetchingActivities,
     open,
     setOpen,
     openActivities,
@@ -29,6 +28,89 @@ const UserInfo = () => {
     hasPermission,
     handleDelete,
   } = useUsers()
+
+  // Helper function to decode Unicode
+  const decodeUnicode = (str) => {
+    if (typeof str !== 'string') return str;
+    
+    try {
+      // Try JSON parsing first
+      return JSON.parse(`"${str}"`);
+    } catch (e) {
+      try {
+        // Manual Unicode decoding
+        return str.replace(/\\u[\dA-F]{4}/gi, (match) => {
+          return String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16));
+        });
+      } catch (error) {
+        return str;
+      }
+    }
+  };
+
+  const decodeActivityText = (activities) => {
+    if (!activities) return null;
+    
+    // Check if the API response has a 'data' property
+    if (activities.data) {
+      // If data is an array
+      if (Array.isArray(activities.data)) {
+        const decodedData = activities.data.map(item => ({
+          ...item,
+          activity: decodeUnicode(item.activity)
+        }));
+        return { ...activities, data: decodedData };
+      }
+      // If data is a single object
+      return {
+        ...activities,
+        data: {
+          ...activities.data,
+          activity: decodeUnicode(activities.data.activity)
+        }
+      };
+    }
+    
+   if (Array.isArray(activities)) {
+  return activities.map(item => ({
+    ...item,
+    activity: typeof item?.activity === "string"
+      ? decodeUnicode(item.activity)
+      : item?.activity
+  }));
+}
+
+    
+    return {
+      ...activities,
+      activity: decodeUnicode(activities.activity)
+    };
+  };
+
+  const { 
+    data: activitiesData, 
+    isLoading: isFetchingActivities,
+    refetch: refetchActivities
+  } = useGetActivitiesQuery(
+    user?.id, 
+    {
+      skip: !user?.id, 
+    }
+  );
+
+  const handleOpenActivities = () => {
+    if (user?.id) {
+      refetchActivities();
+      setOpenActivities(true);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activitiesData && openActivities) {
+      console.log('Original data:', activitiesData);
+      console.log('Decoded data:', decodeActivityText(activitiesData));
+    }
+  }, [activitiesData, openActivities]);
 
   if (isFetching) {
     return (
@@ -69,13 +151,24 @@ const UserInfo = () => {
             </Button>
           )}
 
+          {/* Updated button to use the handler */}
           <Button
-            onClick={() => setOpenActivities(true)}
+            onClick={handleOpenActivities}
             variant="outline"
             className="gap-2 cursor-pointer"
+            disabled={!user?.id || isFetchingActivities}
           >
-            <Icon icon="mdi:history" className="text-lg" />
-            عرض النشاطات
+            {isFetchingActivities ? (
+              <>
+                <Icon icon="mdi:loading" className="text-lg animate-spin" />
+                جاري التحميل...
+              </>
+            ) : (
+              <>
+                <Icon icon="mdi:history" className="text-lg" />
+                عرض النشاطات
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -189,14 +282,15 @@ const UserInfo = () => {
         loading={isLoading}
         onConfirm={handleDelete}
       />
-      <DialogShow
-        show={openActivities}
-        handleClose={() => setOpenActivities(false)}
-        data={activities}
-        arrayKey="activities"
-        arrayFields={ActivityFieldsShow}
-        loading={isFetchingActivities}
-      />
+      
+<DialogShow
+  show={openActivities}
+  handleClose={() => setOpenActivities(false)}
+  data={decodeActivityText(activitiesData) || []} // ✅ FIXed
+  arrayKey="activities" // Tell DialogShow to use activities mode
+  arrayFields={ActivityFieldsShow} 
+  loading={isFetchingActivities}
+/>
     </div>
   );
 };

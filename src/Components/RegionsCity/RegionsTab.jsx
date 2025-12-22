@@ -1,4 +1,4 @@
-import React, { memo, useContext } from "react";
+import React, { memo, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -47,6 +47,9 @@ const RegionsTab = () => {
     handleDeleteDialog,
   } = useContext(RegionsCityContext);
   const { hasPermission } = useAuth();
+  
+  // Static value for status
+  const [staticStatus] = useState(1);
 
   return (
     <TabsContent value="regions">
@@ -105,7 +108,7 @@ const RegionsTab = () => {
                 </SelectContent>
               </Select>
               <Select
-                value={regionForm.is_active.toString()}
+                value={staticStatus.toString()}
                 onValueChange={(value) =>
                   setRegionForm({ ...regionForm, is_active: parseInt(value) })
                 }
@@ -114,8 +117,7 @@ const RegionsTab = () => {
                   <SelectValue placeholder="الحالة" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">متوفر</SelectItem>
-                  <SelectItem value="0">غير متوفر</SelectItem>
+                  <SelectItem value="1">متوفرة</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -156,9 +158,7 @@ const RegionsTab = () => {
                   {cities.find((city) => city.id === region.city_id)?.name ||
                     "Unknown"}
                 </TableCell>
-                <TableCell>
-                  {region.is_active ? "متوفر" : "غير متوفر"}
-                </TableCell>
+                <TableCell>متوفرة</TableCell>
                 <TableCell>
                   {hasPermission(Permissions.EditRegions) && (
                     <Button

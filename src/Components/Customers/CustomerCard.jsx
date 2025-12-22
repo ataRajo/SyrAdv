@@ -148,15 +148,18 @@ const initialStatus =
       <span>{phone_number}</span>
     </div>
 
-    <div className="flex items-center gap-2 text-sm">
-      <Icon icon="mdi:percent" className="text-green-500" />
-      <span>
-        المتبقي:
-        <Badge variant="outline" className="ml-1">
-          {remaining}$
-        </Badge>
-      </span>
-    </div>
+   <div className="flex items-center gap-2 text-sm">
+  <Icon icon="mdi:percent" className="text-green-500" />
+  <span>
+    المتبقي:
+    <Badge 
+      variant="outline" 
+      className={`ml-1 ${remaining > 0 ? ' text-white  font-medium text-md mr-2' : ''}`}
+    >
+      {remaining}$
+    </Badge>
+  </span>
+</div>
 
     <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-2 mt-2">
       <span>

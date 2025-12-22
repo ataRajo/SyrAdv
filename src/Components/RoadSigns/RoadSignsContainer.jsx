@@ -16,6 +16,7 @@ import { Toaster , toast } from "react-hot-toast";
 import {
   useGetCitiesQuery,
   useAddNewRegionMutation,
+  useAddNewCityMutation,
 } from "../../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi";
 
 const RoadSignsContainer = () => {
@@ -25,6 +26,8 @@ const RoadSignsContainer = () => {
 
   // NEW STATE FOR REGION MODAL
   const [showRegionModal, setShowRegionModal] = useState(false);
+  // NEW STATE FOR CITY MODAL
+  const [showCityModal, setShowCityModal] = useState(false);
 
   if (isFetching) {
     return (
@@ -55,13 +58,19 @@ const RoadSignsContainer = () => {
               />
 
               {/* NEW BUTTON "إضافة منطقة" */}
-
               <Button
                 onClick={() => setShowRegionModal(true)}
                 className="bg-white text-gray-700 text-lg"
               >
-                +
-                إضافة منطقة 
+                + إضافة منطقة 
+              </Button>
+
+              {/* NEW BUTTON "إضافة مدينة" */}
+              <Button
+                onClick={() => setShowCityModal(true)}
+                className="bg-white text-gray-700 text-lg"
+              >
+                + إضافة مدينة
               </Button>
             </div>
           )}
@@ -114,6 +123,11 @@ const RoadSignsContainer = () => {
       {showRegionModal && (
         <AddRegionModal onClose={() => setShowRegionModal(false)} />
       )}
+
+      {/* NEW CITY MODAL */}
+      {showCityModal && (
+        <AddCityModal onClose={() => setShowCityModal(false)} />
+      )}
       <Toaster position="top-center" />
 
     </div>
@@ -130,7 +144,7 @@ const AddRegionModal = ({ onClose }) => {
   const [form, setForm] = useState({
     name: "",
     city_id: "",
-    is_active: "",
+    is_active: "1", // Default to "1" (متوفر)
   });
 
   const handleSubmit = async () => {
@@ -169,17 +183,61 @@ const AddRegionModal = ({ onClose }) => {
           ))}
         </select>
 
-        {/* هل متوفر */}
-        <label className="block mb-2 text-gray-700">هل متوفر :</label>
-        <select
-          className="w-full border p-2 rounded mb-4 text-gray-700"
-          value={form.is_active}
-          onChange={(e) => setForm({ ...form, is_active: e.target.value })}
-        >
-          <option value="">اختر</option>
-          <option value="1">نعم</option>
-          <option value="0">لا</option>
-        </select>
+        {/* متوفر */}
+        <label className="block mb-2 text-gray-700">متوفر :</label>
+        <div className="w-full border p-2 rounded mb-4 text-gray-700 bg-gray-50">
+          نعم
+        </div>
+
+        <div className="flex justify-between mt-4">
+          <Button onClick={onClose} variant="secondary">
+            إلغاء
+          </Button>
+          <Button onClick={handleSubmit} disabled={isLoading}>
+            إضافة
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AddCityModal = ({ onClose }) => {
+  const [addCity, { isLoading }] = useAddNewCityMutation();
+
+  const [form, setForm] = useState({
+    name: "",
+    is_active: "1", // Default to "1" (متوفر)
+  });
+
+  const handleSubmit = async () => {
+    try {
+      await addCity(form).unwrap();
+      toast.success("تمت إضافة المدينة بنجاح");
+      onClose();
+    } catch (err) {
+      toast.error("حدث خطأ أثناء الإضافة");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
+      <div className="bg-white p-6 rounded-lg w-[350px]">
+        <h2 className="text-xl font-bold mb-4 text-gray-700">إضافة مدينة</h2>
+
+        {/* الاسم */}
+        <label className="block mb-2 text-gray-700">الاسم :</label>
+        <input
+          className="w-full border p-2 rounded mb-3 text-gray-700"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+
+        {/* متوفر */}
+        <label className="block mb-2 text-gray-700">متوفر :</label>
+        <div className="w-full border p-2 rounded mb-4 text-gray-700 bg-gray-50">
+          نعم
+        </div>
 
         <div className="flex justify-between mt-4">
           <Button onClick={onClose} variant="secondary">

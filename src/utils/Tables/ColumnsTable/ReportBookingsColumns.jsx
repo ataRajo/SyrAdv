@@ -1,7 +1,5 @@
 // Columns for Bookings This Week
 export const ReportBookingsColumns = [
-  
-  
  
   {
     header: "عدد الوجوه",

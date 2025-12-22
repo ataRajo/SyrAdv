@@ -102,8 +102,13 @@ export const ViewImageDialog = ({ show, handleClose, payment }) => {
               </span>
             </div>
             <div className="truncate">
+              {/*
+              
+
               <strong className="ml-2">حالة الاستلام:</strong>
               <span>{payment?.received ? "مستلمة" : "غير مستلمة"}</span>
+
+              */}
             </div>
           </div>
         </div>

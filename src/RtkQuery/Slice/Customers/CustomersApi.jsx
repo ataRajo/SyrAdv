@@ -54,7 +54,7 @@ export const CustomersSlice = createApi({
   query: ({ id, status }) => ({
     url: `customers/${id}/update-status`,
     method: "POST",
-    body: { status }, // ✅ your backend should accept this field
+    body: { status }, 
   }),
   invalidatesTags: ["customers"],
     }),

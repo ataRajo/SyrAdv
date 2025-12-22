@@ -85,42 +85,82 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
     },
   };
 
- const onSubmitTransform = (values) => ({
-  city_id: values.city_id ? Number(values.city_id) : null,
-  region_id: values.region_id ? Number(values.region_id) : null,
-  product_id: values.product_id ? parseInt(values.product_id, 10) : null,
-  is_available: values.is_available
-    ? parseInt(values.is_available, 10)
-    : null,
-  faces_number: values.faces_number ? Number(values.faces_number) : null,
-  advertising_meters: values.advertising_meters
-    ? String(Number(values.advertising_meters))
-    : null,
-  printing_meters: values.printing_meters
-    ? String(Number(values.printing_meters))
-    : null,
-  latitudeX: values?.latitudeX,
-  longitudeY: values?.longitudeY,
-  // Add the missing fields
-  place: values?.place || null,        // مكان التموضع
-  directions: values?.directions || null, // الاتجاه
-});
+const onSubmitTransform = (values) => {
+  // Helper function to safely convert to number
+  const safeToNumber = (value) => {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+    const num = Number(value);
+    return isNaN(num) ? null : num;
+  };
+
+  const formData = {
+    city_id: safeToNumber(values.city_id),
+    region_id: safeToNumber(values.region_id),
+    product_id: values.product_id ? parseInt(values.product_id, 10) : null,
+    is_available: values.is_available ? parseInt(values.is_available, 10) : null,
+    faces_number: safeToNumber(values.faces_number),
+    advertising_meters: safeToNumber(values.advertising_meters),
+    printing_meters: safeToNumber(values.printing_meters),
+    // Use the helper function for latitude/longitude
+    latitudeX: safeToNumber(values.latitudeX),
+    longitudeY: safeToNumber(values.longitudeY),
+    place: values?.place || null,
+    directions: values?.directions || null,
+    _method: 'PUT'
+  };
+  
+  // Remove null values if not needed by backend
+  Object.keys(formData).forEach(key => {
+    if (formData[key] === null) {
+      delete formData[key];
+    }
+  });
+  
+  // Handle image - if it's a File, you'll need FormData
+  if (values.image && values.image instanceof File) {
+    // If there's a file, use FormData
+    const fd = new FormData();
+    Object.keys(formData).forEach(key => {
+      if (formData[key] !== null && formData[key] !== undefined) {
+        fd.append(key, formData[key]);
+      }
+    });
+    fd.append('image', values.image);
+    return fd;
+  }
+  
+  // If no file, send as JSON
+  return formData;
+};
   const handleCityChange = (value) => {
     setCityId(value);
   };
 
-  const transformedInitialValues = useMemo(() => {
-    return {
-      ...initData,
-      city_id: initData?.city_id ? String(initData?.city_id) : "",
-      region_id: initData?.region_id ? String(initData.region_id) : "",
-      is_available: initData?.is_available
-        ? String(initData?.is_available)
-        : "",
-      number: initData?.number ? String(initData.number) : null,
-    };
-  }, [initData]);
-
+const transformedInitialValues = useMemo(() => {
+  if (!initData) return {};
+  
+  // Helper function to safely convert to string
+  const safeToString = (value) => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+    return String(value);
+  };
+  
+  return {
+    ...initData,
+    city_id: initData?.city_id ? String(initData?.city_id) : "",
+    region_id: initData?.region_id ? String(initData.region_id) : "",
+    is_available: initData?.is_available ? String(initData?.is_available) : "",
+    number: initData?.number ? String(initData.number) : "",
+    image: initData?.image || null,
+    // Use safeToString for latitude/longitude
+    latitudeX: safeToString(initData?.latitudeX),
+    longitudeY: safeToString(initData?.longitudeY),
+  };
+}, [initData]);
   return (
     <DynamicDialog
       show={show}

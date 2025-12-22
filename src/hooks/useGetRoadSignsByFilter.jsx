@@ -16,6 +16,7 @@ const useGetRoadSignsByFilter = () => {
   const [cityId, setCityId] = useState("");
   const [regionId, setRegionId] = useState("");
   const [model, setModel] = useState("");
+  const [customerId, setCustomerId] = useState("");
 
   const local = useLocation();
   const pathnameSplit = local?.pathname.split("/");
@@ -33,16 +34,26 @@ const useGetRoadSignsByFilter = () => {
   const { data: getRoadSignsModel, isLoading: isGetRoadSignsModel } =
     useGetRoadSignsModelQuery();
 
-  const {
-    data: roadSigns,
-    isError,
-    isFetching: isRoadSignsFetching,
-  } = useGetRoadSignsQuery({
+  // ✅ FIXED: Include ALL parameters including customer_id
+  const queryParams = {
     start_date: startDate,
     end_date: endDate,
     city_id: cityId,
     region_id: regionId,
     model: model,
+    customer_id: customerId || "", 
+  };
+
+  // ✅ DEBUG: Log the exact parameters being sent
+  console.log("🚀 useGetRoadSignsQuery called with:", queryParams);
+  console.log("🔗 URL would be:", `/api/road-signs?${new URLSearchParams(queryParams).toString()}`);
+
+  const {
+    data: roadSigns,
+    isError,
+    isFetching: isRoadSignsFetching,
+  } = useGetRoadSignsQuery(queryParams, {
+    refetchOnMountOrArgChange: true,
   });
 
   const navigate = useNavigate();
@@ -84,7 +95,7 @@ const useGetRoadSignsByFilter = () => {
     setCityId,
     regionId,
     setRegionId,
-    roadSigns:roadSigns?.data,
+    roadSigns: roadSigns?.data,
     isError,
     cities,
     isCitiesLoading,
@@ -97,6 +108,8 @@ const useGetRoadSignsByFilter = () => {
     getRoadSignsModel,
     isGetRoadSignsModel,
     isRoadSignsFetching,
+    customerId,
+    setCustomerId,
     handleCityChange,
     handleRegionChange,
     handleModelChange,

@@ -12,7 +12,9 @@ import { Icon } from "@iconify/react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useAuth } from "../../Context/AuthProvider";
 import { Link } from "react-router";
-// Utility function to access nested properties
+import { useConfirmBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
+import { toast } from "sonner";
+
 const getNestedValue = (obj, path) => {
   return path.split(".").reduce((current, key) => {
     return current && typeof current === "object" ? current[key] : undefined;
@@ -30,21 +32,40 @@ export const DynamicTable = ({
   onShow,
   onConfirmOrder,
   onUnconfirmOrder,
-  // ============ ADD THIS LINE ============
   onRoadSignAction,
-  onExchange ,
-  // ============ END ADD ============
+  onExchange,
+  onExtendBooking,
+  onStatusChange,
   className = "",
   permissions,
+  hideDeleteIcon = false,
+  showTemporaryBookingIcon = false,
+  isOrdersTable = false,
 }) => {
   const { hasPermission } = useAuth();
+  const [confirmBooking, { isLoading: isConfirming }] = useConfirmBookingMutation();
+
+  // Function to handle booking confirmation
+  const handleConfirmBooking = async (bookingId) => {
+    try {
+      const result = await confirmBooking(bookingId).unwrap();
+      toast.success("تم تأكيد الحجز وتحويله إلى دائم بنجاح!");
+    } catch (error) {
+      console.error("Error confirming booking:", error);
+      toast.error(
+        error?.data?.message ||
+          error?.data?.error ||
+          "فشل في تأكيد الحجز. يرجى المحاولة مرة أخرى."
+      );
+    }
+  };
 
   return (
     <div
       className={`rounded-xl border border-gray-100 dark:border-gray-800 bg-background shadow-sm w-full ${className}`}
     >
-      <ScrollArea className="w-full  h-[calc(100vh-300px)] relative">
-        <Table dir="rtl" className="w-full  min-w-max table-auto">
+      <ScrollArea className="w-full h-[calc(100vh-300px)] relative">
+        <Table dir="rtl" className="w-full min-w-max table-auto">
           <TableHeader className="bg-gray-50 dark:bg-gray-800/50 text-center sticky top-0 z-10">
             <TableRow>
               {columns.map((column) => (
@@ -62,10 +83,13 @@ export const DynamicTable = ({
                 onShow ||
                 onConfirmOrder ||
                 onUnconfirmOrder ||
-                // ============ ADD onRoadSignAction HERE ============
-                onRoadSignAction) && (
+                onRoadSignAction ||
+                onExchange ||
+                onExtendBooking ||
+                onStatusChange ||
+                showTemporaryBookingIcon) && (
                 <TableHead className="text-center min-w-[120px] sm:min-w-[150px]">
-                  Actions
+                  الإجراءات
                 </TableHead>
               )}
             </TableRow>
@@ -87,10 +111,16 @@ export const DynamicTable = ({
                     onShow ||
                     onConfirmOrder ||
                     onUnconfirmOrder ||
-                    // ============ ADD onRoadSignAction HERE ============
-                    onRoadSignAction) && (
+                    onRoadSignAction ||
+                    onExchange ||
+                    onExtendBooking ||
+                    onStatusChange ||
+                    showTemporaryBookingIcon) && (
                     <TableCell className="text-center">
                       <div className="flex justify-end gap-2">
+                        {showTemporaryBookingIcon && (
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        )}
                         {onShow && <Skeleton className="h-8 w-8 rounded-md" />}
                         {onConfirmOrder && (
                           <Skeleton className="h-8 w-8 rounded-md" />
@@ -102,8 +132,16 @@ export const DynamicTable = ({
                         {onDelete && (
                           <Skeleton className="h-8 w-8 rounded-md" />
                         )}
-                        {/* ============ ADD SKELETON FOR ROAD SIGN ACTION ============ */}
                         {onRoadSignAction && (
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        )}
+                        {onExchange && (
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        )}
+                        {onExtendBooking && (
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        )}
+                        {onStatusChange && (
                           <Skeleton className="h-8 w-8 rounded-md" />
                         )}
                       </div>
@@ -114,7 +152,7 @@ export const DynamicTable = ({
             ) : data?.length > 0 ? (
               data.map((row, rowIndex) => (
                 <TableRow
-                  key={row.id ??  rowIndex}
+                  key={row.id ?? rowIndex}
                   className="hover:bg-gray-50 text-center dark:hover:bg-gray-800/30"
                 >
                   {columns.map((column) => (
@@ -134,7 +172,10 @@ export const DynamicTable = ({
                           )}
                           <span className="truncate max-w-[150px] text-center sm:max-w-[200px]">
                             {column.format
-                              ? column.format(getNestedValue(row, column.accessor), row)
+                              ? column.format(
+                                  getNestedValue(row, column.accessor),
+                                  row
+                                )
                               : getNestedValue(row, column.accessor) ?? ""}
                           </span>
                         </div>
@@ -146,10 +187,54 @@ export const DynamicTable = ({
                     onShow ||
                     onConfirmOrder ||
                     onUnconfirmOrder ||
-                    // ============ ADD onRoadSignAction HERE ============
-                    onRoadSignAction) && (
+                    onRoadSignAction ||
+                    onExchange ||
+                    onExtendBooking ||
+                    onStatusChange ||
+                    showTemporaryBookingIcon) && (
                     <TableCell className="py-2">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2 items-center">
+                        {/* Status Change Button - FIXED */}
+                        {onStatusChange && 
+                          hasPermission(permissions?.updateStatus) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onStatusChange(row)}
+                              className="h-7 w-7 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/20 dark:border-purple-800 dark:hover:bg-purple-900/40"
+                              title="تغيير حالة الحجز"
+                            >
+                              <Icon
+                                icon="mdi:swap-vertical"
+                                className="text-purple-600 dark:text-purple-400"
+                              />
+                            </Button>
+                          )}
+
+                        {/* Confirm Booking Button - Show only for temporary bookings (type == 1) */}
+                        {showTemporaryBookingIcon && row.type === 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleConfirmBooking(row.id)}
+                            disabled={isConfirming}
+                            className="h-7 w-7 p-0 bg-green-50 border-green-200 hover:bg-green-100"
+                            title="تأكيد الحجز (تحويل إلى دائم)"
+                          >
+                            {isConfirming ? (
+                              <Icon
+                                icon="mdi:loading"
+                                className="text-green-600 animate-spin"
+                              />
+                            ) : (
+                              <Icon
+                                icon="mdi:check-circle-outline"
+                                className="text-green-600"
+                              />
+                            )}
+                          </Button>
+                        )}
+
                         {onShow && hasPermission(permissions?.show) && (
                           <Button
                             variant="outline"
@@ -160,9 +245,10 @@ export const DynamicTable = ({
                             <Icon icon="mdi:eye" className="text-primary" />
                           </Button>
                         )}
+
                         {(onConfirmOrder || onUnconfirmOrder) && (
                           <>
-                            {(row?.status === 0 || row?.is_received === 0 ) &&
+                            {(row?.status === 0 || row?.is_received === 0) &&
                               onConfirmOrder &&
                               hasPermission(permissions?.confirm) && (
                                 <Button
@@ -177,24 +263,33 @@ export const DynamicTable = ({
                                   />
                                 </Button>
                               )}
+
                             {(row.status === 1 || row?.status === 2) &&
                               onUnconfirmOrder &&
                               hasPermission(permissions?.unConfirm) && (
+                                
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => onUnconfirmOrder(row)}
-                                  className="h-7 w-7 p-0"
+                                  className="h-7 w-7 p-0 bg-transparent "
+                                  title="إيقاف مؤقت للحجز"
                                 >
+                                  {/*
+                                  
                                   <Icon
-                                    icon="mdi:close-circle-outline"
-                                    className="text-red-500"
+                                    icon="mdi:pause-circle-outline"
+                                    className="text-yellow-600 dark:text-yellow-400"
                                   />
+                                  */ }
+                                  
                                 </Button>
                               )}
                           </>
+
                         )}
-                        {onEdit  && hasPermission(permissions?.edit) && (
+
+                        {onEdit && hasPermission(permissions?.edit) && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -204,9 +299,6 @@ export const DynamicTable = ({
                             <Icon icon="mdi:pencil" className="text-primary" />
                           </Button>
                         )}
-
-
-
 
                         {onEditBooking &&
                           hasPermission(permissions?.edit) &&
@@ -224,22 +316,23 @@ export const DynamicTable = ({
                             </Button>
                           )}
 
-                        {onDelete && hasPermission(permissions?.delete) && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => onDelete(row)}
-                            className="h-7 w-7 p-0"
-                          >
-                            <Icon icon="mdi:trash" />
-                          </Button>
-                        )}
-
-
+                        {onDelete &&
+                          !hideDeleteIcon &&
+                          hasPermission(permissions?.delete) && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => onDelete(row)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <Icon icon="mdi:trash" />
+                            </Button>
+                          )}
 
                         {onDeleteBooking &&
+                          !hideDeleteIcon &&
                           hasPermission(permissions?.delete) &&
-                          row?.status == 1  && (
+                          row?.status == 1 && (
                             <Button
                               variant="destructive"
                               size="sm"
@@ -250,38 +343,67 @@ export const DynamicTable = ({
                             </Button>
                           )}
 
+                        {onExchange &&
+                          hasPermission(permissions?.exchange) &&
+                          row.bookings &&
+                          row.bookings.length > 0 &&
+                          row.bookings.some(
+                            (booking) => booking.status === 1
+                          ) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onExchange(row)}
+                              className="h-7 w-7 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100"
+                              title="تبديل الموقع - هذه اللوحة تحتوي على حجوزات نشطة"
+                            >
+                              <Icon
+                                icon="mdi:swap-horizontal"
+                                className="text-purple-600"
+                              />
+                            </Button>
+                          )}
 
-{onExchange && hasPermission(permissions?.exchange) && 
-  // ============ TEMPORARY CONDITION: Show if has active bookings ============
-  row.bookings && 
-  row.bookings.length > 0 &&
-  row.bookings.some(booking => booking.status === 1) && (
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() => onExchange(row)}
-    className="h-7 w-7 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100"
-    title="تبديل الموقع - هذه اللوحة تحتوي على حجوزات نشطة"
-  >
-    <Icon icon="mdi:swap-horizontal" className="text-purple-600" />
-  </Button>
-)}
-                        {/* ============ ADD THE ROAD SIGN ACTION BUTTON HERE ============ */}
                         {onRoadSignAction && (
-                          <Link to={`/dashboard/road_signs/${row.id}/stats`}
-                          state={{roadSign: row }}
+                          <Link
+                            to={`/dashboard/road_signs/${row.id}/stats`}
+                            state={{ roadSign: row }}
                           >
-                          <Button
-                            variant="outline"
-                            size="lg"
-                            onClick={() => onRoadSignAction(row)}
-                            className="h-7 w-7 p-0 bg-blue-50 border-blue-200"
-                            title="Road Sign Action"
-                          >
-                            <Icon icon="mdi:road" className="text-blue-600" />
-                          </Button>
+                            <Button
+                              variant="outline"
+                              size="lg"
+                              onClick={() => onRoadSignAction(row)}
+                              className="h-7 w-7 p-0 bg-blue-50 border-blue-200"
+                              title="Road Sign Action"
+                            >
+                              <Icon
+                                icon="mdi:road"
+                                className="text-blue-600"
+                              />
+                            </Button>
                           </Link>
                         )}
+
+                       {onExtendBooking && 
+  !isOrdersTable &&
+  (hasPermission(permissions?.extend) || true) &&
+  row?.approvement_status === 2 &&
+  [1, 2].includes(row?.type) &&  
+  new Date(row.end_date) > new Date() && (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => onExtendBooking(row)}
+      className="h-7 w-7 p-0 bg-orange-50 border-orange-200 hover:bg-orange-100"
+      title="تمديد الحجز"
+    >
+      <Icon
+        icon="mdi:calendar-plus"
+        className="text-orange-600"
+      />
+    </Button>
+  )}
+
                       </div>
                     </TableCell>
                   )}
@@ -293,12 +415,15 @@ export const DynamicTable = ({
                   colSpan={
                     columns.length +
                     (onEdit ||
-                    onDelete ||
-                    onShow ||
-                    onConfirmOrder ||
-                    onUnconfirmOrder ||
-                    // ============ ADD onRoadSignAction HERE ============
-                    onRoadSignAction
+                      onDelete ||
+                      onShow ||
+                      onConfirmOrder ||
+                      onUnconfirmOrder ||
+                      onRoadSignAction ||
+                      onExchange ||
+                      onExtendBooking ||
+                      onStatusChange ||
+                      showTemporaryBookingIcon
                       ? 1
                       : 0)
                   }

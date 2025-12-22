@@ -1,16 +1,28 @@
+// AdministrationPageLayout.jsx
 import React, { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Bell } from "lucide-react";
 import { navLinksAdministrationPage } from "../Static/StaticData";
 import { useAuth } from "../Context/AuthProvider";
+import NotificationsModal from "../Components/NotificationNavBar/NotificationsModal";
+import { useGetOrdersQuery } from "../RtkQuery/Slice/Orders/OrdersApi"; // Add this import
 
 const AdministrationPageLayout = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const {hasPermission} = useAuth()
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const { hasPermission } = useAuth();
+
+  // Add this query to get real orders data
+  const { data: orders = [], isLoading: isLoadingOrders } = useGetOrdersQuery();
+
+  // Calculate active orders count (status = 0)
+  const activeOrdersCount = React.useMemo(() => {
+    if (!orders || !Array.isArray(orders)) return 0;
+    return orders.filter(order => order.status === 0).length;
+  }, [orders]);
 
   const isActive = (path) => {
     if (path === "") {
@@ -36,26 +48,54 @@ const AdministrationPageLayout = () => {
             )}
           </Button>
 
-          <div className="hidden sm:flex gap-2">
-            {
-            navLinksAdministrationPage.map((link) => (
-              
-              (hasPermission(link.permission)) ?
-              (
+          <div className="hidden sm:flex gap-2 items-center">
+            {/* الروابط العادية */}
+            {navLinksAdministrationPage.map((link) => (
+              hasPermission(link.permission) && (
                 <Button
-                key={link.to}
-                asChild
-                variant={isActive(link.to) ? "default" : "ghost"}
-                className={cn(
-                  "justify-start",
-                  !isActive(link.to) &&
-                    "text-muted-foreground hover:text-primary"
-                )}
-              >
-                <Link to={link.to}>{link.text}</Link>
-              </Button>
-              ) : null
+                  key={link.to}
+                  asChild
+                  variant={isActive(link.to) ? "default" : "ghost"}
+                  className={cn(
+                    "justify-start relative",
+                    !isActive(link.to) &&
+                      "text-muted-foreground hover:text-primary"
+                  )}
+                >
+                  <Link to={link.to} className="flex items-center gap-2">
+                    {link.text}
+                    {/* Show order count only for orders link */}
+                    {link.to === "orders" && activeOrdersCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                        {activeOrdersCount}
+                      </span>
+                    )}
+                  </Link>
+                </Button>
+              )
             ))}
+
+            {/*
+            
+ <div className="relative">
+              <Button
+                variant="ghost"
+                onClick={() => setNotificationsOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Bell className="h-5 w-5" />
+                <span>الإشعارات</span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            
+            */}
+           
           </div>
         </div>
 
@@ -66,38 +106,61 @@ const AdministrationPageLayout = () => {
           )}
         >
           <div className="flex flex-col gap-2 p-2 border-t">
+            {/* زر الإشعارات في الجوال */}
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setNotificationsOpen(true);
+              }}
+              className="justify-start w-full"
+            >
+              <Bell className="h-5 w-5 mr-2" />
+              <span>الإشعارات</span>
+            </Button>
+
+            {/* الروابط العادية للجوال */}
             {navLinksAdministrationPage.map((link) => (
-
-              
-                (hasPermission(link.permission)) ?
-                (
-                  <Button
-                key={link.to}
-                asChild
-                variant={isActive(link.to) ? "default" : "ghost"}
-                className={cn(
-                  "justify-start w-full transition-colors",
-                  !isActive(link.to) &&
-                    "text-muted-foreground hover:text-primary"
-                )}
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <Link to={link.to}>{link.mobileText}</Link>
-              </Button>
-                ) : null
-
-              
-              
+              hasPermission(link.permission) && (
+                <Button
+                  key={link.to}
+                  asChild
+                  variant={isActive(link.to) ? "default" : "ghost"}
+                  className={cn(
+                    "justify-start w-full relative transition-colors",
+                    !isActive(link.to) &&
+                      "text-muted-foreground hover:text-primary"
+                  )}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Link to={link.to} className="flex items-center justify-between w-full">
+                    <span>{link.mobileText}</span>
+                    {/* Show order count only for orders link on mobile */}
+                    {link.to === "orders" && activeOrdersCount > 0 && (
+                      <span className="bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                        {activeOrdersCount}
+                      </span>
+                    )}
+                  </Link>
+                </Button>
+              )
             ))}
           </div>
         </div>
       </nav>
 
-      {/* <ScrollArea className="flex-1 h-full"> */}
-      <div className="p-4 md:p-6  space-y-4">
+      {/* استدعاء NotificationsModal منفصل */}
+      <NotificationsModal
+        isOpen={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        notifications={[]} // Empty array - no static notifications
+        unreadCount={0}
+      />
+
+      {/* المحتوى الرئيسي */}
+      <div className="p-4 md:p-6 space-y-4">
         <Outlet />
       </div>
-      {/* </ScrollArea> */}
     </div>
   );
 };

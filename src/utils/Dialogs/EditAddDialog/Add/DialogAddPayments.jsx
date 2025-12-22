@@ -34,12 +34,15 @@ export const DialogAddPayments = ({ show, handleClose }) => {
   const { data: bookingsData, isSuccess: isBookingsSuccess } = useGetBookingQuery();
   const [addPayment] = useAddNewPaymentMutation();
 
-  // Map bookings to select data
+  // Filter bookings to show only type === 2 ("دائم")
+  const permanentBookings = bookingsData?.filter(booking => booking.type === 2) || [];
+
+  // Map filtered bookings to select data
   const selectData = {
     reservations: {
-      data: bookingsData?.map((b) => ({
+      data: permanentBookings.map((b) => ({
         id: String(b.id),
-        booking_number: `رقم الحجز: ${b.id} - ${b.customer?.company_name || b.customer?.full_name || ""}`,
+booking_number: `حجز #${b.id} - ${b.customer?.company_name || b.customer?.full_name} - ${b.total_price}$ - دائم`,
       })) || [],
     },
   };
@@ -56,7 +59,6 @@ export const DialogAddPayments = ({ show, handleClose }) => {
   };
 
   return (
-
     <DynamicDialog
       show={show}
       handleClose={handleClose}

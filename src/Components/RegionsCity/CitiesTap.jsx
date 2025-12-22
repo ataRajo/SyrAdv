@@ -1,4 +1,4 @@
-import React, { memo, useContext } from "react";
+import React, { memo, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,6 +32,9 @@ import { Permissions } from "../../Static/StaticData";
 const CitiesTap = () => {
   const context = useContext(RegionsCityContext);
   const { hasPermission } = useAuth();
+  
+  // Static value for status
+  const [staticStatus] = useState(1);
 
   // Safe fallback if context is undefined
   if (!context) {
@@ -88,7 +91,7 @@ const CitiesTap = () => {
                 }
               />
               <Select
-                value={cityForm.is_active?.toString() || "1"}
+                value={staticStatus.toString()}
                 onValueChange={(value) =>
                   setCityForm({ ...cityForm, is_active: parseInt(value) })
                 }
@@ -97,8 +100,7 @@ const CitiesTap = () => {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">متوفر</SelectItem>
-                  <SelectItem value="0">غير متوفرة</SelectItem>
+                  <SelectItem value="1">متوفرة</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -135,7 +137,7 @@ const CitiesTap = () => {
               <TableRow key={city.id}>
                 <TableCell>{city.id}</TableCell>
                 <TableCell>{city.name}</TableCell>
-                <TableCell>{city.is_active ? "متوفر" : "غير متوفر"}</TableCell>
+                <TableCell>متوفرة</TableCell>
                 <TableCell>
                   {hasPermission(Permissions.EditCities) && (
                     <Button

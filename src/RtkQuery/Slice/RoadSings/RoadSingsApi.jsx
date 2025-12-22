@@ -7,13 +7,15 @@ export const RoadSignsSlice = createApi({
   tagTypes: ["RoadSigns"],
   endpoints: (builder) => ({
     getRoadSigns: builder.query({
-      query: ({ start_date, end_date, city_id, region_id, model } = {}) => {
+      query: ({ start_date, end_date, city_id, region_id, model , customer_id } = {}) => {
         const params = new URLSearchParams();
         if (start_date) params.append("start_date", start_date);
         if (end_date) params.append("end_date", end_date);
         if (city_id) params.append("city_id", city_id);
         if (region_id) params.append("region_id", region_id);
         if (model) params.append("model", model);
+        if (customer_id) params.append("customer_id", customer_id); // ✅ ADD THIS LINE
+
 
         const queryString = params.toString();
         return `/road-signs${queryString ? `?${queryString}` : ""}`;
@@ -39,16 +41,32 @@ export const RoadSignsSlice = createApi({
       query: (id) => `road-signs/${id}`,
       providesTags: (result, error, id) => [{ type: "RoadSigns", id }],
     }),
-    updateRoadSign: builder.mutation({
-      query: ({ id, data }) => {
-        console.log(data)
-        return ({
+updateRoadSign: builder.mutation({
+  query: ({ id, data }) => {
+    console.log('Update data:', data);
+    
+    // Check if data is FormData
+    if (data instanceof FormData) {
+      return {
+        url: `road-signs/${id}`,
+        method: "POST", 
+        body: data,
+        
+      };
+    } else {
+      // Regular JSON data
+      return {
         url: `road-signs/${id}`,
         method: "PUT",
         body: data,
-      })},
-      invalidatesTags: ["RoadSigns"],
-    }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      };
+    }
+  },
+  invalidatesTags: ["RoadSigns"],
+}),
     addRoadSign: builder.mutation({
       query: (data) => ({
         url: `road-signs`,

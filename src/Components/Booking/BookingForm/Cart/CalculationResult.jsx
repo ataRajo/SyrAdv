@@ -56,59 +56,57 @@ const CalculationResult = () => {
         </div>
       </div>
 
-      {/* Calculation Results */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <div className="flex flex-col">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            السعر الإجمالي:
-          </span>
-          <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-            {calculationResult?.price_per_period?.toFixed(2)} $
-          </span>
-        </div>
-        {discountValue && (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              السعر بعد الحسم:
-            </span>
-            <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-              {calculateDiscountedPrice()?.toFixed(2)} $
-            </span>
-          </div>
-        )}
-        <div className="flex flex-col">
-          {/*
-           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            مساحة الإعلان:
-          </span>
-
-          <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-            {calculationResult?.amount?.total_advertising_space.toFixed(2)} متر
-          </span>
-        </div>
-        <div className="flex flex-col">
-
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            مساحة الطباعة:
-          </span>
-
-          <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-            {calculationResult?.amount?.total_printing_space.toFixed(2)} متر
-          </span>
-          */}
-         
-
-        </div>
-
-        <div className="flex flex-col">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            عدد الدورات ( الأشهر ) :
-          </span>
-          <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-            {calculationResult?.units || "غير متوفر"} 
-          </span>
-        </div>
-      </div>
+   {/* Calculation Results */}
+<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+  <div className="flex flex-col">
+    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      السعر الإجمالي:
+    </span>
+    <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
+      {calculationResult?.price_per_period?.toFixed(2)} $
+    </span>
+  </div>
+  
+  {/* Add Advertising Price */}
+  <div className="flex flex-col">
+    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      سعر الإعلان:
+    </span>
+    <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
+      {calculationResult?.amount?.total_advertising_price?.toFixed(2)} $
+    </span>
+  </div>
+  
+  {/* Add Printing Price */}
+  <div className="flex flex-col">
+    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      سعر الطباعة:
+    </span>
+    <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
+      {calculationResult?.amount?.total_printing_price?.toFixed(2)} $
+    </span>
+  </div>
+  
+  {discountValue && (
+    <div className="flex flex-col">
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        السعر بعد الحسم:
+      </span>
+      <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
+        {calculateDiscountedPrice()?.toFixed(2)} $
+      </span>
+    </div>
+  )}
+  
+  <div className="flex flex-col">
+    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      عدد الدورات ( الأشهر ) :
+    </span>
+    <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
+      {calculationResult?.units || "غير متوفر"} 
+    </span>
+  </div>
+</div>
       {calculationResult && (
         <div className="mt-4">
           <Button
@@ -134,11 +132,12 @@ const CalculationResult = () => {
                   <Label htmlFor="percentage">نسبة مئوية</Label>
                 </div>
               </RadioGroup>
+              <p className="text-sm text-red-600 font-bold">الحسم يشمل فقط  سعر الاعلان </p>
               <Input
                 type="number"
                 value={discountValue}
                 onChange={handleDiscountValueChange}
-                placeholder="أدخل قيمة الحسم"
+                placeholder= "الحسم لا يتضمن الطباعة !!!!!"
                 className="w-full text-right"
               />
               <Button

@@ -6,6 +6,8 @@ import {
   IconCash,
   IconTemplate,
   IconRoad,
+  IconReceipt , 
+  
 } from "@tabler/icons-react";
 
 export const BookingType = {
@@ -22,6 +24,8 @@ export const productTypeOptions = [
   { value: 1, label: "محلي" },
   { value: 2, label: "أجنبي" },
   { value: 3, label: "محلي اجنبي" },
+
+
 ];
 
 export const statusBookings = {
@@ -90,6 +94,15 @@ export const Permissions = {
   ViewTemplates: "view-templates",
   ViewUsers: "view-users",
   ViewFinancials: "view-financials",
+  
+  ViewPrice: "view-price",
+  CreatePrice: "create-price",
+  EditPrice: "edit-price",
+  DeletePrice: "delete-price",
+
+
+  ExtendBookings: "extend-bookings",
+
 };
 
 export const navLinkSidebar = [
@@ -131,10 +144,17 @@ export const navLinkSidebar = [
     permission: Permissions.ViewTemplates,
   },
   {
-    title: "اللوحات الطرقية",
+    title: "  الخرائط و اللوحات الطرقية",
     url: "/dashboard/road_signs",
     icon: IconRoad,
     permission: Permissions.ViewRoadSigns,
+  },
+
+  {
+    title: "سعر الطباعة",
+    url: "/dashboard/PrintPrice",
+    icon: IconReceipt, 
+    permission: Permissions.ViewRegions, 
   },
 ];
 
@@ -143,7 +163,7 @@ export const navLinksAdministrationPage = [
     to: "",
     text: "الاحصائيات",
     mobileText: "الرئيسية",
-    permission: "view-road-signs",
+    permission: "view-road-signs", // أو Permissions.ViewRoadSigns
   },
   {
     to: "orders",
@@ -189,6 +209,16 @@ export const navLinksAdministrationPage = [
     mobileText: "الوسيط ",
     permission: Permissions.ViewBrokers,
   },
+  
+  /*
+  {
+    to: "notifications",
+    text: "  الإشعارات",
+    mobileText: "الإشعارات",
+    permission: Permissions.ViewRegions, //      
+    isModal: true,
+  },
+  */
 ];
 
 

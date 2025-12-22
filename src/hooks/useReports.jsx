@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useGetRoadSignBookingByDateQuery, useGetRoadSignBookingByWeekQuery, useGetSoadSignDontHaveBookingQuery } from '../RtkQuery/Slice/Report/ReportApi';
 import { useGetRoadSignsModelQuery } from '../RtkQuery/Slice/RoadSings/RoadSingsApi';
 import { useGetActiveRegionsByCityMutation, useGetCitiesQuery } from '../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi';
+import { useGetCustomersQuery } from '../RtkQuery/Slice/Customers/CustomersApi';
 
 const useReports = () => {
   const [activeTab, setActiveTab] = useState("bookings");
@@ -11,18 +12,48 @@ const useReports = () => {
   const [fromDate, setFromDate] = useState();
   const [toDate, setToDate] = useState();
   const [productId, setProductId] = useState();
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [customerType, setCustomerType] = useState("");
+
+const handleCustomerTypeChange = useCallback((e) => {
+  setCustomerType(e.target.value);
+}, []);
+
+  const { 
+    data: customersData, 
+    isLoading: isCustomersLoading,
+    error: customersError 
+  } = useGetCustomersQuery();
   
-    // Fetch data for bookings this Date
-    const {
-      data,
-      isLoading: isBookingsDateLoading,
-      isFetching: isBookingsDateFetching,
-    } = useGetRoadSignBookingByDateQuery({
-      from_date: fromDate,
-      to_date: toDate,
-      product_type: productId,
-    });
-  
+  const getCustomersArray = () => {
+    if (!customersData) return [];
+    
+    if (Array.isArray(customersData)) {
+      return customersData;
+    } else if (Array.isArray(customersData.data)) {
+      return customersData.data;
+    } else if (Array.isArray(customersData.customers)) {
+      return customersData.customers;
+    } else if (Array.isArray(customersData.items)) {
+      return customersData.items;
+    } else if (customersData.data && Array.isArray(customersData.data.data)) {
+      return customersData.data.data; // Double nested
+    }
+    
+    console.warn("Unknown customers data structure:", customersData);
+    return [];
+  };
+
+  const {
+    data,
+    isLoading: isBookingsDateLoading,
+    isFetching: isBookingsDateFetching,
+  } = useGetRoadSignBookingByDateQuery({
+    from_date: fromDate,
+    to_date: toDate,
+    product_type: productId,
+    customer_id: selectedCustomerId,
+  });
 
   const { data: cities, isLoading: isCitiesLoading } = useGetCitiesQuery();
   const [
@@ -32,12 +63,21 @@ const useReports = () => {
   const { data: getRoadSignsModel, isLoading: isGetRoadSignsModel } =
     useGetRoadSignsModelQuery();
 
-  // Fetches active regions when cityId changes
   useEffect(() => {
-    if (cityId) { // Only call if cityId is set
+    if (cityId) {
       getActiveRegionsByCity(cityId);
     }
   }, [cityId, getActiveRegionsByCity]);
+
+  useEffect(() => {
+    if (customersData) {
+      console.log("Customers API Response:", customersData);
+      console.log("Extracted customers array:", getCustomersArray());
+    }
+    if (customersError) {
+      console.error("Customers API Error:", customersError);
+    }
+  }, [customersData, customersError]);
 
   // Fetch data for bookings this week
   const {
@@ -48,9 +88,9 @@ const useReports = () => {
     city_id: cityId,
     region_id: regionId,
     model: model,
+    customer_id: selectedCustomerId,
   });
 
-  // Fetch data for unbooked signs
   const {
     data: unbookedSignsData,
     isLoading: isUnbookedLoading,
@@ -61,23 +101,26 @@ const useReports = () => {
     model: model,
     from_date: fromDate,
     to_date: toDate,
+    customer_id: selectedCustomerId,
   });
 
-  // Handles city selection change
+  // Handlers
   const handleCityChange = useCallback((e) => {
     setCityId(e.target.value);
-    setRegionId(""); // Reset region when city changes
-  }, []); // Setters are stable, no dependencies
+    setRegionId("");
+  }, []);
 
-  // Handles region selection change
   const handleRegionChange = useCallback((e) => {
     setRegionId(e.target.value);
-  }, []); // Setters are stable, no dependencies
+  }, []);
 
-  // Handles model selection change
   const handleModelChange = useCallback((e) => {
     setModel(e.target.value);
-  }, []); // Setters are stable, no dependencies
+  }, []);
+
+  const handleCustomerChange = useCallback((e) => {
+    setSelectedCustomerId(e.target.value);
+  }, []);
 
   return {
     activeTab,
@@ -92,6 +135,16 @@ const useReports = () => {
     setFromDate,
     toDate,
     setToDate,
+    productId,
+    setProductId,
+    selectedCustomerId,
+    setSelectedCustomerId,
+    customersData: getCustomersArray(), // ✅ Return extracted array
+    isCustomersLoading,
+    customerType,
+  setCustomerType,
+  handleCustomerTypeChange,
+    customersError,
     cities,
     isCitiesLoading,
     regions,
@@ -107,11 +160,10 @@ const useReports = () => {
     handleCityChange,
     handleRegionChange,
     handleModelChange,
-    data ,
-    isBookingsDateLoading ,
-    isBookingsDateFetching ,
-    productId ,
-    setProductId 
+    handleCustomerChange,
+    data,
+    isBookingsDateLoading,
+    isBookingsDateFetching,
   };
 };
 

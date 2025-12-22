@@ -27,6 +27,40 @@ const CartDialog = () => {
     isLoadingCalculateReservation,
   } = useContext(BookingContext);
 
+  // Create a custom submit handler
+  const handleSubmitBooking = async () => {
+    console.log("🟢 Submit button clicked");
+    
+    // Validate the form first
+    const errors = await formik.validateForm();
+    console.log("🟡 Form validation errors:", errors);
+    
+    if (Object.keys(errors).length > 0) {
+      // Set touched to show errors
+      formik.setTouched({
+        customer_id: true,
+        type: true,
+        start_date: true,
+        end_date: true,
+        product_type: true,
+        printing_id: true,
+      });
+      console.log("🔴 Form has validation errors");
+      return;
+    }
+
+    // Check if we have items in cart
+    if (formik.values.selectedSigns?.length === 0) {
+      console.log("🔴 No items in cart");
+      // You might want to show a toast here
+      return;
+    }
+
+    // Submit the form
+    console.log("🟢 Submitting form...");
+    formik.submitForm();
+  };
+
   return (
     <Dialog dir="rtl" open={openDialog} onOpenChange={setOpenDialog}>
       <DialogContent
@@ -83,7 +117,8 @@ const CartDialog = () => {
           )}
           <Button
             type="button"
-            onClick={formik.submitForm}
+            onClick={handleSubmitBooking} // Changed to custom handler
+            disabled={isLoadingAdd || isLoadingUpdate}
             className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg"
           >
             {isLoadingAdd || isLoadingUpdate ? (

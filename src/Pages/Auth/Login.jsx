@@ -18,6 +18,8 @@ import { showToast } from "../../utils/Notifictions/showToast";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useAuth } from "../../Context/AuthProvider";
+import { messaging } from "@/firebase";
+import { getToken, isSupported } from "firebase/messaging";
 
 const LoginSchema = Yup.object().shape({
   username: Yup.string()
@@ -29,11 +31,74 @@ const LoginSchema = Yup.object().shape({
 });
 
 export function Login({ className, ...props }) {
-  const [triggerLogin, { isLoading }] = useLoginMutation(); // distinct name
+  const [triggerLogin, { isLoading }] = useLoginMutation();
   const navigate = useNavigate();
-  const { loginUser } = useAuth(); // context login function
-
+  const { loginUser } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [fcmToken, setFcmToken] = useState(null);
+
+  // Function to get FCM token
+  const getFCMToken = async () => {
+    try {
+      // Check if browser supports notifications
+      if (!('Notification' in window)) {
+        console.log("This browser does not support notifications");
+        return null;
+      }
+
+      // Check if Firebase Messaging is supported
+      const isFcmSupported = await isSupported();
+      if (!isFcmSupported) {
+        console.log("Firebase Messaging is not supported");
+        return null;
+      }
+
+      // Request notification permission
+      const permission = await Notification.requestPermission();
+      
+      if (permission === 'granted') {
+        // Get FCM token
+        const token = await getToken(messaging, {
+          vapidKey: "BAEh5pDcl7muc7kcU-wQnfZQTM9EoYNTD9BLnlq5fYVKBMkxgpiy6pvH7TbHafvprRLOkRSRzP_NSKtkEtxLyWY"
+        });
+        
+        if (token) {
+          console.log("FCM Token retrieved:", token.substring(0, 20) + "...");
+          setFcmToken(token);
+          localStorage.setItem('fcm_token', token);
+          return token;
+        }
+      } else {
+        console.log("Notification permission not granted:", permission);
+      }
+    } catch (error) {
+      console.error("Error getting FCM token:", error);
+    }
+    return null;
+  };
+
+  // Function to check if token changed
+  const checkTokenChanges = async () => {
+    const oldToken = localStorage.getItem('fcm_token');
+    console.log("Old token in localStorage:", oldToken?.substring(0, 20) + "...");
+    
+    // Get new token
+    const newToken = await getFCMToken();
+    
+    console.log("New token from Firebase:", newToken?.substring(0, 20) + "...");
+    
+    if (oldToken && newToken && oldToken !== newToken) {
+      console.log("⚠️ Token changed! Old vs New");
+      showToast("info", "تم تحديث رمز الإشعارات");
+      // You could send the new token to backend here if needed
+    }
+  };
+
+  // Get FCM token on component mount
+  useEffect(() => {
+    getFCMToken();
+    checkTokenChanges();
+  }, []);
 
   const formik = useFormik({
     initialValues: { username: "", password: "" },
@@ -41,7 +106,23 @@ export function Login({ className, ...props }) {
     onSubmit: async (values, { setSubmitting }) => {
       setSubmitting(true);
       try {
-        const res = await triggerLogin(values).unwrap();
+        // Get current FCM token (or from localStorage)
+        const currentFcmToken = fcmToken || localStorage.getItem('fcm_token');
+        
+        // Prepare login data with FCM token
+        const loginData = {
+          ...values,
+          fcm_token: currentFcmToken || null,
+          device_type: 'web'
+        };
+
+        console.log("Sending login data:", { 
+          username: values.username, 
+          hasFcmToken: !!loginData.fcm_token,
+          tokenPreview: loginData.fcm_token?.substring(0, 20) + "..."
+        });
+
+        const res = await triggerLogin(loginData).unwrap();
 
         // Update context before navigating
         const success = loginUser(res);
@@ -51,14 +132,52 @@ export function Login({ className, ...props }) {
           return;
         }
 
-        showToast("success", "تم تسجيل الدخول بنجاح ");
+        showToast("success", "تم تسجيل الدخول بنجاح");
+        
+        // Send FCM token to backend separately if needed
+        if (loginData.fcm_token && res.user?.id) {
+          sendFcmTokenToBackend(loginData.fcm_token, res.user.id);
+        }
+        
         navigate("/dashboard/administration-page/");
       } catch (error) {
+        console.error("Login error:", error);
         showToast("error", error?.data?.message || "حدث خطأ غير متوقع");
       }
       setSubmitting(false);
     },
   });
+
+  // Function to send FCM token to backend
+  const sendFcmTokenToBackend = async (token, userId) => {
+    try {
+      const authToken = localStorage.getItem('token');
+      if (!authToken) {
+        console.log("No auth token available");
+        return;
+      }
+
+      const response = await fetch("/api/save-fcm-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ 
+          fcm_token: token,
+          user_id: userId
+        })
+      });
+
+      if (response.ok) {
+        console.log("FCM token sent to backend successfully");
+      } else {
+        console.log("Backend endpoint not ready for FCM token, status:", response.status);
+      }
+    } catch (error) {
+      console.error("Error sending FCM token to backend:", error);
+    }
+  };
 
   useEffect(() => {
     if (formik.errors.username && formik.touched.username) {
@@ -80,7 +199,7 @@ export function Login({ className, ...props }) {
     >
       <Card className="w-full max-w-md bg-[oklch(0.208_0.042_265.755)] shadow-xl">
         <CardHeader>
-          <CardTitle className="text-2xl text-center text-white">Login</CardTitle>
+          <CardTitle className="text-2xl text-center text-white">تسجيل الدخول</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={formik.handleSubmit}>
@@ -131,20 +250,32 @@ export function Login({ className, ...props }) {
               <Button
                 type="submit"
                 disabled={formik.isSubmitting || isLoading}
-                className="w-full bg-white text-black cursor-pointer"
+                className="w-full bg-white text-black cursor-pointer hover:bg-gray-100"
               >
-                {formik.isSubmitting || isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                تسجيل الدخول
+                {(formik.isSubmitting || isLoading) ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    جاري تسجيل الدخول...
+                  </>
+                ) : (
+                  "تسجيل الدخول"
+                )}
               </Button>
+
+              <div className="text-xs text-gray-300 text-center">
+                {fcmToken ? (
+                  <span className="text-green-400">✓ الإشعارات مفعلة</span>
+                ) : (
+                  <span className="text-yellow-400">⚠️ يرجى تفعيل الإشعارات</span>
+                )}
+              </div>
 
               <Link
                 to="#"
                 onClick={() => showToast("error", "يرجى التواصل مع المدير")}
                 className="ml-auto text-center text-white inline-block text-sm underline-offset-4 hover:underline"
               >
-                هل نسيت كلمة المرور ؟{" "}
+                هل نسيت كلمة المرور ؟
               </Link>
             </div>
           </form>
