@@ -1,4 +1,4 @@
-import React, { memo, useContext, useEffect, useState } from "react";
+import React, { memo, useContext, useEffect, useState, useMemo, useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -13,22 +13,33 @@ import {
   typeOptions,
 } from "../../../Static/StaticData";
 import { BookingContext } from "../../../Context/BookingContext";
+import { useGetRoadSignsDirectionsQuery } from "../../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import axios from "axios";
-import { BASE_URL } from "../../../Api/baseUrl"; 
+import { BASE_URL } from "../../../Api/baseUrl";
 
 const DAYS_PER_PERIOD = 14;
 const EXTRA_DAYS = 2;
-const TOTAL_DAYS_PER_PERIOD = DAYS_PER_PERIOD + EXTRA_DAYS; // Now 16 days per period
+const TOTAL_DAYS_PER_PERIOD = DAYS_PER_PERIOD + EXTRA_DAYS;
 
 const BookingFields = () => {
   const { formik, customers, isLoadingCustomers, bookingData } =
     useContext(BookingContext);
 
-  // Add state for printing types
   const [printingTypes, setPrintingTypes] = useState([]);
   const [loadingPrintingTypes, setLoadingPrintingTypes] = useState(false);
+  
+  // استخدام Redux query
+  const { 
+    data: directionsData = [], 
+    isLoading: loadingDirections,
+    error: directionsError 
+  } = useGetRoadSignsDirectionsQuery();
 
-  /** ✅ Calculates the end date based on start date + periods (including extra days) */
+  // ✅ حالة للبحث أثناء الكتابة
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
   const calculateEndDate = (startDateString, numberOfPeriods) => {
     if (!startDateString) return "";
     const startDate = new Date(startDateString);
@@ -38,28 +49,26 @@ const BookingFields = () => {
     return endDate.toISOString().slice(0, 10);
   };
 
+  const calculatePeriodsFromDates = (startDate, endDate) => {
+    if (!startDate || !endDate) return 1;
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    const totalInclusiveDays = Math.ceil(diffDays) + 1;
+    
+    const rawPeriods = (totalInclusiveDays - 2) / 14;
+    const periods = Math.ceil(rawPeriods);
+    
+    return Math.min(Math.max(periods, 1), 24);
+  };
 
-const calculatePeriodsFromDates = (startDate, endDate) => {
-  if (!startDate || !endDate) return 1;
-  
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  
-  const diffTime = end.getTime() - start.getTime();
-  const diffDays = diffTime / (1000 * 60 * 60 * 24);
-  const totalInclusiveDays = Math.ceil(diffDays) + 1;
-  
-  const rawPeriods = (totalInclusiveDays - 2) / 14;
-  const periods = Math.ceil(rawPeriods);
-  
-  return Math.min(Math.max(periods, 1), 24);
-};
-
-  /** ✅ Calculate the visible end date (without extra days) for display */
   const calculateVisibleEndDate = (startDateString, numberOfPeriods) => {
     if (!startDateString) return "";
     const startDate = new Date(startDateString);
-    const totalDays = numberOfPeriods * DAYS_PER_PERIOD; // Only 14 days for display
+    const totalDays = numberOfPeriods * DAYS_PER_PERIOD;
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + totalDays);
     return endDate.toISOString().slice(0, 10);
@@ -70,14 +79,9 @@ const calculatePeriodsFromDates = (startDate, endDate) => {
     const newStartDate = event.target.value;
 
     if (newStartDate) {
-      // Automatically set 1 period and calculate end_date
       formik.setFieldValue("units", 1);
-      
-      // Set the actual end date (with extra days)
       const newEndDate = calculateEndDate(newStartDate, 1);
       formik.setFieldValue("end_date", newEndDate);
-      
-      // Also calculate and set the visible end date for user reference
       const visibleEndDate = calculateVisibleEndDate(newStartDate, 1);
       formik.setFieldValue("visible_end_date", visibleEndDate);
     } else {
@@ -87,70 +91,132 @@ const calculatePeriodsFromDates = (startDate, endDate) => {
     }
   };
 
-  // In BookingFields.js - Update handleEndDateChange with DEBUG:
+  const handleEndDateChange = (event) => {
+    const newEndDate = event.target.value;
+    formik.setFieldValue("end_date", newEndDate);
 
-const handleEndDateChange = (event) => {
-  const newEndDate = event.target.value;
-  formik.setFieldValue("end_date", newEndDate);
+    const startDate = formik.values.start_date;
 
-  const startDate = formik.values.start_date;
-
-  if (startDate && newEndDate) {
-    // DEBUG: Let's see exactly what we're calculating
-    const start = new Date(startDate);
-    const end = new Date(newEndDate);
-    
-    // Calculate total days INCLUDING both start and end
-    const diffTime = end.getTime() - start.getTime();
-    const diffDays = diffTime / (1000 * 60 * 60 * 24);
-    
-    console.log("🔍 DEBUG PERIOD CALCULATION:");
-    console.log("Start Date:", startDate, "(", start.toDateString(), ")");
-    console.log("End Date:", newEndDate, "(", end.toDateString(), ")");
-    console.log("Time Difference (ms):", diffTime);
-    console.log("Days Difference:", diffDays);
-    console.log("Days Difference (rounded):", Math.ceil(diffDays));
-    
-    // CORRECT: Count inclusive days (Jan 1 to Jan 31 = 31 days)
-    const totalInclusiveDays = Math.ceil(diffDays) + 1;
-    console.log("Total Inclusive Days:", totalInclusiveDays);
-    
-    const rawPeriods = (totalInclusiveDays - 2) / 14;
-    const periods = Math.ceil(rawPeriods);
-    
-    console.log("Formula: (", totalInclusiveDays, "- 2) ÷ 14 =", rawPeriods);
-    console.log("Rounded up periods:", periods);
-    
-    formik.setFieldValue("units", periods);
-    
-    const visibleEndDate = calculateVisibleEndDate(startDate, periods);
-    formik.setFieldValue("visible_end_date", visibleEndDate);
-  }
-};
-
+    if (startDate && newEndDate) {
+      const start = new Date(startDate);
+      const end = new Date(newEndDate);
+      
+      const diffTime = end.getTime() - start.getTime();
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+      
+      const totalInclusiveDays = Math.ceil(diffDays) + 1;
+      const rawPeriods = (totalInclusiveDays - 2) / 14;
+      const periods = Math.ceil(rawPeriods);
+      
+      formik.setFieldValue("units", periods);
+      
+      const visibleEndDate = calculateVisibleEndDate(startDate, periods);
+      formik.setFieldValue("visible_end_date", visibleEndDate);
+    }
+  };
 
   const handlePeriodsChange = (value) => {
     const numberOfPeriods = parseInt(value, 10);
     formik.setFieldValue("units", numberOfPeriods);
 
     if (formik.values.start_date && !isNaN(numberOfPeriods)) {
-      // Set actual end date (with extra days)
       const newEndDate = calculateEndDate(formik.values.start_date, numberOfPeriods);
       formik.setFieldValue("end_date", newEndDate);
-      
-      // Set visible end date (without extra days)
       const visibleEndDate = calculateVisibleEndDate(formik.values.start_date, numberOfPeriods);
       formik.setFieldValue("visible_end_date", visibleEndDate);
     }
   };
 
-  // Fetch printing types
+  // ✅ تحضير جميع الاتجاهات مع قيمة فارغة لـ "كل الاتجاهات"
+  const allDirections = useMemo(() => {
+    if (!directionsData || !Array.isArray(directionsData)) {
+      return [{ value: "", label: "كل الاتجاهات" }];
+    }
+    
+    const options = [{ value: "", label: "كل الاتجاهات" }];
+    
+    // إضافة الاتجاهات الفريدة والمصفاة
+    const uniqueDirections = new Set();
+    directionsData.forEach((dir) => {
+      if (dir && dir.trim() !== "") {
+        uniqueDirections.add(dir.trim());
+      }
+    });
+    
+    Array.from(uniqueDirections).sort().forEach(dir => {
+      options.push({
+        value: dir,
+        label: dir
+      });
+    });
+    
+    return options;
+  }, [directionsData]);
+
+  // ✅ تصفية الاتجاهات عند الكتابة
+  const filteredDirections = useMemo(() => {
+    if (searchQuery.trim() === "") {
+      return allDirections;
+    } else {
+      const query = searchQuery.toLowerCase();
+      return allDirections.filter(option => 
+        option.value.toLowerCase().includes(query) || 
+        option.label.toLowerCase().includes(query)
+      );
+    }
+  }, [searchQuery, allDirections]);
+
+  // ✅ عند تغيير القيمة المختارة
+  const handleDirectionSelect = (value) => {
+    formik.setFieldValue("direction", value === "" ? "" : value);
+    setSearchQuery(value || "");
+    setShowDropdown(false);
+  };
+
+  // ✅ عند الكتابة في حقل البحث
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    
+    if (value === "") {
+      formik.setFieldValue("direction", "");
+    } else if (allDirections.some(opt => opt.value === value)) {
+      formik.setFieldValue("direction", value);
+    }
+    
+    setShowDropdown(true);
+  };
+
+  // ✅ عند النقر خارج القائمة
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // ✅ عند التركيز على الحقل
+  const handleFocus = () => {
+    setShowDropdown(true);
+  };
+
+  // ✅ تهيئة قيمة البحث من formik
+  useEffect(() => {
+    const directionValue = bookingData?.direction || formik.values.direction || "";
+    setSearchQuery(directionValue);
+  }, [formik.values.direction, bookingData?.direction]);
+
   useEffect(() => {
     const fetchPrintingTypes = async () => {
       try {
         setLoadingPrintingTypes(true);
         
-        // Get token from localStorage (same as PrintPrice component)
         const getAuthToken = () => {
           try {
             const raw = localStorage.getItem("SuperAdminInfo");
@@ -184,7 +250,6 @@ const handleEndDateChange = (event) => {
     fetchPrintingTypes();
   }, []);
 
-  // Initialize visible_end_date on mount
   useEffect(() => {
     if (formik.values.start_date && formik.values.units && !formik.values.visible_end_date) {
       const visibleEndDate = calculateVisibleEndDate(
@@ -287,7 +352,7 @@ const handleEndDateChange = (event) => {
         </div>
       </div>
 
-      {/* تاريخ النهاية الفعلي (مع الأيام الإضافية) */}
+      {/* تاريخ النهاية الفعلي */}
       <div>
         <label className="block text-sm font-medium mb-2">تاريخ النهاية الفعلي</label>
         <Input
@@ -303,18 +368,79 @@ const handleEndDateChange = (event) => {
         </div>
       </div>
 
-      {/* تاريخ النهاية الظاهر (بدون الأيام الإضافية) */}
-      <div>
-        <label className="block text-sm font-medium mb-2">تاريخ النهاية الظاهر</label>
-        <Input
-          type="date"
-          name="visible_end_date"
-          readOnly
-          value={formik.values.visible_end_date || ""}
-          className="w-full text-right bg-gray-50"
-        />
-        <div className="text-xs text-gray-500 mt-1">
-          للعرض فقط (بدون الأيام الإضافية)
+      {/* الاتجاه مع خاصية البحث */}
+      <div ref={dropdownRef} className="relative">
+        <label className="block text-sm font-medium mb-2">الاتجاه</label>
+        
+        <div className="relative">
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onFocus={handleFocus}
+            placeholder="ابحث أو اختر الاتجاه..."
+            className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 text-right"
+            disabled={loadingDirections}
+          />
+          
+          {/* Dropdown arrow */}
+          <div 
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
+            onClick={() => setShowDropdown(!showDropdown)}
+          >
+            {loadingDirections ? (
+              <span className="text-gray-400">...</span>
+            ) : (
+              <span className="text-gray-400">▼</span>
+            )}
+          </div>
+        </div>
+        
+        {/* ✅ Dropdown Menu */}
+        {showDropdown && filteredDirections.length > 0 && (
+          <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+            {filteredDirections.map((option, index) => (
+              <div
+                key={index}
+                className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                  (formik.values.direction || "") === option.value ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                } ${option.value === "" ? 'border-b border-gray-200 dark:border-gray-700' : ''}`}
+                onClick={() => handleDirectionSelect(option.value)}
+              >
+                <div className="flex justify-between items-center">
+                  <span className={option.value === "" ? 'font-semibold text-gray-700 dark:text-gray-300' : ''}>
+                    {option.label}
+                  </span>
+                  {(formik.values.direction || "") === option.value && (
+                    <span className="text-blue-500">✓</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* ✅ No results message */}
+        {showDropdown && searchQuery && filteredDirections.length === 1 && filteredDirections[0].value === "" && (
+          <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+            <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-right">
+              لا توجد نتائج لـ "{searchQuery}"
+            </div>
+          </div>
+        )}
+        
+        {/* ✅ رسالة الخطأ */}
+        {formik.errors.direction && formik.touched.direction && (
+          <div className="text-red-500 text-sm mt-1">
+            {formik.errors.direction}
+          </div>
+        )}
+        
+        {/* ✅ تلميح الاستخدام */}
+        <div className="mt-1 text-xs text-gray-500">
+          {loadingDirections ? 'جاري تحميل الاتجاهات...' : 
+           searchQuery ? `البحث: "${searchQuery}" - ${filteredDirections.length} نتيجة` : 
+           'اكتب للبحث في الاتجاهات أو اختر من القائمة'}
         </div>
       </div>
 
@@ -342,6 +468,7 @@ const handleEndDateChange = (event) => {
         </Select>
       </div>
 
+      {/* نوع الطباعة */}
       <div>
         <label className="block text-sm font-medium mb-2">نوع الطباعة *</label>
         <Select

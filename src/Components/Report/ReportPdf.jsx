@@ -23,7 +23,6 @@ export const ReportPdf = ({
 
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
-    const contentWidth = pageWidth - 2 * margin;
 
     // Dynamic title based on filter
     const title = isFilteredByCustomer 
@@ -35,6 +34,16 @@ export const ReportPdf = ({
 
     doc.setFontSize(10);
     
+    // Helper function to format date in English
+    const formatDate = (dateString) => {
+      if (!dateString) return "غير محدد";
+      const date = new Date(dateString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
     // Add customer name if filtered
     if (isFilteredByCustomer && selectedCustomer) {
       const customerName = selectedCustomer.company_name || selectedCustomer.full_name || "غير معروف";
@@ -45,26 +54,26 @@ export const ReportPdf = ({
         { align: "right" }
       );
       doc.text(
-        `من تاريخ: ${from_date ? new Date(from_date).toLocaleDateString("en-US") : "غير محدد"}`,
+        `من تاريخ: ${formatDate(from_date)}`,
         pageWidth - margin,
         margin + 25,
         { align: "right" }
       );
       doc.text(
-        `إلى تاريخ: ${to_date ? new Date(to_date).toLocaleDateString("en-US") : "غير محدد"}`,
+        `إلى تاريخ: ${formatDate(to_date)}`,
         pageWidth - margin,
         margin + 30,
         { align: "right" }
       );
     } else {
       doc.text(
-        `من تاريخ: ${from_date ? new Date(from_date).toLocaleDateString("en-US") : "غير محدد"}`,
+        `من تاريخ: ${formatDate(from_date)}`,
         pageWidth - margin,
         margin + 15,
         { align: "right" }
       );
       doc.text(
-        `إلى تاريخ: ${to_date ? new Date(to_date).toLocaleDateString("en-US") : "غير محدد"}`,
+        `إلى تاريخ: ${formatDate(to_date)}`,
         pageWidth - margin,
         margin + 20,
         { align: "right" }
@@ -136,6 +145,8 @@ export const ReportPdf = ({
         if (customer.roadSigns && customer.roadSigns.length > 0) {
           const roadSignsHeaders = [
             [
+              "تاريخ الانتهاء",
+              "تاريخ البدء",
               "عدد الأمتار الإعلانية",
               "القياس",
               "عدد الأوجه",
@@ -145,6 +156,8 @@ export const ReportPdf = ({
           ];
 
           const roadSignsData = customer.roadSigns.map((sign) => [
+            sign.pivot?.end_date ? formatDate(sign.pivot.end_date) : "-",
+            sign.pivot?.start_date ? formatDate(sign.pivot.start_date) : "-",
             sign.total_advertising_space || "0.00",
             sign.template?.advertising_space || "غير معروف",
             sign.pivot?.booking_faces || "غير معروف",
@@ -160,7 +173,7 @@ export const ReportPdf = ({
             styles: {
               font: "Amiri-Regular",
               halign: "center",
-              fontSize: 10,
+              fontSize: 9,
               textColor: [0, 0, 0],
               fontStyle: "normal",
               cellPadding: 2,
@@ -168,11 +181,20 @@ export const ReportPdf = ({
             headStyles: {
               font: "Amiri-Regular",
               halign: "center",
-              fontSize: 10,
+              fontSize: 9,
               fillColor: [41, 128, 185],
               textColor: [255, 255, 255],
               fontStyle: "normal",
               cellPadding: 3,
+            },
+            columnStyles: {
+              0: { cellWidth: 20 }, // End date
+              1: { cellWidth: 20 }, // Start date
+              2: { cellWidth: 25 }, // Advertising space
+              3: { cellWidth: 20 }, // Measurement
+              4: { cellWidth: 20 }, // Faces count
+              5: { cellWidth: 50 }, // Place
+              6: { cellWidth: 25 }, // Model
             },
             didParseCell: (data) => {
               data.cell.styles.font = "Amiri-Regular";
@@ -281,8 +303,8 @@ export const ReportPdf = ({
 
     // Dynamic filename based on filter
     const fileName = isFilteredByCustomer && selectedCustomer
-      ? `تقرير_${selectedCustomer.company_name || selectedCustomer.full_name || "زبون"}_${new Date().toLocaleDateString('ar-EG')}.pdf`
-      : "التقرير_الأسبوعي.pdf";
+      ? `تقرير_${selectedCustomer.company_name || selectedCustomer.full_name || "زبون"}_${formatDate(new Date()).replace(/-/g, '_')}.pdf`
+      : `التقرير_الأسبوعي_${formatDate(new Date()).replace(/-/g, '_')}.pdf`;
 
     doc.save(fileName);
   };

@@ -30,7 +30,7 @@ const ContractDialog = () => {
           <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100 text-right">
             {parseInt(formik.values.type) === 1
               ? "تصدير عقد دائم"
-              : "تصدير عقد مؤقت"}
+              : "تصدير ملاحظات "}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">

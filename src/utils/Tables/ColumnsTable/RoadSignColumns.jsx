@@ -8,7 +8,6 @@ export const RoadSignColumns = [
   {
     header: "كود اللوحة",
     accessor: "roadsign_code",
-    prefixIcon: "mdi:numeric",
     className: "min-w-[100px] sm:min-w-[120px] md:min-w-[140px] text-center",
     cellClassName: "text-center font-mono font-semibold text-blue-600",
     priority: 1,

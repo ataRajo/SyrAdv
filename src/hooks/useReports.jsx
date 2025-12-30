@@ -5,19 +5,35 @@ import { useGetActiveRegionsByCityMutation, useGetCitiesQuery } from '../RtkQuer
 import { useGetCustomersQuery } from '../RtkQuery/Slice/Customers/CustomersApi';
 
 const useReports = () => {
+  // حساب التواريخ الافتراضية (من اليوم + 7 أيام للأمام)
+  const getDefaultDates = () => {
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7); // +7 أيام للأمام
+    
+    return {
+      fromDate: today.toISOString().split('T')[0], // اليوم كتاريخ بداية
+      toDate: nextWeek.toISOString().split('T')[0] // اليوم + 7 أيام كتاريخ نهاية
+    };
+  };
+
   const [activeTab, setActiveTab] = useState("bookings");
-  const [cityId, setCityId] = useState();
-  const [regionId, setRegionId] = useState();
-  const [model, setModel] = useState();
-  const [fromDate, setFromDate] = useState();
-  const [toDate, setToDate] = useState();
-  const [productId, setProductId] = useState();
+  const [cityId, setCityId] = useState("");
+  const [regionId, setRegionId] = useState("");
+  const [model, setModel] = useState("");
+  
+  // Set default dates (today to today+7 days)
+  const defaultDates = getDefaultDates();
+  const [fromDate, setFromDate] = useState(defaultDates.fromDate);
+  const [toDate, setToDate] = useState(defaultDates.toDate);
+  
+  const [productId, setProductId] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerType, setCustomerType] = useState("");
 
-const handleCustomerTypeChange = useCallback((e) => {
-  setCustomerType(e.target.value);
-}, []);
+  const handleCustomerTypeChange = useCallback((e) => {
+    setCustomerType(e.target.value);
+  }, []);
 
   const { 
     data: customersData, 
@@ -37,7 +53,7 @@ const handleCustomerTypeChange = useCallback((e) => {
     } else if (Array.isArray(customersData.items)) {
       return customersData.items;
     } else if (customersData.data && Array.isArray(customersData.data.data)) {
-      return customersData.data.data; // Double nested
+      return customersData.data.data;
     }
     
     console.warn("Unknown customers data structure:", customersData);
@@ -79,7 +95,7 @@ const handleCustomerTypeChange = useCallback((e) => {
     }
   }, [customersData, customersError]);
 
-  // Fetch data for bookings this week
+  // Fetch data for bookings this week WITH DATES
   const {
     data: bookingsData,
     isLoading: isBookingsLoading,
@@ -88,8 +104,24 @@ const handleCustomerTypeChange = useCallback((e) => {
     city_id: cityId,
     region_id: regionId,
     model: model,
+    from_date: fromDate, // TODAY
+    to_date: toDate,     // TODAY + 7 DAYS
     customer_id: selectedCustomerId,
   });
+
+  useEffect(() => {
+    console.log('📅 Dates being sent to API:');
+    console.log('fromDate:', fromDate);
+    console.log('toDate:', toDate);
+    console.log('Today:', new Date().toISOString().split('T')[0]);
+    
+    // احسب تاريخ اليوم + 7 أيام للتحقق
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+    console.log('Today + 7 days:', nextWeek.toISOString().split('T')[0]);
+  }, [fromDate, toDate]);
+
 
   const {
     data: unbookedSignsData,
@@ -139,11 +171,11 @@ const handleCustomerTypeChange = useCallback((e) => {
     setProductId,
     selectedCustomerId,
     setSelectedCustomerId,
-    customersData: getCustomersArray(), // ✅ Return extracted array
+    customersData: getCustomersArray(),
     isCustomersLoading,
     customerType,
-  setCustomerType,
-  handleCustomerTypeChange,
+    setCustomerType,
+    handleCustomerTypeChange,
     customersError,
     cities,
     isCitiesLoading,
@@ -151,10 +183,10 @@ const handleCustomerTypeChange = useCallback((e) => {
     isRegionsLoading,
     getRoadSignsModel,
     isGetRoadSignsModel,
-    bookingsData,
+    bookingsData: bookingsData || [],
     isBookingsLoading,
     isBookingsFetching,
-    unbookedSignsData,
+    unbookedSignsData: unbookedSignsData || [],
     isUnbookedLoading,
     isUnbookedFetching,
     handleCityChange,

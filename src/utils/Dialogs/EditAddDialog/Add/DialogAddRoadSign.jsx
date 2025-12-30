@@ -126,7 +126,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
 
     const formData = new FormData();
 
-    // Always append all required fields
     formData.append('city_id', values?.city_id || '');
     formData.append('region_id', values?.region_id || '');
     formData.append('template_id', values?.template_id || '');

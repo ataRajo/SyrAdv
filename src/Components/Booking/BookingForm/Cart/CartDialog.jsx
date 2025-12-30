@@ -111,7 +111,7 @@ const CartDialog = () => {
               ) : parseInt(formik.values.type) === 1 ? (
                 "تصدير عقد دائم"
               ) : (
-                "تصدير عقد مؤقت"
+                "ملاحظة"
               )}
             </Button>
           )}

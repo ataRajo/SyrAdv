@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useDeleteRoadSignMutation } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import HeaderComponent from "../../utils/HeaderComponent";
@@ -18,6 +18,7 @@ import { Permissions } from "../../Static/StaticData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useMoveBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi"; 
+import { useGetRoadSignsDirectionsQuery } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 
 const TableRoadSigns = ({ isLoading }) => {
   const [openDelete, setOpenDelete] = useState(false);
@@ -31,6 +32,12 @@ const TableRoadSigns = ({ isLoading }) => {
   const [deleteRoadSign, { isLoading: isDeleting }] = useDeleteRoadSignMutation();
   const [moveBooking, { isLoading: isMoving }] = useMoveBookingMutation();
 
+  // ✅ استخدام API الاتجاهات
+  const { 
+    data: directionsData = [], 
+    isLoading: loadingDirections 
+  } = useGetRoadSignsDirectionsQuery();
+
   // Get customers for the dropdown
   const { 
     data: customersData, 
@@ -39,26 +46,7 @@ const TableRoadSigns = ({ isLoading }) => {
     isSuccess: isCustomersSuccess
   } = useGetCustomersQuery();
 
-  // Debug customers API
-  useEffect(() => {
-    console.log("📊 Customers API Debug:");
-    console.log("📦 customersData:", customersData);
-    
-    if (customersData) {
-      console.log("👥 Customers data structure:", typeof customersData);
-      
-      // Check if it's an array or has data property
-      if (Array.isArray(customersData)) {
-        console.log("👥 Customers is array, count:", customersData.length);
-      } else if (customersData.data && Array.isArray(customersData.data)) {
-        console.log("👥 Customers has data property, count:", customersData.data.length);
-      } else if (customersData.customers && Array.isArray(customersData.customers)) {
-        console.log("👥 Customers has customers property, count:", customersData.customers.length);
-      }
-    }
-  }, [customersData]);
-
-  // Get hook with ALL filter states including customer_id
+  // Get hook with ALL filter states including customer_id and direction
   const {
     cityId,
     regionId,
@@ -72,26 +60,96 @@ const TableRoadSigns = ({ isLoading }) => {
     setModel,
     handleCityChange,
     handleRegionChange,
+    // ✅ الحصول على قيم الاتجاه
+    direction,
+    setDirection,
+    handleDirectionChange,
     // ✅ Get customer-related values from hook
-    customerId, // current customer_id value in hook
-    setCustomerId, // function to update customer_id in hook
-    handleCustomerChange, // function to handle customer change
+    customerId,
+    setCustomerId,
   } = useGetRoadSignsByFilter();
+
+  // ✅ حالة للبحث أثناء الكتابة
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [filteredDirections, setFilteredDirections] = useState([]);
 
   useEffect(() => {
     setModel(id);
   }, [id]);
 
-  // ✅ Debug: Log when API call is made
+  // ✅ تحضير جميع الاتجاهات مع قيمة فارغة لـ "كل الاتجاهات"
+  const allDirections = useMemo(() => {
+    if (!directionsData || !Array.isArray(directionsData)) {
+      return [{ value: "", label: "كل الاتجاهات" }];
+    }
+    
+    const options = [{ value: "", label: "كل الاتجاهات" }];
+    
+    // إضافة الاتجاهات الفريدة والمصفاة
+    const uniqueDirections = new Set();
+    directionsData.forEach((dir) => {
+      if (dir && dir.trim() !== "") {
+        uniqueDirections.add(dir.trim());
+      }
+    });
+    
+    Array.from(uniqueDirections).sort().forEach(dir => {
+      options.push({
+        value: dir,
+        label: dir
+      });
+    });
+    
+    return options;
+  }, [directionsData]);
+
+  // ✅ تصفية الاتجاهات عند الكتابة
   useEffect(() => {
-    console.log("🔍 API REQUEST DEBUG:");
-    console.log("City ID:", cityId);
-    console.log("Region ID:", regionId);
-    console.log("Customer ID:", customerId);
-    console.log("Model:", id);
-    console.log("Road Signs Data:", roadSigns);
-    console.log("Is Loading:", isRoadSignsFetching);
-  }, [cityId, regionId, customerId, id, roadSigns, isRoadSignsFetching]);
+    if (searchQuery.trim() === "") {
+      setFilteredDirections(allDirections);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = allDirections.filter(option => 
+        option.value.toLowerCase().includes(query) || 
+        option.label.toLowerCase().includes(query)
+      );
+      setFilteredDirections(filtered);
+    }
+  }, [searchQuery, allDirections]);
+
+  // ✅ عند تغيير القيمة المختارة
+  const handleDirectionSelect = (value) => {
+    handleDirectionChange(value);
+    setSearchQuery(value || "");
+    setShowDropdown(false);
+  };
+
+  // ✅ عند الكتابة في حقل البحث
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    
+    if (value === "") {
+      handleDirectionChange("");
+    } else if (allDirections.some(opt => opt.value === value)) {
+      handleDirectionChange(value);
+    }
+    
+    setShowDropdown(true);
+  };
+
+  // ✅ عند النقر خارج القائمة
+  const handleBlur = () => {
+    setTimeout(() => {
+      setShowDropdown(false);
+    }, 200);
+  };
+
+  // ✅ عند التركيز على الحقل
+  const handleFocus = () => {
+    setShowDropdown(true);
+  };
 
   const handleEdit = (roadSign) => {
     setSelectedRoadSign(roadSign);
@@ -134,7 +192,6 @@ const TableRoadSigns = ({ isLoading }) => {
   const getCustomersList = () => {
     if (!customersData) return [];
     
-    // Try different response structures
     if (Array.isArray(customersData)) {
       return customersData;
     } else if (customersData.data && Array.isArray(customersData.data)) {
@@ -155,7 +212,6 @@ const TableRoadSigns = ({ isLoading }) => {
     const value = e.target.value;
     console.log("🎯 Customer filter changed to:", value);
     
-    // Update customer_id in hook (this will trigger API call)
     if (setCustomerId) {
       setCustomerId(value);
     } else {
@@ -181,7 +237,7 @@ const TableRoadSigns = ({ isLoading }) => {
   return (
     <div dir="rtl" className="p-4 sm:p-6 w-full mx-auto space-y-6 overflow-x-auto">
       {/* Filter Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         {/* City Filter */}
         <div>
           <Label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
@@ -235,15 +291,15 @@ const TableRoadSigns = ({ isLoading }) => {
           <Label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
             العميل
           </Label>
+          
           <select
             id="customer"
-            value={customerId || ""} // ✅ Use customerId from hook
+            value={customerId || ""}
             onChange={handleCustomerFilterChange}
             disabled={isCustomersLoading}
             className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">جميع العملاء</option>
-            <option value="none">لوحات بدون حجوزات</option>
             
             {isCustomersLoading && <option>جاري تحميل العملاء ...</option>}
             
@@ -256,17 +312,85 @@ const TableRoadSigns = ({ isLoading }) => {
               </option>
             ))}
             
-            {/* Show message if no customers */}
             {!isCustomersLoading && !customersError && customersList.length === 0 && (
               <option disabled>لا توجد عملاء</option>
             )}
           </select>
           
-          {/* Debug info */}
           <div className="mt-1 text-xs text-gray-500">
             {isCustomersLoading ? 'جاري التحميل...' : 
              customersError ? 'خطأ!' : 
              customersList.length > 0 ? `تم تحميل ${customersList.length} عميل` : 'لا توجد بيانات'}
+          </div>
+        </div>
+
+        {/* ✅ Direction Filter with Search */}
+        <div className="relative">
+          <Label htmlFor="direction" className="block text-sm font-medium text-gray-700 mb-1">
+            الاتجاه
+          </Label>
+          
+          <div className="relative">
+            <Input
+              id="direction"
+              type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              placeholder="ابحث أو اختر الاتجاه..."
+              className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+              disabled={loadingDirections}
+            />
+            
+            {/* Dropdown arrow */}
+            <div 
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
+              onClick={() => setShowDropdown(!showDropdown)}
+            >
+              {loadingDirections ? (
+                <span className="text-gray-400">...</span>
+              ) : (
+                <span className="text-gray-400">▼</span>
+              )}
+            </div>
+          </div>
+          
+          {/* ✅ Dropdown Menu */}
+          {showDropdown && filteredDirections.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+              {filteredDirections.map((option, index) => (
+                <div
+                  key={index}
+                  className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                    direction === option.value ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                  } ${option.value === "" ? 'border-b border-gray-200 dark:border-gray-700' : ''}`}
+                  onClick={() => handleDirectionSelect(option.value)}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className={option.value === "" ? 'font-semibold text-gray-700 dark:text-gray-300' : ''}>
+                      {option.label}
+                    </span>
+                    {direction === option.value && (
+                      <span className="text-blue-500">✓</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* ✅ No results message */}
+          {showDropdown && searchQuery && filteredDirections.length === 1 && filteredDirections[0].value === "" && (
+            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+              <div className="px-3 py-2 text-gray-500 dark:text-gray-400">
+                لا توجد نتائج لـ "{searchQuery}"
+              </div>
+            </div>
+          )}
+          
+          <div className="mt-1 text-xs text-gray-500">
+            {direction ? `تم اختيار: ${direction}` : 'اكتب للبحث في الاتجاهات'}
           </div>
         </div>
 
@@ -278,7 +402,10 @@ const TableRoadSigns = ({ isLoading }) => {
               // Reset all filters
               handleCityChange({ target: { value: "" } });
               handleRegionChange({ target: { value: "" } });
-              setCustomerId(""); // Reset customer filter
+              setCustomerId("");
+              setDirection("");
+              setSearchQuery("");
+              setShowDropdown(false);
             }}
             className="w-full mb-5 border-gray-300 hover:bg-gray-100"
           >
@@ -287,7 +414,49 @@ const TableRoadSigns = ({ isLoading }) => {
         </div>
       </div>
 
-     
+      {/* ✅ عرض الفلتر النشط */}
+      {(direction || customerId) && (
+        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              فلاتر نشطة:
+            </span>
+            
+            {direction && (
+              <div className="flex items-center gap-1 bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">
+                <span className="text-sm text-blue-700 dark:text-blue-400">
+                  الاتجاه: {direction}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirection("");
+                    setSearchQuery("");
+                  }}
+                  className="text-blue-500 hover:text-blue-700 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            
+            {customerId && customerId !== "" && (
+              <div className="flex items-center gap-1 bg-green-100 dark:bg-green-800 px-2 py-1 rounded">
+                <span className="text-sm text-green-700 dark:text-green-400">
+                  العميل: {customersList.find(c => c.id == customerId)?.full_name || `#${customerId}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCustomerId("")}
+                  className="text-green-500 hover:text-green-700 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* PDF Export Button */}
       <Button
@@ -313,16 +482,16 @@ const TableRoadSigns = ({ isLoading }) => {
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <span className="font-medium">عدد اللوحات:</span> {roadSigns?.length || 0}
-            {customerId && customerId !== "none" && (
+            {customerId && customerId !== "" && (
               <span className="mr-4">
-                <span className="font-medium"> | تم التصفية حسب العميل:</span> {
+                <span className="font-medium"> | العميل:</span> {
                   customersList.find(c => c.id == customerId)?.full_name || `#${customerId}`
                 }
               </span>
             )}
-            {customerId === "none" && (
+            {direction && (
               <span className="mr-4">
-                <span className="font-medium"> | تم التصفية:</span> لوحات بدون حجوزات
+                <span className="font-medium"> | الاتجاه:</span> {direction}
               </span>
             )}
           </div>
@@ -384,18 +553,18 @@ const TableRoadSigns = ({ isLoading }) => {
   );
 };
 
+// باقي الكود كما هو...
+
 // Helper function for customer filter
 const filterRoadSignsByCustomer = (roadSigns, customerId) => {
   if (!customerId || customerId === "") return roadSigns;
   
   if (customerId === "none") {
-    // Show road signs without bookings
     return roadSigns.filter(roadSign => 
       !roadSign.bookings || roadSign.bookings.length === 0
     );
   }
   
-  // Show road signs with bookings for this specific customer
   return roadSigns.filter(roadSign => {
     return roadSign.bookings?.some(booking => 
       booking.customer_id == customerId

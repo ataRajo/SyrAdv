@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import html2pdf from "html2pdf.js";
 import logo from "../../assets/images/adv_syrian.png";
 import { useParams } from "react-router";
@@ -13,22 +13,65 @@ const BookingType = {
   // Add other types if they exist
 };
 
-// Helper function to get period text - just show the number
-const getPeriodText = (units) => {
-  if (!units) return "1";
-  return `${units}`;
-};
-
 const ContractPage = () => {
   const contentRef = useRef(null);
   const { id: bookingId } = useParams();
 
   const { data: getBooking, isSuccess, isLoading, error } = useGetOneBookingsQuery(bookingId);
 
-  // Debug: Log the data to see what we're getting
+  // ✅ 1. CALCULATE PRINTING TOTAL PRICE
+  const printingTotalPrice = useMemo(() => {
+    if (!getBooking?.printing?.price || !getBooking?.total_printing_space) return 0;
+    return getBooking.printing.price * getBooking.total_printing_space;
+  }, [getBooking]);
+
+  const calculateAdvertisingPeriods = useMemo(() => {
+    if (!getBooking) return 1;
+    
+    const bookingType = getBooking.type;
+    const roadsigns = getBooking.roadsigns || [];
+    
+    if (bookingType === 1) { // Temporary
+      // For temporary: Each roadsign has its own periods (booking_faces)
+      let totalPeriods = 0;
+      roadsigns.forEach(roadsign => {
+        const periods = roadsign.pivot?.booking_faces || 1;
+        totalPeriods += periods;
+      });
+      return totalPeriods;
+    } else { // Permanent
+      // For permanent: Use units field
+      return getBooking.units || 1;
+    }
+  }, [getBooking]);
+
+  // ✅ 3. FORMAT PERIOD TEXT WITH CORRECT GRAMMAR
+  const periodText = useMemo(() => {
+    const periods = calculateAdvertisingPeriods;
+    if (periods === 1) return "1 فترة إعلانية";
+    if (periods === 2) return "فترتين إعلانيتين";
+    if (periods >= 3 && periods <= 10) return `${periods} فترات إعلانية`;
+    return `${periods} فترة إعلانية`;
+  }, [calculateAdvertisingPeriods]);
+
+  // ✅ 4. FORMAT PERIOD NUMBER ONLY (for table headers)
+  const periodNumberText = useMemo(() => {
+    const periods = calculateAdvertisingPeriods;
+    return `${periods}`;
+  }, [calculateAdvertisingPeriods]);
+
+  // Debug logs to verify calculations
+  console.log("📊 CONTRACT CALCULATIONS:");
   console.log("Booking Data:", getBooking);
-  console.log("Booking Units:", getBooking?.units);
-  console.log("Period Text:", getPeriodText(getBooking?.units));
+  console.log("Booking Type:", getBooking?.type, "(", BookingType[getBooking?.type] || "غير محدد", ")");
+  console.log("Original Units:", getBooking?.units);
+  console.log("Calculated Advertising Periods:", calculateAdvertisingPeriods);
+  console.log("Period Text:", periodText);
+  console.log("Printing Price per unit:", getBooking?.printing?.price);
+  console.log("Total Printing Space:", getBooking?.total_printing_space);
+  console.log("Printing Total Price:", printingTotalPrice);
+  console.log("Total Price Before Discount:", getBooking?.total_price_befor_discount);
+  console.log("Total Price:", getBooking?.total_price);
 
   // Prepare contract details for display.
   const contractDetails = {
@@ -58,9 +101,6 @@ const ContractPage = () => {
   const bookingType = getBooking?.type;
   const isTemporaryBooking = bookingType === 1; // Check for numeric 1
   const bookingTypeText = BookingType[bookingType] || "غير محدد";
-  
-  // Get period text from units
-  const periodText = getPeriodText(getBooking?.units);
 
   const generatePdf = () => {
     const element = contentRef.current;
@@ -139,6 +179,84 @@ const ContractPage = () => {
     return <div className="text-center mt-5">لا توجد بيانات للعقد</div>;
   }
 
+  // ✅ COMMON TABLE ROWS FOR BOTH CONTRACT TYPES
+  const CommonTableRows = () => (
+    <>
+      <tr>
+        <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+          قيمة الفترات الاعلانية    
+        </th>
+        <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
+      </tr>
+      
+      {/* ✅ UPDATED: Show total printing price with calculation details */}
+      {getBooking?.printing?.price && getBooking?.total_printing_space && (
+        <tr>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+            سعر الطباعة ({getBooking.printing.price}$ × {getBooking.total_printing_space} م²)
+          </th>
+          <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
+        </tr>
+      )}
+      
+      {getBooking?.value && (
+        <tr>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+            الحسم
+ المقدم من الشركة السورية   
+          </th>
+          <td style={styles.adTableThTd}>
+            {getBooking.discount_type === 1 ? (
+              <span>{getBooking.value} $ </span>
+            ) : (
+              <span>{getBooking.value} %</span>
+            )}
+          </td>
+        </tr>
+      )}
+      
+      <tr>
+        <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+القيمة الكلية للعقد
+        </th>
+        <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
+      </tr>
+    </>
+  );
+
+  // ✅ COMMON PRINTING INFO FOR BOTH CONTRACT TYPES
+  const CommonPrintingInfo = () => (
+    <div style={{ margin: "20px 0" }}>
+      <strong>
+        - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
+      </strong>
+      {getBooking?.groupedTemplates?.map((tem, ind) => (
+        <div key={ind}>
+          <p>
+            العدد الكلي لنموذج {tem?.model} بعدد{" "}
+            <span>{tem?.total_faces} وجه إعلاني</span>
+          </p>
+        </div>
+      ))}
+
+      <p>مدة الدورة الاعلانية الواحدة هي 14 يوم </p>
+
+      <div>
+        إجمالي الأمتار الطباعية : {getBooking?.total_printing_space} م²
+      </div>
+      
+      {/* ✅ UPDATED: Show printing price calculation details */}
+      {getBooking?.printing?.price && getBooking?.total_printing_space && (
+        <div style={{ marginTop: "10px", padding: "8px", backgroundColor: "#f0f8ff", border: "1px solid #d1e7ff" }}>
+          <small>
+            <strong>ملاحظة:</strong> سعر الطباعة محسوب كالتالي: 
+            {getBooking.printing.price}$ (سعر المتر) × {getBooking.total_printing_space} م² (إجمالي المساحة) = {printingTotalPrice}$
+          </small>
+        </div>
+      )}
+    </div>
+  );
+
   // Temporary Contract Component
   const TemporaryContract = () => (
     <div style={styles.contractPage} ref={contentRef}>
@@ -185,7 +303,7 @@ const ContractPage = () => {
         </ul>
       </div>
 
-      {/* Rest of your existing content */}
+      {/* Advertising details table */}
       <div style={styles.adDetailsSection}>
         <h2 style={styles.adDetailsSectionH2}>
           1- يتم الإعلان المؤقت من خلال اللوحات المبنية بالجدول التالي:
@@ -201,7 +319,6 @@ const ContractPage = () => {
               <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>المدة الإعلانية (بالايام)</th>
               <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>السعر الإفرادي</th>
             </tr>
-            
           </thead>
           <tbody>
             {getBooking?.roadsigns?.map((ad, index) => (
@@ -212,76 +329,24 @@ const ContractPage = () => {
                 <td style={styles.adTableThTd}>{ad?.directions}</td>
                 <td style={styles.adTableThTd}>{ad?.pivot.booking_faces} وجه اعلاني</td>
                 <td style={styles.adTableThTd}>{ad?.pivot.days_of_reservation} يوم</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.total_faces_price}</td>
+                <td style={styles.adTableThTd}>{ad?.pivot.total_faces_price} $</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
+      {/* Price summary table */}
       <table style={styles.adTable}>
         <tbody>
-          <tr>
-            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-              القيمة الكلية قبل الحسم عن {periodText} فترة إعلانية  
-            </th>
-            <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
-          </tr>
-          
-          {/* ✅ NEW: Add printing price row in the table */}
-          {getBooking?.printing?.price && (
-            <tr>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-                سعر الطباعة
-              </th>
-              <td style={styles.adTableThTd}>{getBooking.printing.price} $</td>
-            </tr>
-          )}
-          
-          {getBooking?.value && (
-            <tr>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-                حسم خاص مقدم من الشركة السورية
-              </th>
-              <td style={styles.adTableThTd}>
-                {getBooking.discount_type === 1 ? (
-                  <span>{getBooking.value} $ </span>
-                ) : (
-                  <span>{getBooking.value} %</span>
-                )}
-              </td>
-            </tr>
-          )}
-          
-          <tr>
-            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-              القيمة الكلية بعد الحسم عن {periodText} فترة إعلانية  
-            </th>
-            <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
-          </tr>
+          <CommonTableRows />
         </tbody>
       </table>
 
-      <div style={{ margin: "20px 0" }}>
-        <strong>
-          - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
-        </strong>
-        {getBooking?.groupedTemplates?.map((tem, ind) => (
-          <div key={ind}>
-            <p>
-              العدد الكلي لنموذج {tem?.model} بعدد{" "}
-              <span>{tem?.total_faces} وجه إعلاني</span>
-            </p>
-          </div>
-        ))}
+      {/* Printing and additional info */}
+      <CommonPrintingInfo />
 
-        <div>
-          إجمالي الأمتار الطباعية : {getBooking?.total_printing_space}
-        </div>
-        
-        {/* ❌ REMOVED: Printing price is now in the table above */}
-      </div>
-
+      {/* Notes section */}
       <div>
         {getBooking?.notes ? (
           <div className="list-decimal pr-6">
@@ -301,6 +366,7 @@ const ContractPage = () => {
         )}
       </div>
 
+      {/* Dates section */}
       <div style={{ margin: "20px 0" }}>
         <strong>
           - تبدأ الحملة الإعلانية بتاريخ{" "}
@@ -309,6 +375,7 @@ const ContractPage = () => {
         </strong>
       </div>
 
+      {/* Signatures */}
       <div style={styles.signatures}>
         <div style={styles.signatureParty}>
           <h3 style={styles.signaturePartyH3}>
@@ -362,6 +429,7 @@ const ContractPage = () => {
         </p>
       </div>
 
+      {/* Advertising details table */}
       <div style={styles.adDetailsSection}>
         <h2 style={styles.adDetailsSectionH2}>
           1- يتم الإعلان من خلال اللوحات المبنية بالجدول التالي:
@@ -387,76 +455,24 @@ const ContractPage = () => {
                 <td style={styles.adTableThTd}>{ad?.directions}</td>
                 <td style={styles.adTableThTd}>{ad?.pivot.booking_faces} وجه اعلاني</td>
                 <td style={styles.adTableThTd}>{ad?.pivot.days_of_reservation} يوم</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.total_faces_price}</td>
+                <td style={styles.adTableThTd}>{ad?.pivot.total_faces_price} $</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
+      {/* Price summary table */}
       <table style={styles.adTable}>
         <tbody>
-          <tr>
-            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-              القيمة الكلية قبل الحسم عن {periodText} فترة إعلانية  
-            </th>
-            <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
-          </tr>
-          
-          {/* ✅ NEW: Add printing price row in the table */}
-          {getBooking?.printing?.price && (
-            <tr>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-                سعر الطباعة
-              </th>
-              <td style={styles.adTableThTd}>{getBooking.printing.price} $</td>
-            </tr>
-          )}
-          
-          {getBooking?.value && (
-            <tr>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-                حسم خاص مقدم من الشركة السورية
-              </th>
-              <td style={styles.adTableThTd}>
-                {getBooking.discount_type === 1 ? (
-                  <span>{getBooking.value} $ </span>
-                ) : (
-                  <span>{getBooking.value} %</span>
-                )}
-              </td>
-            </tr>
-          )}
-          
-          <tr>
-            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-              القيمة الكلية بعد الحسم عن {periodText} فترة إعلانية  
-            </th>
-            <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
-          </tr>
+          <CommonTableRows />
         </tbody>
       </table>
 
-      <div style={{ margin: "20px 0" }}>
-        <strong>
-          - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
-        </strong>
-        {getBooking?.groupedTemplates?.map((tem, ind) => (
-          <div key={ind}>
-            <p>
-              العدد الكلي لنموذج {tem?.model} بعدد{" "}
-              <span>{tem?.total_faces} وجه إعلاني</span>
-            </p>
-          </div>
-        ))}
+      {/* Printing and additional info */}
+      <CommonPrintingInfo />
 
-        <div>
-          إجمالي الأمتار الطباعية : {getBooking?.total_printing_space}
-        </div>
-        
-        {/* ❌ REMOVED: Printing price is now in the table above */}
-      </div>
-
+      {/* Notes section */}
       <div>
         {getBooking?.notes ? (
           <div className="list-decimal pr-6">
@@ -476,6 +492,7 @@ const ContractPage = () => {
         )}
       </div>
 
+      {/* Dates section */}
       <div style={{ margin: "20px 0" }}>
         <strong>
           - تبدأ الحملة الإعلانية بتاريخ{" "}
@@ -484,6 +501,7 @@ const ContractPage = () => {
         </strong>
       </div>
 
+      {/* Signatures */}
       <div style={styles.signatures}>
         <div style={styles.signatureParty}>
           <h3 style={styles.signaturePartyH3}>
@@ -498,6 +516,8 @@ const ContractPage = () => {
           <p>الفريق الثاني: {contractDetails.secondParty.name}</p>
         </div>
       </div>
+      
+      {/* Footer contact info */}
       <p className="mt-6">دمشق 09393333336 - حلب 0992400040</p>
       <span>www.syrianco.com /</span> 
       <span>info@syrianco.com</span> 

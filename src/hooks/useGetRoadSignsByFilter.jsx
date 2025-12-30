@@ -17,6 +17,7 @@ const useGetRoadSignsByFilter = () => {
   const [regionId, setRegionId] = useState("");
   const [model, setModel] = useState("");
   const [customerId, setCustomerId] = useState("");
+  const [direction, setDirection] = useState(""); // ✅ إضافة direction
 
   const local = useLocation();
   const pathnameSplit = local?.pathname.split("/");
@@ -34,19 +35,19 @@ const useGetRoadSignsByFilter = () => {
   const { data: getRoadSignsModel, isLoading: isGetRoadSignsModel } =
     useGetRoadSignsModelQuery();
 
-  // ✅ FIXED: Include ALL parameters including customer_id
+  // ✅ FIXED: Include ALL parameters including direction
   const queryParams = {
     start_date: startDate,
     end_date: endDate,
     city_id: cityId,
     region_id: regionId,
     model: model,
-    customer_id: customerId || "", 
+    customer_id: customerId || "",
+    direction: direction || "", // ✅ إضافة direction هنا
   };
 
   // ✅ DEBUG: Log the exact parameters being sent
-  console.log("🚀 useGetRoadSignsQuery called with:", queryParams);
-  console.log("🔗 URL would be:", `/api/road-signs?${new URLSearchParams(queryParams).toString()}`);
+  console.log("🚀bookings informations :", queryParams);
 
   const {
     data: roadSigns,
@@ -86,6 +87,11 @@ const useGetRoadSignsByFilter = () => {
     setModel(e.target.value);
   };
 
+  // ✅ دالة جديدة لمعالجة تغيير الاتجاه
+  const handleDirectionChange = (value) => {
+    setDirection(value);
+  };
+
   return {
     startDate,
     setStartDate,
@@ -110,9 +116,12 @@ const useGetRoadSignsByFilter = () => {
     isRoadSignsFetching,
     customerId,
     setCustomerId,
+    direction, // ✅ تصدير direction
+    setDirection, // ✅ تصدير setDirection
     handleCityChange,
     handleRegionChange,
     handleModelChange,
+    handleDirectionChange, // ✅ تصدير handleDirectionChange
   };
 };
 

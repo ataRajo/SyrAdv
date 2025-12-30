@@ -289,43 +289,56 @@ case "map":
     <div key={field.name} className="space-y-2">
       <Label htmlFor={field.name}>موقع اللوحة الطرقية</Label>
       
-      {/* عرض الموقع المحدد */}
-      {selectedLocation && (
+      {/* 🔍 DEBUG: Show what values we actually have */}
+      <div className="text-xs text-gray-500 mb-2">
+        Form values: lat={formik.values.latitudeX}, lng={formik.values.longitudeY}
+      </div>
+      
+      {/* Display selected location if we have coordinates */}
+      {(formik.values.latitudeX && formik.values.longitudeY) ? (
         <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-md">
           <p className="text-sm text-green-700 flex items-center gap-2">
             <MapPin className="h-4 w-4" />
-            <strong>الموقع المحدد:</strong> {selectedLocation.address}
+            <strong>الموقع الحالي:</strong>
+            {selectedLocation?.address || "موقع محدد"}
           </p>
           <p className="text-xs text-gray-600">
-            الإحداثيات: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+            الإحداثيات: {formik.values.latitudeX}, {formik.values.longitudeY}
+          </p>
+        </div>
+      ) : (
+        <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+          <p className="text-sm text-yellow-700">
+            ⚠️ لم يتم تحديد موقع بعد
           </p>
         </div>
       )}
       
-      {/* زر فتح الخريطة */}
+      {/* Map Dialog */}
       <MapDialog
         onLocationSelect={(locationData) => {
-          // ✅ تحديث الموقع المختار
+          // ✅ SIMPLY update formik values
+          formik.setFieldValue("latitudeX", locationData.lat);
+          formik.setFieldValue("longitudeY", locationData.lng);
+          
+          // If you have an external handler, call it
           if (typeof handleLocationSelect === 'function') {
             handleLocationSelect(locationData);
           }
         }}
-        buttonText={selectedLocation ? "تغيير الموقع من الخريطة" : "اختر موقع من الخريطة"}
-        buttonVariant={selectedLocation ? "outline" : "default"}
+        // ✅ Pass initial location ONLY if we have coordinates
+        initialLocation={
+          formik.values.latitudeX && formik.values.longitudeY
+            ? {
+                lat: parseFloat(formik.values.latitudeX),
+                lng: parseFloat(formik.values.longitudeY),
+                address: "الموقع الحالي"
+              }
+            : null
+        }
+        buttonText="تحديد/تغيير الموقع من الخريطة"
+        buttonVariant="outline"
         enableSatelliteView={true}
-        defaultMapType="satellite"
-      />
-      
-      {/* ✅ ADD HIDDEN FIELDS FOR COORDINATES */}
-      <input
-        type="hidden"
-        name="latitudeX"
-        value={formik.values.latitudeX || ''}
-      />
-      <input
-        type="hidden"
-        name="longitudeY"
-        value={formik.values.longitudeY || ''}
       />
     </div>
   );

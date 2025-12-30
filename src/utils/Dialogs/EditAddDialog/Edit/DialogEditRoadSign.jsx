@@ -49,7 +49,6 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
   };
 
   useEffect(() => {
-    // Fetch regions when cityId changes OR on initial load if initData has city_id
     if (cityId) {
       getRegionsByCityId(cityId);
     } else if (initData?.city_id) {

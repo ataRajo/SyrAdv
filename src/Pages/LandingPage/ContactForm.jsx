@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Icon } from '@iconify/react';
 import { toast } from 'react-hot-toast';
 
-const ContactForm = forwardRef(({ inView, isDarkMode, onSubmit }, ref) => {
+const ContactForm = forwardRef(({ inView, isDarkMode }, ref) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -82,16 +82,71 @@ const ContactForm = forwardRef(({ inView, isDarkMode, onSubmit }, ref) => {
     setIsSubmitting(true);
     
     try {
-      await onSubmit(formData);
+      // Format the message for WhatsApp
+      const serviceTypeMap = {
+        'billboard': 'إعلانات اللوحات',
+        'roadside': 'لافتات الطرق',
+        'bus-stop': 'إعلانات محطات الحافلات',
+        'vehicle': 'إعلانات المركبات',
+        'digital': 'الشاشات الرقمية',
+        'comprehensive': 'باقة شاملة'
+      };
+
+      const budgetMap = {
+        'basic': 'أساسي (أقل من $1,000)',
+        'standard': 'قياسي ($1,000 - $5,000)',
+        'premium': 'متميز ($5,000 - $15,000)',
+        'enterprise': 'شركات ($15,000+)',
+        'custom': 'عرض سعر مخصص'
+      };
+
+      const whatsappMessage = `🚀 *طلب عرض سعر جديد* 🚀
+
+👤 *الاسم:* ${formData.name}
+📧 *البريد الإلكتروني:* ${formData.email}
+📱 *رقم الهاتف:* ${formData.phone}
+🎯 *نوع الخدمة:* ${serviceTypeMap[formData.serviceType] || formData.serviceType}
+💰 *نطاق الميزانية:* ${budgetMap[formData.budget] || formData.budget}
+
+⏰ *تم إرسال الطلب بتاريخ:* ${new Date().toLocaleString('ar-SA', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}
+
+✨ *شكرًا للاهتمام بخدماتنا!* ✨`;
+
+      // Encode the message for URL
+      const encodedMessage = encodeURIComponent(whatsappMessage);
       
+      // WhatsApp number: 0981 888 977 (International format: +963981888977)
+      const whatsappNumber = '+963981888977'; // Syria country code is +963
+      
+      // Create WhatsApp URL
+      const whatsappURL = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+      
+      // Show success message first
+      toast.success('جاري فتح واتساب لإرسال الطلب...');
+      
+      // Small delay for toast to show
       setTimeout(() => {
-        toast.success('تم إرسال الطلب بنجاح! سنتواصل معك خلال 24 ساعة.');
-        setIsSubmitting(false);
-        setFormData({ name: '', email: '', phone: '', serviceType: '', budget: '' });
-      }, 2000);
+        // Open WhatsApp in a new tab
+        window.open(whatsappURL, '_blank');
+        
+        // Reset form after a moment
+        setTimeout(() => {
+          toast.success('تم إرسال الطلب إلى واتساب بنجاح!');
+          setIsSubmitting(false);
+          setFormData({ name: '', email: '', phone: '', serviceType: '', budget: '' });
+        }, 1000);
+      }, 1500);
+      
     } catch (error) {
+      console.error('Error opening WhatsApp:', error);
       setIsSubmitting(false);
-      toast.error('فشل في إرسال الطلب. يرجى المحاولة مرة أخرى.');
+      toast.error('حدث خطأ. يرجى المحاولة مرة أخرى أو التواصل مباشرة عبر واتساب.');
     }
   };
 
@@ -126,8 +181,9 @@ const ContactForm = forwardRef(({ inView, isDarkMode, onSubmit }, ref) => {
             <p className={`text-lg sm:text-xl ${
               isDarkMode ? 'text-gray-300' : 'text-gray-600'
             }`}>
-              املأ النموذج أدناه وسنتواصل معك خلال 24 ساعة
+              املأ النموذج أدناه وسيتم فتح واتساب لإرسال الطلب تلقائيًا
             </p>
+           
           </motion.div>
 
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
@@ -243,9 +299,6 @@ const ContactForm = forwardRef(({ inView, isDarkMode, onSubmit }, ref) => {
                   <option value="">اختر نوع الخدمة</option>
                   <option value="billboard">إعلانات اللوحات</option>
                   <option value="roadside">لافتات الطرق</option>
-                  <option value="bus-stop">إعلانات محطات الحافلات</option>
-                  <option value="vehicle">إعلانات المركبات</option>
-                  <option value="digital">الشاشات الرقمية</option>
                   <option value="comprehensive">باقة شاملة</option>
                 </select>
                 {errors.serviceType && (
@@ -306,16 +359,31 @@ const ContactForm = forwardRef(({ inView, isDarkMode, onSubmit }, ref) => {
                   >
                     <Icon icon="mdi:loading" className="text-lg sm:text-xl" />
                   </motion.div>
-                  <span>جاري إرسال الطلب...</span>
+                  <span>جاري فتح واتساب...</span>
                 </>
               ) : (
                 <>
-                  <Icon icon="mdi:chart-line" className="text-lg sm:text-xl" />
-                  <span>احصل على عرض سعر إعلاني </span>
+                  <Icon icon="ri:whatsapp-fill" className="text-lg sm:text-xl" />
+                  <span>إرسال الطلب عبر واتساب</span>
                 </>
               )}
             </motion.button>
           </form>
+          
+          {/* WhatsApp direct link as backup */}
+          <div className="mt-4 text-center">
+            <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              أو يمكنك التواصل مباشرة عبر الرابط: 
+              <a 
+                href="https://wa.me/963981888977" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className={`ml-1 ${colors.primary.text} hover:underline font-medium`}
+              >
+                اضغط هنا للتواصل عبر واتساب
+              </a>
+            </p>
+          </div>
         </motion.div>
       </div>
     </section>

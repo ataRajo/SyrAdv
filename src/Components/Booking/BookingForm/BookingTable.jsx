@@ -40,26 +40,50 @@ const BookingTable = () => {
     handleCityChange,
     handleRegionChange,
     handleModelChange,
+    direction,
+    setDirection,
+    handleDirectionChange,
   } = useGetRoadSignsByFilter();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [uniqueDirections, setUniqueDirections] = useState([]);
 
   useEffect(() => {
     setStartDate(formik.values.start_date);
     setEndDate(formik.values.end_date);
-  }, [formik.values.start_date, formik.values.end_date]);
+    
+    if (formik.values.direction !== undefined && formik.values.direction !== direction) {
+      setDirection(formik.values.direction);
+    }
+  }, [formik.values.start_date, formik.values.end_date, formik.values.direction]);
 
-  // Group similar road signs
+  // استخراج الاتجاهات الفريدة من roadSigns للفلتر
+  useEffect(() => {
+    if (roadSigns && roadSigns.length > 0) {
+      const directions = new Set();
+      roadSigns.forEach(sign => {
+        if (sign.directions && sign.directions.trim() !== "") {
+          directions.add(sign.directions);
+        }
+      });
+      setUniqueDirections(Array.from(directions).sort());
+    } else {
+      setUniqueDirections([]);
+    }
+  }, [roadSigns]);
+
+  // Group similar road signs - NOW INCLUDING DIRECTIONS
   const groupedRoadSigns = React.useMemo(() => {
     if (!roadSigns) return [];
 
     const groups = {};
     
     roadSigns.forEach(sign => {
-      const key = `${sign.template?.model}_${sign.place}_${sign.region?.name}`;
+      // Updated key to include directions as the 4th comparison factor
+      const key = `${sign.template?.model}_${sign.place}_${sign.region?.name}_${sign.directions || "غير_محدد"}`;
       
       if (!groups[key]) {
         groups[key] = {
@@ -67,6 +91,9 @@ const BookingTable = () => {
           template: sign.template,
           place: sign.place,
           region: sign.region,
+          directions: sign.directions || "غير محدد",
+          roadsign_code: sign.roadsign_code || "غير متوفر",  
+          direction_code: sign.direction_code || "------- ",    
           signs: [],
           totalAvailable: 0,
           totalPanels: 0,
@@ -102,7 +129,6 @@ const BookingTable = () => {
   const handleAddToCart = () => {
     if (!selectedGroup) return;
 
-    // Calculate available signs (not in cart)
     const availableSigns = selectedGroup.signs.filter(sign => 
       !addedSignIds?.has?.(sign.id)
     );
@@ -117,13 +143,11 @@ const BookingTable = () => {
       return;
     }
 
-    // Add EACH sign as a separate booking item with unique cartId
     const signsToAdd = availableSigns.slice(0, selectedQuantity);
     
     signsToAdd.forEach((sign, index) => {
       const uniqueBooking = {
         ...sign,
-        // Create unique cart ID to prevent grouping
         cartId: `sign-${sign.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         customDateRanges: [
           {
@@ -145,11 +169,21 @@ const BookingTable = () => {
     return addedSignIds?.has?.(signId);
   };
 
-  // Fix: Check if any sign in the group is added
   const isGroupAdded = (groupId) => {
     const group = groupedRoadSigns.find(g => g.id === groupId);
     if (!group) return false;
     return group.signs.some(sign => addedSignIds?.has?.(sign.id));
+  };
+
+  const handleDirectionFilterChange = (e) => {
+    const value = e.target.value;
+    handleDirectionChange(value);
+    formik.setFieldValue("direction", value);
+  };
+
+  const handleResetFilters = () => {
+    setDirection("");
+    formik.setFieldValue("direction", "");
   };
 
   return (
@@ -180,6 +214,7 @@ const BookingTable = () => {
             ))}
           </select>
         </div>
+        
         <div className="flex-1">
           <Label htmlFor="region" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             المنطقة
@@ -197,7 +232,7 @@ const BookingTable = () => {
               <option>اختر مدينة لإظهار المناطق</option>
             ) : (
               <>
-                <option>كل المناطق </option>
+                <option value="">كل المناطق</option>
                 {regions?.map((region) => (
                   <option key={region.id} value={region.id}>
                     {region.name}
@@ -207,6 +242,7 @@ const BookingTable = () => {
             )}
           </select>
         </div>
+        
         <div className="flex-1">
           <Label htmlFor="model" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             القياس
@@ -229,7 +265,65 @@ const BookingTable = () => {
             ))}
           </select>
         </div>
+        
+        {/* ✅ فلتر الاتجاهات */}
+        <div className="flex-1">
+          <Label htmlFor="direction-filter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            تصفية حسب الاتجاه
+          </Label>
+          <select
+            id="direction-filter"
+            value={direction}
+            onChange={handleDirectionFilterChange}
+            className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">كل الاتجاهات</option>
+            {uniqueDirections.map((dir, index) => (
+              <option key={index} value={dir}>
+                {dir}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {/* ✅ زر إعادة تعيين الفلاتر */}
+        <div className="flex items-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleResetFilters}
+            className="h-10 px-4"
+          >
+            إعادة تعيين الفلاتر
+          </Button>
+        </div>
       </div>
+
+      {/* ✅ عرض الفلتر النشط */}
+      {direction && (
+        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              فلتر نشط:
+            </span>
+            <span className="text-sm text-blue-600 dark:text-blue-400">
+              الاتجاه: {direction}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDirection("");
+                formik.setFieldValue("direction", "");
+              }}
+              className="h-6 px-2 text-xs"
+            >
+              إلغاء
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <Table>
@@ -241,6 +335,8 @@ const BookingTable = () => {
               <TableHead className="text-right">عدد الوجوه</TableHead>
               <TableHead className="text-right">عدد الأمتار</TableHead>
               <TableHead className="text-right">القياس</TableHead>
+              <TableHead className="text-right">كود اللوحة</TableHead> {/* ✅ إضافة */}
+              <TableHead className="text-right">كود الاتجاه</TableHead> {/* ✅ إضافة */}
               <TableHead className="text-right">المنطقة</TableHead>
               <TableHead className="text-right">مكان التموضع</TableHead>
               <TableHead className="text-right">الاتجاه</TableHead>
@@ -250,20 +346,22 @@ const BookingTable = () => {
           <TableBody>
             {isRoadSignsFetching ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-4">
+                <TableCell colSpan={12} className="text-center py-4">
                   جاري التحميل...
                 </TableCell>
               </TableRow>
             ) : !groupedRoadSigns || groupedRoadSigns.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-4">
-                  لا توجد لوحات متوفرة لهذه الفترة
+                <TableCell colSpan={12} className="text-center py-4">
+                  {direction 
+                    ? `لا توجد لوحات متوفرة للاتجاه "${direction}" في هذه الفترة`
+                    : "لا توجد لوحات متوفرة لهذه الفترة"
+                  }
                 </TableCell>
               </TableRow>
             ) : (
               groupedRoadSigns.map((group) => (
                 <React.Fragment key={group.id}>
-                  {/* Main Group Row */}
                   <TableRow
                     className={`${
                       isGroupAdded(group.id)
@@ -291,6 +389,12 @@ const BookingTable = () => {
                     <TableCell>{group.totalPanels || 0}</TableCell>
                     <TableCell>{group.template?.printing_space || 0}</TableCell>
                     <TableCell>{group.template?.size || "غير متوفر"}</TableCell>
+                    <TableCell className="truncate max-w-[100px] sm:max-w-[120px] text-xs font-mono">
+                      {group.roadsign_code || "غير متوفر"} {/* ✅ عرض roadSign code */}
+                    </TableCell>
+                    <TableCell className="truncate max-w-[80px] sm:max-w-[100px] text-xs font-mono text-center">
+                      {group.direction_code || "غير متوفر"} {/* ✅ عرض direction code */}
+                    </TableCell>
                     <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
                       {group.region?.name || "غير متوفر"}
                     </TableCell>
@@ -298,7 +402,7 @@ const BookingTable = () => {
                       {group.place || "غير متوفر"}
                     </TableCell>
                     <TableCell className="truncate max-w-[120px] sm:max-w-[150px]">
-                      {group.signs[0]?.directions || "غير متوفر"}
+                      {group.directions || "غير متوفر"}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -321,7 +425,6 @@ const BookingTable = () => {
                     </TableCell>
                   </TableRow>
                   
-                  {/* Expanded view showing individual signs - FIXED */}
                   {expandedGroups.has(group.id) && (
                     <>
                       {group.signs.map((sign, index) => {
@@ -350,6 +453,12 @@ const BookingTable = () => {
                             </TableCell>
                             <TableCell className="text-sm">
                               {sign.template?.size || "غير متوفر"}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[100px] sm:max-w-[120px] text-xs font-mono">
+                              {sign.roadsign_code || "غير متوفر"} {/* ✅ عرض roadSign code للعلامة الفردية */}
+                            </TableCell>
+                            <TableCell className="truncate max-w-[80px] sm:max-w-[100px] text-xs font-mono text-center">
+                              {sign.direction_code || "غير متوفر"} {/* ✅ عرض direction code للعلامة الفردية */}
                             </TableCell>
                             <TableCell className="truncate max-w-[120px] sm:max-w-[150px] text-sm">
                               {sign.region?.name || "غير متوفر"}
@@ -398,10 +507,19 @@ const BookingTable = () => {
                 <strong>النموذج:</strong> {selectedGroup?.template?.model}
               </p>
               <p className="text-sm text-blue-700 dark:text-blue-400">
+                <strong>كود اللوحة:</strong> {selectedGroup?.roadsign_code}
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                <strong>كود الاتجاه:</strong> {selectedGroup?.direction_code}
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
                 <strong>المنطقة:</strong> {selectedGroup?.region?.name}
               </p>
               <p className="text-sm text-blue-700 dark:text-blue-400">
                 <strong>مكان التموضع:</strong> {selectedGroup?.place}
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                <strong>الاتجاه:</strong> {selectedGroup?.directions}
               </p>
             </div>
 

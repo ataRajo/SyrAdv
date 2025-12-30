@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import useReports from "../../hooks/useReports";
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { useState, useEffect, useRef } from "react";
 import { productTypeOptions } from "../../Static/StaticData";
 import html2canvas from "html2canvas";
@@ -87,27 +86,6 @@ const RoadSignsReport = () => {
     }));
   }, [cityId, regionId, model, fromDate, toDate, selectedCustomerId]);
 
-  const isDateInRange = (dateString, fromDate, toDate) => {
-    if (!dateString) return true;
-    
-    const date = new Date(dateString);
-    
-    if (fromDate) {
-      const from = new Date(fromDate);
-      from.setHours(0, 0, 0, 0);
-      if (date < from) return false;
-    }
-    
-    if (toDate) {
-      const to = new Date(toDate);
-      to.setHours(23, 59, 59, 999);
-      if (date > to) return false;
-    }
-    
-    return true;
-  };
-
-  // Filter bookings data
   useEffect(() => {
     if (!bookingsData || !Array.isArray(bookingsData)) {
       setFilteredBookingsData([]);
@@ -116,6 +94,7 @@ const RoadSignsReport = () => {
 
     let filtered = [...bookingsData];
 
+    // Apply city filter locally
     if (localFilters.cityId && localFilters.cityId !== "") {
       filtered = filtered.filter(booking => {
         const bookingCityId = booking.city_id || booking.city?.id;
@@ -123,6 +102,7 @@ const RoadSignsReport = () => {
       });
     }
 
+    // Apply customer type filter locally
     if (customerTypeFilter && customerTypeFilter !== "" && customersData && customersData.length > 0) {
       const selectedType = parseInt(customerTypeFilter);
       
@@ -150,15 +130,8 @@ const RoadSignsReport = () => {
       }
     }
 
-    if (localFilters.fromDate || localFilters.toDate) {
-      filtered = filtered.filter(booking => {
-        const bookingDate = booking.created_at || booking.booking_date || booking.date;
-        return isDateInRange(bookingDate, localFilters.fromDate, localFilters.toDate);
-      });
-    }
-
     setFilteredBookingsData(filtered);
-  }, [bookingsData, customerTypeFilter, customersData, localFilters]);
+  }, [bookingsData, customerTypeFilter, customersData, localFilters.cityId]);
 
   // Filter unbooked signs data
   useEffect(() => {
@@ -169,6 +142,7 @@ const RoadSignsReport = () => {
 
     let filtered = [...unbookedSignsData];
     
+    // Apply city filter locally
     if (localFilters.cityId && localFilters.cityId !== "") {
       filtered = filtered.filter(sign => {
         const signCityId = sign.city_id || sign.city?.id;
@@ -176,15 +150,8 @@ const RoadSignsReport = () => {
       });
     }
 
-    if (localFilters.fromDate || localFilters.toDate) {
-      filtered = filtered.filter(sign => {
-        const signDate = sign.created_at || sign.date;
-        return isDateInRange(signDate, localFilters.fromDate, localFilters.toDate);
-      });
-    }
-
     setFilteredUnbookedData(filtered);
-  }, [unbookedSignsData, localFilters]);
+  }, [unbookedSignsData, localFilters.cityId]);
 
   const customerTypeOptions = [
     { value: "", label: "جميع الأنواع" },
@@ -204,27 +171,36 @@ const RoadSignsReport = () => {
   const handleDateChange = (dateType, value) => {
     if (dateType === 'fromDate') {
       setFromDate(value);
+      handleFilterChange('fromDate', value);
     } else if (dateType === 'toDate') {
       setToDate(value);
+      handleFilterChange('toDate', value);
     }
-    handleFilterChange(dateType, value);
   };
 
-  const clearAllFilters = () => {
-    setCustomerTypeFilter("");
-    handleCityChange({ target: { value: "" } });
-    setFromDate("");
-    setToDate("");
-    setLocalFilters({
-      cityId: "",
-      regionId: "",
-      model: "",
-      fromDate: "",
-      toDate: "",
-      customerId: "",
-    });
-  };
 
+  
+ const clearAllFilters = () => {
+  // Reset to default dates (today to today+7 days)
+  const today = new Date();
+  const nextWeek = new Date();
+  nextWeek.setDate(today.getDate() + 7); // +7 أيام للأمام
+  
+  setFromDate(today.toISOString().split('T')[0]);
+  setToDate(nextWeek.toISOString().split('T')[0]);
+  
+  setCustomerTypeFilter("");
+  handleCityChange({ target: { value: "" } });
+  
+  setLocalFilters({
+    cityId: "",
+    regionId: "",
+    model: "",
+    fromDate: today.toISOString().split('T')[0],
+    toDate: nextWeek.toISOString().split('T')[0],
+    customerId: "",
+  });
+};
   const calculateTotalAdvertisingSpace = (data) => {
     return data.reduce((total, booking) => {
       return total + calculateBookingAdvertisingSpace(booking);
@@ -263,12 +239,77 @@ const RoadSignsReport = () => {
     }
   };
 
+
+useEffect(() => {
+  if (!bookingsData || !Array.isArray(bookingsData)) {
+    setFilteredBookingsData([]);
+    return;
+  }
+
+  console.log('📊 Original bookings data count:', bookingsData.length);
+  
+  // تحقق من تواريخ الحجوزات
+  bookingsData.forEach((booking, index) => {
+    const bookingStartDate = booking.bookings?.[0]?.start_date;
+    const bookingEndDate = booking.bookings?.[0]?.end_date;
+    console.log(`Booking ${index + 1}:`, {
+      start_date: bookingStartDate,
+      end_date: bookingEndDate,
+      customer: booking.bookings?.[0]?.customer?.company_name || booking.bookings?.[0]?.customer?.full_name
+    });
+  });
+
+  let filtered = [...bookingsData];
+
+  // Apply city filter locally
+  if (localFilters.cityId && localFilters.cityId !== "") {
+    filtered = filtered.filter(booking => {
+      const bookingCityId = booking.city_id || booking.city?.id;
+      return bookingCityId === parseInt(localFilters.cityId);
+    });
+  }
+
+  // Apply customer type filter locally
+  if (customerTypeFilter && customerTypeFilter !== "" && customersData && customersData.length > 0) {
+    const selectedType = parseInt(customerTypeFilter);
+    
+    if (!isNaN(selectedType)) {
+      const customersOfType = customersData.filter(customer => {
+        const customerType = parseInt(customer.type);
+        return !isNaN(customerType) && customerType === selectedType;
+      });
+      
+      if (customersOfType.length > 0) {
+        const customerIdsOfType = customersOfType.map(customer => customer.id);
+        
+        filtered = filtered.filter(booking => {
+          const bookingCustomerId = booking.bookings?.[0]?.customer?.id || 
+                                   booking.customer_id || 
+                                   booking.customer?.id;
+          
+          if (!bookingCustomerId) return false;
+          
+          return customerIdsOfType.includes(parseInt(bookingCustomerId));
+        });
+      } else {
+        filtered = [];
+      }
+    }
+  }
+
+  console.log('📊 Filtered bookings count after local filters:', filtered.length);
+  setFilteredBookingsData(filtered);
+}, [bookingsData, customerTypeFilter, customersData, localFilters.cityId]);
+
+
+
+
   // دالة لإنشاء HTML للتقرير
   const createReportHTML = () => {
     const customerTypeLabel = getCustomerTypeLabel();
     const currentDate = formatArabicDate(new Date());
-    const fromDateText = localFilters.fromDate ? formatArabicDate(localFilters.fromDate) : "البداية";
-    const toDateText = localFilters.toDate ? formatArabicDate(localFilters.toDate) : "النهاية";
+    const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
+    const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
 
     // تجميع البيانات حسب نوع المنتج
     const groupedByProductType = {};
@@ -615,7 +656,6 @@ const RoadSignsReport = () => {
                   <th>الوجوه</th>
                   <th>الإجمالي</th>
                   <th>المكان</th>
-                  <th>التاريخ</th>
                 </tr>
               </thead>
               <tbody>
@@ -629,7 +669,6 @@ const RoadSignsReport = () => {
           const totalMeters = advertisingSpace * bookedFaces;
           const templateName = booking.template?.model || booking.template?.name || "غير معروف";
           const place = booking.place || "غير معروف";
-          const date = formatArabicDate(booking.created_at || booking.booking_date || booking.date);
           
           html += `
             <tr>
@@ -639,7 +678,6 @@ const RoadSignsReport = () => {
               <td>${bookedFaces}</td>
               <td>${totalMeters.toFixed(0)}</td>
               <td>${place}</td>
-              <td>${date}</td>
             </tr>
           `;
         });
@@ -761,7 +799,7 @@ const RoadSignsReport = () => {
           try {
             // استخدام html2canvas لالتقاط الصفحة
             const canvas = await html2canvas(printWindow.document.body, {
-              scale: 2, // زيادة الجودة
+              scale: 2,
               useCORS: true,
               logging: false,
               backgroundColor: '#ffffff'
@@ -775,8 +813,8 @@ const RoadSignsReport = () => {
             });
             
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
-            const imgWidth = 210; // A4 width in mm
-            const pageHeight = 297; // A4 height in mm
+            const imgWidth = 210;
+            const pageHeight = 297;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
             
             let heightLeft = imgHeight;
@@ -807,7 +845,7 @@ const RoadSignsReport = () => {
           } finally {
             setIsGeneratingPDF(false);
           }
-        }, 1000); // انتظر ثانية لتحميل الخطوط والصور
+        }, 1000);
       };
       
     } catch (error) {
@@ -843,40 +881,442 @@ const RoadSignsReport = () => {
     };
   };
 
-  const generateBookingsPdf = () => {
-    if (filteredBookingsData.length === 0) {
-      alert("لا توجد بيانات لتصديرها");
-      return;
-    }
-
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-
-    // ... (الكود الأصلي)
-
-    const fileName = `كشف_الحجوزات_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
-  };
-
-  const generateUnbookedPdf = () => {
+  const generateUnbookedPdf = async () => {
     if (filteredUnbookedData.length === 0) {
-      alert("لا توجد بيانات لتصديرها");
+      alert("لا توجد بيانات للطباعة");
       return;
     }
 
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
+    setIsGeneratingPDF(true);
+    
+    try {
+      // First, create the HTML content
+      const createUnbookedReportHTML = () => {
+        const currentDate = formatArabicDate(new Date());
+        const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
+        const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
 
-    // ... (الكود الأصلي)
+        // Group by city
+        const groupedByCity = {};
+        
+        filteredUnbookedData.forEach(sign => {
+          const cityName = sign.city?.name || "غير معروف";
+          
+          if (!groupedByCity[cityName]) {
+            groupedByCity[cityName] = {
+              signs: [],
+              totalMeters: 0
+            };
+          }
+          
+          const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
+          groupedByCity[cityName].signs.push(sign);
+          groupedByCity[cityName].totalMeters += advertisingSpace;
+        });
 
-    const fileName = `كشف_اللوحات_غير_المحجوزة_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
+        // Template statistics
+        const templateStats = {};
+        filteredUnbookedData.forEach(sign => {
+          const templateName = sign.template?.model || sign.template?.name || "غير معروف";
+          const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
+          const faces = parseInt(sign.faces_number) || 1;
+          
+          if (!templateStats[templateName]) {
+            templateStats[templateName] = {
+              count: 0,
+              totalMeters: 0,
+              totalFaces: 0
+            };
+          }
+          
+          templateStats[templateName].count += 1;
+          templateStats[templateName].totalMeters += advertisingSpace;
+          templateStats[templateName].totalFaces += faces;
+        });
+
+        let html = `
+          <!DOCTYPE html>
+          <html dir="rtl" lang="ar">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>تقرير اللوحات غير المحجوزة</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+              
+              body {
+                font-family: 'Amiri', serif;
+                direction: rtl;
+                margin: 0;
+                padding: 20px;
+                background-color: #fff;
+                color: #000;
+                width: 100%;
+                max-width: 210mm;
+                margin: 0 auto;
+              }
+              
+              .report-container {
+                width: 100%;
+              }
+              
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+                border-bottom: 2px solid #dc2626;
+                padding-bottom: 20px;
+              }
+              
+              .header h1 {
+                font-size: 28px;
+                color: #dc2626;
+                margin: 0 0 10px 0;
+              }
+              
+              .header .subtitle {
+                font-size: 16px;
+                color: #666;
+                margin: 5px 0;
+              }
+              
+              .report-info {
+                background-color: #fef2f2;
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                border-right: 4px solid #dc2626;
+              }
+              
+              .city-section {
+                margin-bottom: 30px;
+                page-break-inside: avoid;
+              }
+              
+              .city-header {
+                background-color: #991b1b;
+                color: white;
+                padding: 12px 15px;
+                border-radius: 6px 6px 0 0;
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+              }
+              
+              .city-stats {
+                background-color: #fee2e2;
+                padding: 10px 15px;
+                border: 1px solid #fecaca;
+                border-top: none;
+                display: flex;
+                justify-content: space-between;
+                font-size: 14px;
+              }
+              
+              .signs-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 12px;
+              }
+              
+              .signs-table th {
+                background-color: #dc2626;
+                color: white;
+                padding: 8px;
+                text-align: center;
+                border: 1px solid #ddd;
+              }
+              
+              .signs-table td {
+                padding: 6px;
+                text-align: center;
+                border: 1px solid #ddd;
+              }
+              
+              .signs-table tr:nth-child(even) {
+                background-color: #f9f9f9;
+              }
+              
+              .city-total {
+                text-align: left;
+                padding: 8px 15px;
+                font-weight: bold;
+                color: #065f46;
+                background-color: #d1fae5;
+                border-radius: 4px;
+                margin-top: 10px;
+                font-size: 13px;
+              }
+              
+              .template-summary {
+                margin-top: 40px;
+                page-break-before: always;
+              }
+              
+              .template-summary h2 {
+                text-align: center;
+                color: #7c3aed;
+                font-size: 22px;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #a78bfa;
+              }
+              
+              .summary-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 15px;
+                font-size: 13px;
+              }
+              
+              .summary-table th {
+                background-color: #8b5cf6;
+                color: white;
+                padding: 10px;
+                text-align: center;
+                border: 1px solid #ddd;
+              }
+              
+              .summary-table td {
+                padding: 8px;
+                text-align: center;
+                border: 1px solid #ddd;
+              }
+              
+              .summary-table tr:last-child {
+                background-color: #10b981;
+                color: white;
+                font-weight: bold;
+              }
+              
+              .footer {
+                text-align: center;
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #ccc;
+                color: #666;
+                font-size: 12px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="report-container">
+              <div class="header">
+                <h1>تقرير اللوحات غير المحجوزة</h1>
+                <div class="subtitle">تاريخ التقرير: ${currentDate}</div>
+                <div class="subtitle">الفترة: من ${fromDateText} إلى ${toDateText}</div>
+                <div class="subtitle">عدد اللوحات غير المحجوزة: ${filteredUnbookedData.length}</div>
+              </div>
+              
+              <div class="report-info">
+                <div style="text-align: center; font-size: 16px; font-weight: bold; color: #dc2626;">
+                  إجمالي الأمتار الإعلانية غير المحجوزة: ${calculateTotalUnbookedAdvertisingSpace(filteredUnbookedData)} متر مربع
+                </div>
+              </div>
+        `;
+
+        // Add each city section
+        Object.entries(groupedByCity).forEach(([cityName, cityData]) => {
+          if (cityData.signs.length === 0) return;
+          
+          html += `
+            <div class="city-section">
+              <div class="city-header">
+                المدينة: ${cityName}
+              </div>
+              
+              <div class="city-stats">
+                <span>عدد اللوحات: ${cityData.signs.length}</span>
+                <span>الإجمالي: ${cityData.totalMeters.toFixed(0)} متر مربع</span>
+              </div>
+              
+              <table class="signs-table">
+                <thead>
+                  <tr>
+                    <th>م</th>
+                    <th>الرمز</th>
+                    <th>النوع</th>
+                    <th>المساحة (م²)</th>
+                    <th>الوجوه</th>
+                    <th>الإجمالي (م²)</th>
+                    <th>المنطقة</th>
+                    <th>المكان</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+          
+          cityData.signs.forEach((sign, index) => {
+            const advertisingSpace = parseFloat(sign.template?.advertising_space) || 0;
+            const faces = parseInt(sign.faces_number) || 1;
+            const totalMeters = advertisingSpace * faces;
+            const templateName = sign.template?.model || sign.template?.name || "غير معروف";
+            const regionName = sign.region?.name || "غير محدد";
+            const place = sign.place || "غير محدد";
+            
+            html += `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${sign.code || "غير محدد"}</td>
+                <td>${templateName}</td>
+                <td>${advertisingSpace.toFixed(2)}</td>
+                <td>${faces}</td>
+                <td>${totalMeters.toFixed(2)}</td>
+                <td>${regionName}</td>
+                <td>${place}</td>
+              </tr>
+            `;
+          });
+          
+          html += `
+                </tbody>
+              </table>
+              
+              <div class="city-total">
+                إجمالي المدينة: ${cityData.totalMeters.toFixed(0)} متر مربع
+              </div>
+            </div>
+          `;
+        });
+
+        // Template summary section
+        html += `
+          <div class="template-summary">
+            <h2>ملخص القوالب غير المحجوزة</h2>
+            
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th>م</th>
+                  <th>اسم القالب</th>
+                  <th>عدد اللوحات</th>
+                  <th>إجمالي الوجوه</th>
+                  <th>المساحة الكلية (م²)</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+        
+        const statsArray = Object.entries(templateStats)
+          .map(([templateName, stats], index) => ({
+            index,
+            templateName,
+            stats
+          }))
+          .sort((a, b) => b.stats.count - a.stats.count);
+        
+        statsArray.forEach((item, i) => {
+          html += `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${item.templateName}</td>
+              <td>${item.stats.count}</td>
+              <td>${item.stats.totalFaces}</td>
+              <td>${item.stats.totalMeters.toFixed(0)}</td>
+            </tr>
+          `;
+        });
+        
+        // Totals
+        const totalCount = Object.values(templateStats).reduce((sum, stat) => sum + stat.count, 0);
+        const totalFaces = Object.values(templateStats).reduce((sum, stat) => sum + stat.totalFaces, 0);
+        const totalMeters = Object.values(templateStats).reduce((sum, stat) => sum + stat.totalMeters, 0);
+        
+        html += `
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="2"><strong>المجموع الكلي</strong></td>
+                  <td><strong>${totalCount}</strong></td>
+                  <td><strong>${totalFaces}</strong></td>
+                  <td><strong>${totalMeters.toFixed(0)}</strong></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          
+          <div class="footer">
+            <p>---------------------------------------------</p>
+            <p>تم الإنشاء آلياً بواسطة نظام التقارير - اللوحات غير المحجوزة</p>
+            <p>تاريخ الطباعة: ${currentDate}</p>
+          </div>
+        `;
+        
+        html += `
+            </div>
+          </body>
+          </html>
+        `;
+        
+        return html;
+      };
+
+      const htmlContent = createUnbookedReportHTML();
+      
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      
+      if (!printWindow) {
+        alert('يرجى السماح بالنوافذ المنبثقة لهذا الموقع');
+        setIsGeneratingPDF(false);
+        return;
+      }
+      
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      
+      printWindow.onload = () => {
+        setTimeout(async () => {
+          try {
+            const canvas = await html2canvas(printWindow.document.body, {
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#ffffff'
+            });
+            
+            const pdf = new jsPDF({
+              orientation: 'portrait',
+              unit: 'mm',
+              format: 'a4'
+            });
+            
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            const imgWidth = 210;
+            const pageHeight = 297;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            let heightLeft = imgHeight;
+            let position = 0;
+            
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+            
+            while (heightLeft > 0) {
+              position = heightLeft - imgHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pageHeight;
+            }
+            
+            const fileName = `تقرير_اللوحات_غير_المحجوزة_${new Date().toISOString().split('T')[0]}.pdf`;
+            pdf.save(fileName);
+            
+            printWindow.close();
+            
+          } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('حدث خطأ أثناء إنشاء PDF. يرجى المحاولة مرة أخرى.');
+          } finally {
+            setIsGeneratingPDF(false);
+          }
+        }, 1000);
+      };
+      
+    } catch (error) {
+      console.error('Error in print report:', error);
+      alert('حدث خطأ. يرجى المحاولة مرة أخرى.');
+      setIsGeneratingPDF(false);
+    }
   };
 
   if (isBookingsLoading || isUnbookedLoading || isCustomersLoading) {
@@ -963,7 +1403,7 @@ const RoadSignsReport = () => {
           </Label>
           <input
             type="date"
-            value={localFilters.fromDate || ''}
+            value={fromDate || ''}
             onChange={(e) => handleDateChange('fromDate', e.target.value)}
             className="p-2.5 border rounded-lg bg-card text-foreground text-sm shadow-sm focus:ring-2 focus:ring-primary focus:border-primary w-full transition-colors duration-200"
           />
@@ -975,7 +1415,7 @@ const RoadSignsReport = () => {
           </Label>
           <input
             type="date"
-            value={localFilters.toDate || ''}
+            value={toDate || ''}
             onChange={(e) => handleDateChange('toDate', e.target.value)}
             className="p-2.5 border rounded-lg bg-card text-foreground text-sm shadow-sm focus:ring-2 focus:ring-primary focus:border-primary w-full transition-colors duration-200"
           />
@@ -1011,7 +1451,6 @@ const RoadSignsReport = () => {
             </div>
             
             <div className="flex flex-wrap gap-3">
-              {/* زر الطباعة الجديد - PDF عالي الجودة */}
               <Button
                 onClick={handlePrintReport}
                 disabled={isGeneratingPDF || isBookingsLoading || isBookingsFetching || filteredBookingsData.length === 0}
@@ -1030,7 +1469,6 @@ const RoadSignsReport = () => {
                 )}
               </Button>
               
-              {/* زر الطباعة البسيط */}
               <Button
                 onClick={handleSimplePrint}
                 disabled={isBookingsLoading || isBookingsFetching || filteredBookingsData.length === 0}
@@ -1039,16 +1477,6 @@ const RoadSignsReport = () => {
                 <Printer className="w-4 h-4" />
                 <span>طباعة مباشرة</span>
               </Button>
-              
-                {/*
-              
-              
-
-              
-                */}
-
-                
-              
             </div>
           </div>
           

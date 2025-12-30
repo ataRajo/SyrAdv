@@ -20,35 +20,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png",
 });
 
-// Custom icons for road signs
-const RoadSignIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-icon.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
-
-const UserLocationIcon = L.icon({
-  iconUrl: "data:image/svg+xml;base64," + btoa(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#2563eb" width="24" height="24">
-      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
-    </svg>
-  `),
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
-
-const SearchMarkerIcon = L.icon({
-  iconUrl: "data:image/svg+xml;base64," + btoa(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" width="28" height="28">
-      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
-    </svg>
-  `),
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
-  popupAnchor: [0, -28]
-});
-
 // Component to handle user location
 function UserLocation() {
   const map = useMap();
@@ -206,7 +177,15 @@ function UserLocation() {
   return (
     <>
       {userPosition && (
-        <Marker position={userPosition} icon={UserLocationIcon}>
+        <Marker position={userPosition} icon={L.icon({
+          iconUrl: "data:image/svg+xml;base64," + btoa(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#2563eb" width="24" height="24">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+            </svg>
+          `),
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        })}>
           <Popup>
             <div className="text-center">
               <p className="font-semibold">موقعك الحالي</p>
@@ -247,32 +226,33 @@ function MapZoomToLocation({ location }) {
 
   useEffect(() => {
     if (location) {
-      console.log("Zooming to:", location.name, "Type:", location.type, "Zoom:", location.zoom);
-      
-      // Ensure minimum zoom level based on type
       let finalZoom = location.zoom;
       
-      // Force minimum zoom levels for better visibility
       if (location.type === "دولة") {
-        finalZoom = Math.max(finalZoom, 9); // At least zoom 9 for countries
+        finalZoom = Math.max(finalZoom, 9);
       } else if (location.type === "مدينة") {
-        finalZoom = Math.max(finalZoom, 14); // At least zoom 14 for cities
+        finalZoom = Math.max(finalZoom, 14);
       } else {
-        finalZoom = Math.max(finalZoom, 12); // Minimum zoom 12 for other types
+        finalZoom = Math.max(finalZoom, 12);
       }
       
-      console.log("Final zoom level:", finalZoom);
-      
-      // Use flyTo with smooth animation
       map.flyTo([location.coords[0], location.coords[1]], finalZoom, {
         duration: 2,
         easeLinearity: 0.25,
         animate: true
       });
       
-      // Add a temporary marker for the searched location
       const marker = L.marker([location.coords[0], location.coords[1]], {
-        icon: SearchMarkerIcon
+        icon: L.icon({
+          iconUrl: "data:image/svg+xml;base64," + btoa(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" width="28" height="28">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+            </svg>
+          `),
+          iconSize: [28, 28],
+          iconAnchor: [14, 28],
+          popupAnchor: [0, -28]
+        })
       }).addTo(map);
       
       marker.bindPopup(`
@@ -283,19 +263,17 @@ function MapZoomToLocation({ location }) {
         </div>
       `).openPopup();
       
-      // Remove marker after 15 seconds
       setTimeout(() => {
         if (marker && map.hasLayer(marker)) {
           marker.remove();
         }
       }, 15000);
-      
-      // Removed the red circle/zone highlight
     }
   }, [location, map]);
 
   return null;
 }
+
 // Component to display road sign details in popup
 const RoadSignDetails = ({ roadSignId }) => {
   const { data: roadSignDetails, isLoading, error } = useGetRoadSignByIdQuery(roadSignId);
@@ -446,6 +424,90 @@ const RoadSignDetails = ({ roadSignId }) => {
   );
 };
 
+
+// 1. دالة للتحقق إذا كان الوجه محجوزاً
+const isFaceBooked = (roadSign) => {
+  if (!roadSign.bookings || !Array.isArray(roadSign.bookings) || roadSign.bookings.length === 0) {
+    return false;
+  }
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  
+  for (const booking of roadSign.bookings) {
+    if (!booking.start_date || !booking.end_date) continue;
+    
+    try {
+      // Parse dates and normalize to start of day
+      const startDate = new Date(booking.start_date);
+      const endDate = new Date(booking.end_date);
+      
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
+      
+      // Check if today is within booking period
+      if (today >= startDate && today <= endDate) {
+        return true;
+      }
+    } catch (error) {
+      console.error(`Error parsing dates for booking:`, error);
+      continue;
+    }
+  }
+  
+  return false;
+};
+
+// 2. دالة للتحقق من الحالة الخاصة (وجه محجوز ووجه متاح)
+const checkSpecialDualFaceCase = (roadSign, allRoadSigns) => {
+  // فقط للوحات ذات وجهين (لها direction_code)
+  if (roadSign.direction_code !== null && roadSign.direction_code !== undefined) {
+    const roadSignCode = roadSign.roadsign_code;
+    
+    // ابحث عن الوجه الآخر بنفس الكود
+    const otherFace = allRoadSigns.find(sign => 
+      sign.roadsign_code === roadSignCode && 
+      sign.direction_code !== roadSign.direction_code &&
+      sign.id !== roadSign.id
+    );
+    
+    if (otherFace) {
+      const currentFaceBooked = isFaceBooked(roadSign);
+      const otherFaceBooked = isFaceBooked(otherFace);
+      
+      // الحالة المطلوبة: وجه محجوز ووجه متاح
+      return (currentFaceBooked && !otherFaceBooked) || (!currentFaceBooked && otherFaceBooked);
+    }
+  }
+  return false;
+};
+
+// 3. دالة للحصول على معلومات الوجهين
+const getDualFaceInfo = (roadSign, allRoadSigns) => {
+  if (roadSign.direction_code === null || roadSign.direction_code === undefined) return null;
+  
+  const roadSignCode = roadSign.roadsign_code;
+  const otherFace = allRoadSigns.find(sign => 
+    sign.roadsign_code === roadSignCode && 
+    sign.direction_code !== roadSign.direction_code
+  );
+  
+  if (!otherFace) return null;
+  
+  return {
+    currentFace: {
+      direction: roadSign.direction_code,
+      isBooked: isFaceBooked(roadSign),
+      data: roadSign
+    },
+    otherFace: {
+      direction: otherFace.direction_code,
+      isBooked: isFaceBooked(otherFace),
+      data: otherFace
+    }
+  };
+};
+
 const RoadSignsMapView = ({ viewType }) => {
   const { data: roadSignsResponse, isLoading, error } = useGetRoadSignsQuery();
   
@@ -462,174 +524,160 @@ const RoadSignsMapView = ({ viewType }) => {
   const [showFilters, setShowFilters] = useState(true);
   const [selectedRoadSignId, setSelectedRoadSignId] = useState(null);
 
-// Function to search ANY location using OpenStreetMap Nominatim API
-const searchLocation = async (query) => {
-  if (!query.trim()) return [];
-  
-  setIsSearching(true);
-  showToast("info", "جاري البحث...");
-  
-  try {
-    // Encode the query for URL
-    const encodedQuery = encodeURIComponent(query);
+  // Function to search ANY location using OpenStreetMap Nominatim API
+  const searchLocation = async (query) => {
+    if (!query.trim()) return [];
     
-    // Use OpenStreetMap Nominatim API for geocoding
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodedQuery}&format=json&accept-language=ar&limit=10`
-    );
+    setIsSearching(true);
+    showToast("info", "جاري البحث...");
     
-    if (!response.ok) {
-      throw new Error('Network response was not ok');
-    }
-    
-    const data = await response.json();
-    
-    // Format results
-    const formattedResults = data.map((item, index) => {
-      let locationType = "موقع";
-      let displayName = item.display_name;
+    try {
+      const encodedQuery = encodeURIComponent(query);
       
-      // Determine type based on class and type
-      if (item.class === "boundary" && item.type === "administrative") {
-        locationType = item.type.includes("city") ? "مدينة" : 
-                      item.type.includes("state") ? "ولاية" : 
-                      item.type.includes("country") ? "دولة" : "منطقة";
-      } else if (item.class === "place") {
-        locationType = item.type === "city" ? "مدينة" :
-                      item.type === "town" ? "بلدة" :
-                      item.type === "village" ? "قرية" :
-                      item.type === "hamlet" ? "حي" : "مكان";
-      } else if (item.class === "highway") {
-        locationType = "طريق";
-      } else if (item.class === "amenity") {
-        locationType = "مركز";
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodedQuery}&format=json&accept-language=ar&limit=10`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
       }
       
-      // Extract Arabic name if available
-      const arabicMatch = displayName.match(/[\u0600-\u06FF\s]+/g);
-      const arabicName = arabicMatch ? arabicMatch.join(' ') : item.display_name.split(',')[0];
+      const data = await response.json();
       
-      // DETERMINE ZOOM LEVEL - ALL INCREASED FOR BETTER VISIBILITY
-      let zoomLevel;
-      
-      // Set MINIMUM zoom levels (higher numbers = more zoomed in)
-      switch(locationType) {
-        case "دولة": // Country - zoom in to see major cities
-          zoomLevel = 9; // Increased from 6
-          break;
-        case "ولاية": // State
-        case "منطقة": // Region
-          zoomLevel = 10; // Increased from 8
-          break;
-        case "مدينة": // City
-          zoomLevel = 14; // Increased from 12
-          break;
-        case "بلدة": // Town
-          zoomLevel = 15; // Increased from 14
-          break;
-        case "قرية": // Village
-        case "حي": // Neighborhood
-          zoomLevel = 16; // Increased from 14/16
-          break;
-        case "طريق": // Highway/Street
-          zoomLevel = 18; // Already high
-          break;
-        case "مركز": // Center/Amenity
-        case "مكان": // Place
-          zoomLevel = 17; // High zoom
-          break;
-        default:
-          // Use importance but with higher baseline
-          zoomLevel = item.importance > 0.7 ? 15 : item.importance > 0.5 ? 13 : 11;
-      }
-      
-      // SPECIAL CASES - Force higher zoom for specific important locations
-      const importantCities = [
-        "paris", "london", "new york", "tokyo", "dubai", "riyadh",
-        "دمشق", "حلب", "القاهرة", "الرياض", "دبي", "بيروت", "عمان"
-      ];
-      
-      const lowerName = (arabicName || item.display_name).toLowerCase();
-      if (importantCities.some(city => lowerName.includes(city))) {
-        zoomLevel = Math.max(zoomLevel, 15); // Ensure at least zoom 15
-      }
-      
-      // Adjust based on bounding box size if available
-      if (item.boundingbox) {
-        const [south, north, west, east] = item.boundingbox.map(parseFloat);
-        const latDiff = north - south;
-        const lonDiff = east - west;
+      const formattedResults = data.map((item, index) => {
+        let locationType = "موقع";
+        let displayName = item.display_name;
         
-        // If it's a large area (like a country), zoom in more
-        if (latDiff > 20 || lonDiff > 20) { // Very large (country)
-          zoomLevel = 8; // Still need some overview for countries
-        } else if (latDiff > 10 || lonDiff > 10) { // Large (state/big region)
-          zoomLevel = 10;
-        } else if (latDiff > 5 || lonDiff > 5) { // Medium (region)
-          zoomLevel = 12;
-        } else if (latDiff > 2 || lonDiff > 2) { // Small (city area)
-          zoomLevel = 14;
-        } else { // Very small (specific location)
-          zoomLevel = 16;
+        if (item.class === "boundary" && item.type === "administrative") {
+          locationType = item.type.includes("city") ? "مدينة" : 
+                        item.type.includes("state") ? "ولاية" : 
+                        item.type.includes("country") ? "دولة" : "منطقة";
+        } else if (item.class === "place") {
+          locationType = item.type === "city" ? "مدينة" :
+                        item.type === "town" ? "بلدة" :
+                        item.type === "village" ? "قرية" :
+                        item.type === "hamlet" ? "حي" : "مكان";
+        } else if (item.class === "highway") {
+          locationType = "طريق";
+        } else if (item.class === "amenity") {
+          locationType = "مركز";
         }
-      }
-      
-      return {
-        id: index,
-        name: arabicName || item.display_name.split(',')[0],
-        fullName: item.display_name,
-        coords: [parseFloat(item.lat), parseFloat(item.lon)],
-        type: locationType,
-        importance: item.importance,
-        country: item.address?.country || "",
-        city: item.address?.city || item.address?.town || "",
-        zoom: zoomLevel,
-        boundingbox: item.boundingbox
-      };
-    });
-    
-    // Sort by importance AND zoom level preference
-    formattedResults.sort((a, b) => {
-      // Prefer locations that are more specific (higher zoom level)
-      const aScore = b.importance + (a.zoom / 20);
-      const bScore = a.importance + (b.zoom / 20);
-      return bScore - aScore;
-    });
-    
-    setSearchResults(formattedResults);
-    
-    if (formattedResults.length > 0) {
-      // Add to search history
-      const newSearch = {
-        query,
-        timestamp: new Date().toISOString(),
-        results: formattedResults.length
-      };
-      
-      setSearchHistory(prev => {
-        const filtered = prev.filter(item => item.query !== query);
-        return [newSearch, ...filtered].slice(0, 10);
+        
+        const arabicMatch = displayName.match(/[\u0600-\u06FF\s]+/g);
+        const arabicName = arabicMatch ? arabicMatch.join(' ') : item.display_name.split(',')[0];
+        
+        let zoomLevel;
+        
+        switch(locationType) {
+          case "دولة":
+            zoomLevel = 9;
+            break;
+          case "ولاية":
+          case "منطقة":
+            zoomLevel = 10;
+            break;
+          case "مدينة":
+            zoomLevel = 14;
+            break;
+          case "بلدة":
+            zoomLevel = 15;
+            break;
+          case "قرية":
+          case "حي":
+            zoomLevel = 16;
+            break;
+          case "طريق":
+            zoomLevel = 18;
+            break;
+          case "مركز":
+          case "مكان":
+            zoomLevel = 17;
+            break;
+          default:
+            zoomLevel = item.importance > 0.7 ? 15 : item.importance > 0.5 ? 13 : 11;
+        }
+        
+        const importantCities = [
+          "paris", "london", "new york", "tokyo", "dubai", "riyadh",
+          "دمشق", "حلب", "القاهرة", "الرياض", "دبي", "بيروت", "عمان"
+        ];
+        
+        const lowerName = (arabicName || item.display_name).toLowerCase();
+        if (importantCities.some(city => lowerName.includes(city))) {
+          zoomLevel = Math.max(zoomLevel, 15);
+        }
+        
+        if (item.boundingbox) {
+          const [south, north, west, east] = item.boundingbox.map(parseFloat);
+          const latDiff = north - south;
+          const lonDiff = east - west;
+          
+          if (latDiff > 20 || lonDiff > 20) {
+            zoomLevel = 8;
+          } else if (latDiff > 10 || lonDiff > 10) {
+            zoomLevel = 10;
+          } else if (latDiff > 5 || lonDiff > 5) {
+            zoomLevel = 12;
+          } else if (latDiff > 2 || lonDiff > 2) {
+            zoomLevel = 14;
+          } else {
+            zoomLevel = 16;
+          }
+        }
+        
+        return {
+          id: index,
+          name: arabicName || item.display_name.split(',')[0],
+          fullName: item.display_name,
+          coords: [parseFloat(item.lat), parseFloat(item.lon)],
+          type: locationType,
+          importance: item.importance,
+          country: item.address?.country || "",
+          city: item.address?.city || item.address?.town || "",
+          zoom: zoomLevel,
+          boundingbox: item.boundingbox
+        };
       });
       
-      showToast("success", `تم العثور على ${formattedResults.length} نتيجة`);
+      formattedResults.sort((a, b) => {
+        const aScore = b.importance + (a.zoom / 20);
+        const bScore = a.importance + (b.zoom / 20);
+        return bScore - aScore;
+      });
       
-      // Auto-select first result
-      if (formattedResults.length === 1) {
-        handleResultClick(formattedResults[0]);
+      setSearchResults(formattedResults);
+      
+      if (formattedResults.length > 0) {
+        const newSearch = {
+          query,
+          timestamp: new Date().toISOString(),
+          results: formattedResults.length
+        };
+        
+        setSearchHistory(prev => {
+          const filtered = prev.filter(item => item.query !== query);
+          return [newSearch, ...filtered].slice(0, 10);
+        });
+        
+        showToast("success", `تم العثور على ${formattedResults.length} نتيجة`);
+        
+        if (formattedResults.length === 1) {
+          handleResultClick(formattedResults[0]);
+        }
+      } else {
+        showToast("warning", "لم يتم العثور على نتائج");
       }
-    } else {
-      showToast("warning", "لم يتم العثور على نتائج");
+      
+      return formattedResults;
+    } catch (error) {
+      console.error("Error searching location:", error);
+      showToast("error", "حدث خطأ في البحث");
+      return [];
+    } finally {
+      setIsSearching(false);
     }
-    
-    return formattedResults;
-  } catch (error) {
-    console.error("Error searching location:", error);
-    showToast("error", "حدث خطأ في البحث");
-    return [];
-  } finally {
-    setIsSearching(false);
-  }
-};
+  };
+
   // Handle search
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -641,23 +689,22 @@ const searchLocation = async (query) => {
   };
 
   // Handle search result click
-const handleResultClick = (location) => {
-  setSelectedLocation(location);
-  setSearchQuery(location.name);
-  setIsSearching(false);
-  
-  // Show different messages based on location type
-  let message = `تم التوجه إلى ${location.name}`;
-  if (location.type === "دولة") {
-    message = `تم التوجه إلى ${location.name} (البلد)`;
-  } else if (location.type === "مدينة") {
-    message = `تم التوجه إلى ${location.name} (المدينة)`;
-  } else if (location.type === "طريق") {
-    message = `تم التوجه إلى ${location.name} (الطريق)`;
-  }
-  
-  showToast("success", message);
-};
+  const handleResultClick = (location) => {
+    setSelectedLocation(location);
+    setSearchQuery(location.name);
+    setIsSearching(false);
+    
+    let message = `تم التوجه إلى ${location.name}`;
+    if (location.type === "دولة") {
+      message = `تم التوجه إلى ${location.name} (البلد)`;
+    } else if (location.type === "مدينة") {
+      message = `تم التوجه إلى ${location.name} (المدينة)`;
+    } else if (location.type === "طريق") {
+      message = `تم التوجه إلى ${location.name} (الطريق)`;
+    }
+    
+    showToast("success", message);
+  };
 
   // Clear search
   const clearSearch = () => {
@@ -679,48 +726,6 @@ const handleResultClick = (location) => {
     setSearchQuery(query);
     await searchLocation(query);
   };
-
-  // Debug: Log the raw response
-  // Debug: Log the raw response
-useEffect(() => {
-  if (roadSignsResponse) {
-    console.log("🚨 RAW ROAD SIGNS RESPONSE:", roadSignsResponse);
-    
-    // Check the structure
-    if (Array.isArray(roadSignsResponse)) {
-      console.log("✅ Response is array, count:", roadSignsResponse.length);
-      console.log("✅ First item structure:", roadSignsResponse[0]);
-      console.log("✅ First item keys:", Object.keys(roadSignsResponse[0]));
-    } else if (roadSignsResponse?.data) {
-      console.log("✅ Response has data property");
-      console.log("✅ Data structure:", roadSignsResponse.data);
-      if (Array.isArray(roadSignsResponse.data)) {
-        console.log("✅ Data is array, count:", roadSignsResponse.data.length);
-        console.log("✅ First item in data:", roadSignsResponse.data[0]);
-      }
-    }
-    
-    // Check coordinates for first few items
-    const sampleItems = Array.isArray(roadSignsResponse) 
-      ? roadSignsResponse.slice(0, 3) 
-      : roadSignsResponse?.data 
-        ? roadSignsResponse.data.slice(0, 3)
-        : [];
-        
-    sampleItems.forEach((item, index) => {
-      console.log(`📍 Item ${index} coordinates check:`, {
-        id: item.id,
-        latitudeX: item.latitudeX,
-        longitudeY: item.longitudeY,
-        lat: item.lat,
-        lng: item.lng,
-        latitude: item.latitude,
-        longitude: item.longitude,
-        allKeys: Object.keys(item)
-      });
-    });
-  }
-}, [roadSignsResponse]);
 
   // Safely extract road signs array from response
   const roadSigns = useMemo(() => {
@@ -745,52 +750,42 @@ useEffect(() => {
     return [];
   }, [roadSignsResponse]);
 
-  // Enhanced coordinate parsing with more field names
-  // Enhanced coordinate parsing with debugging
-const getCoordinates = (roadSign) => {
-  try {
-    console.log("🔍 Checking coordinates for:", roadSign.id, roadSign);
-    
-    // Try all possible coordinate field combinations
-    const coordinateCandidates = [
-      [roadSign.latitudeX, roadSign.longitudeY],
-      [roadSign.lat, roadSign.lng],
-      [roadSign.latitude, roadSign.longitude],
-      [roadSign.x, roadSign.y],
-      [roadSign.coord_x, roadSign.coord_y],
-      [roadSign.location_x, roadSign.location_y],
-      [roadSign.position_lat, roadSign.position_lng],
-      
-      // Try as strings (might be in nested objects)
-      [roadSign.location?.latitude, roadSign.location?.longitude],
-      [roadSign.coordinates?.lat, roadSign.coordinates?.lng],
-      [roadSign.position?.latitude, roadSign.position?.longitude],
-    ];
+  // Enhanced coordinate parsing
+  const getCoordinates = (roadSign) => {
+    try {
+      const coordinateCandidates = [
+        [roadSign.latitudeX, roadSign.longitudeY],
+        [roadSign.lat, roadSign.lng],
+        [roadSign.latitude, roadSign.longitude],
+        [roadSign.x, roadSign.y],
+        [roadSign.coord_x, roadSign.coord_y],
+        [roadSign.location_x, roadSign.location_y],
+        [roadSign.position_lat, roadSign.position_lng],
+        [roadSign.location?.latitude, roadSign.location?.longitude],
+        [roadSign.coordinates?.lat, roadSign.coordinates?.lng],
+        [roadSign.position?.latitude, roadSign.position?.longitude],
+      ];
 
-    for (const [lat, lng] of coordinateCandidates) {
-      if (lat !== undefined && lng !== undefined) {
-        const latNum = parseFloat(lat);
-        const lngNum = parseFloat(lng);
-        
-        console.log(`📍 Found candidate: lat=${lat}, lng=${lng}, parsed: lat=${latNum}, lng=${lngNum}`);
-        
-        if (!isNaN(latNum) && !isNaN(lngNum) && 
-            latNum >= -90 && latNum <= 90 && 
-            lngNum >= -180 && lngNum <= 180) {
-          console.log(`✅ Valid coordinates found for ${roadSign.id}: [${latNum}, ${lngNum}]`);
-          return [latNum, lngNum];
+      for (const [lat, lng] of coordinateCandidates) {
+        if (lat !== undefined && lng !== undefined) {
+          const latNum = parseFloat(lat);
+          const lngNum = parseFloat(lng);
+          
+          if (!isNaN(latNum) && !isNaN(lngNum) && 
+              latNum >= -90 && latNum <= 90 && 
+              lngNum >= -180 && lngNum <= 180) {
+            return [latNum, lngNum];
+          }
         }
       }
-    }
 
-    console.warn(`❌ No valid coordinates found for road sign ${roadSign.id}`);
-    return null;
-    
-  } catch (error) {
-    console.error(`❌ Error parsing coordinates for road sign ${roadSign.id}:`, error);
-    return null;
-  }
-};
+      return null;
+      
+    } catch (error) {
+      console.error(`Error parsing coordinates for road sign ${roadSign.id}:`, error);
+      return null;
+    }
+  };
 
   // Filter road signs based on selection
   const filteredRoadSigns = useMemo(() => {
@@ -812,53 +807,12 @@ const getCoordinates = (roadSign) => {
   // Get road signs with valid coordinates
   const roadSignsWithCoordinates = useMemo(() => {
     const signsWithCoords = filteredRoadSigns.filter(sign => getCoordinates(sign) !== null);
-    console.log("📊 Road signs with coordinates:", signsWithCoords.length, "out of", filteredRoadSigns.length);
     return signsWithCoords;
   }, [filteredRoadSigns]);
-
-  // Get unique cities and regions for filters
-  const cities = useMemo(() => {
-    if (!roadSigns || !Array.isArray(roadSigns)) return [];
-    const uniqueCities = [];
-    const seen = new Set();
-    
-    roadSigns.forEach(sign => {
-      const city = sign.city || sign.city_id;
-      if (city && city.id && !seen.has(city.id)) {
-        seen.add(city.id);
-        uniqueCities.push(city);
-      } else if (typeof city === 'number' && !seen.has(city)) {
-        seen.add(city);
-        uniqueCities.push({ id: city, name: `City ${city}` });
-      }
-    });
-    
-    return uniqueCities;
-  }, [roadSigns]);
-
-  const regions = useMemo(() => {
-    if (!roadSigns || !Array.isArray(roadSigns)) return [];
-    const uniqueRegions = [];
-    const seen = new Set();
-    
-    roadSigns.forEach(sign => {
-      const region = sign.region || sign.region_id;
-      if (region && region.id && !seen.has(region.id)) {
-        seen.add(region.id);
-        uniqueRegions.push(region);
-      } else if (typeof region === 'number' && !seen.has(region)) {
-        seen.add(region);
-        uniqueRegions.push({ id: region, name: `Region ${region}` });
-      }
-    });
-    
-    return uniqueRegions;
-  }, [roadSigns]);
 
   // Handle marker click
   const handleMarkerClick = (roadSignId) => {
     setSelectedRoadSignId(roadSignId);
-    console.log("📍 Marker clicked, fetching details for road sign ID:", roadSignId);
   };
 
   if (isLoading) {
@@ -975,215 +929,277 @@ const getCoordinates = (roadSign) => {
           {searchResults.length > 0 && (
             <div className="mt-4">
               <div className="flex justify-between items-center mb-2">
-                <p className="text-sm text-gray-600">
-                  <span className="font-semibold">{searchResults.length}</span> نتيجة:
-                </p>
-                <button 
-                  onClick={() => setSearchResults([])}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                >
-                  إخفاء النتائج
-                </button>
+                <h3 className="text-sm font-semibold text-gray-700">نتائج البحث:</h3>
+                <span className="text-xs text-gray-500">{searchResults.length} نتيجة</span>
               </div>
-              <div className="max-h-96 overflow-y-auto border rounded-lg divide-y">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
                 {searchResults.map((result) => (
                   <div
                     key={result.id}
-                    className="p-3 hover:bg-blue-50 cursor-pointer transition-colors border-b last:border-b-0"
+                    className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                     onClick={() => handleResultClick(result)}
                   >
                     <div className="flex justify-between items-start">
-                      <div className="text-right flex-1">
-                        <p className="font-medium text-gray-800 text-sm">{result.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{result.fullName}</p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <Badge 
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {result.type}
-                          </Badge>
-                          {result.country && (
-                            <span className="text-xs text-gray-500">🇸🇾 {result.country}</span>
-                          )}
-                          {result.city && (
-                            <span className="text-xs text-gray-500">🏙️ {result.city}</span>
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {result.coords[0].toFixed(4)}°, {result.coords[1].toFixed(4)}°
-                          </span>
-                        </div>
-                      </div>
-                      <div className="ml-3">
-                        <NavigationIcon className="w-4 h-4 text-blue-500" />
-                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {result.type}
+                      </Badge>
+                      <span className="text-xs text-gray-500">
+                        {result.importance.toFixed(2)}
+                      </span>
+                    </div>
+                    <h4 className="font-medium text-sm mt-1 truncate">{result.name}</h4>
+                    <p className="text-xs text-gray-600 truncate">{result.fullName}</p>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">
+                        {result.coords[0].toFixed(4)}, {result.coords[1].toFixed(4)}
+                      </span>
+                      <NavigationIcon className="w-3 h-3 text-blue-500" />
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-2 text-xs text-gray-500 text-center">
-                <p>انقر على أي نتيجة للانتقال إليها على الخريطة</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Filters and Map Container */}
+      <div className="flex flex-col lg:flex-row gap-4">
+    
+
+        {/* Map Container */}
+        <div className={`flex-1 ${showFilters ? 'lg:w-[calc(100%-320px)]' : 'w-full'}`}>
+          {/* Show Filters Button when hidden */}
+          {!showFilters && (
+            <Button
+              variant="outline"
+              className="mb-4"
+              onClick={() => setShowFilters(true)}
+            >
+              <FilterIcon className="w-4 h-4 ml-2" />
+              إظهار الفلاتر
+            </Button>
+          )}
+
+          <div className="relative h-[600px] rounded-lg overflow-hidden border">
+            <MapContainer
+              center={[24.7136, 46.6753]}
+              zoom={10}
+              className="w-full h-full"
+              scrollWheelZoom={true}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+
+              {/* User Location Component */}
+              <UserLocation />
+
+              {/* Map Zoom to Selected Location */}
+              {selectedLocation && <MapZoomToLocation location={selectedLocation} />}
+
+              {/* Road Sign Markers */}
+              {roadSignsWithCoordinates.map((roadSign) => {
+                const coords = getCoordinates(roadSign);
+                if (!coords) return null;
+
+                // Check if this road sign has special dual face case
+                const isSpecialDualFace = checkSpecialDualFaceCase(roadSign, roadSigns);
+                
+                // Get dual face info if available
+                const dualFaceInfo = getDualFaceInfo(roadSign, roadSigns);
+                
+                // Determine marker color based on booking status and special cases
+                let markerColor = "#6b7280"; // Default gray
+                let markerIcon = "🚦"; // Default icon
+                let isBooked = isFaceBooked(roadSign);
+                
+                if (isSpecialDualFace) {
+                  // Special case: one face booked, one available
+                  markerColor = "#f59e0b"; // Amber
+                  markerIcon = "⚡"; // Special icon
+                } else if (isBooked) {
+                  markerColor = "#ef4444"; 
+                 markerIcon = "📍";
+                } else {
+                  markerColor = "#10b981"; 
+                  markerIcon = "📍"; // green pin
+                }
+
+                return (
+                  <Marker
+                    key={roadSign.id}
+                    position={coords}
+                    icon={L.divIcon({
+                      html: `
+                        <div style="
+                          background-color: ${markerColor};
+                          width: 32px;
+                          height: 32px;
+                          border-radius: 50%;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          color: white;
+                          font-size: 16px;
+                          border: 2px solid white;
+                          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                          cursor: pointer;
+                          position: relative;
+                        ">
+                          ${markerIcon}
+                          ${dualFaceInfo ? `
+                            <div style="
+                              position: absolute;
+                              top: -5px;
+                              right: -5px;
+                              background: ${dualFaceInfo.otherFace.isBooked ? '#ef4444' : '#10b981'};
+                              width: 12px;
+                              height: 12px;
+                              border-radius: 50%;
+                              border: 1px solid white;
+                            "></div>
+                          ` : ''}
+                        </div>
+                      `,
+                      iconSize: [32, 32],
+                      iconAnchor: [16, 16],
+                      className: 'road-sign-marker'
+                    })}
+                    eventHandlers={{
+                      click: () => handleMarkerClick(roadSign.id),
+                    }}
+                  >
+                    <Popup
+                      onClose={() => setSelectedRoadSignId(null)}
+                      className="custom-popup"
+                    >
+                      <RoadSignDetails roadSignId={roadSign.id} />
+                      
+                      {/* Dual Face Information */}
+                      {dualFaceInfo && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg border">
+                          <h4 className="font-medium text-sm mb-2 text-center">
+                            معلومات الوجهين
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className={`text-center p-2 rounded ${dualFaceInfo.currentFace.isBooked ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                              <div className="text-xs font-semibold">الوجه الحالي</div>
+                              <div className="text-xs">الاتجاه: {dualFaceInfo.currentFace.direction}</div>
+                              <div className={`text-xs font-bold ${dualFaceInfo.currentFace.isBooked ? 'text-red-600' : 'text-green-600'}`}>
+                                {dualFaceInfo.currentFace.isBooked ? 'محجوز' : 'متاح'}
+                              </div>
+                            </div>
+                            <div className={`text-center p-2 rounded ${dualFaceInfo.otherFace.isBooked ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                              <div className="text-xs font-semibold">الوجه الآخر</div>
+                              <div className="text-xs">الاتجاه: {dualFaceInfo.otherFace.direction}</div>
+                              <div className={`text-xs font-bold ${dualFaceInfo.otherFace.isBooked ? 'text-red-600' : 'text-green-600'}`}>
+                                {dualFaceInfo.otherFace.isBooked ? 'محجوز' : 'متاح'}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {isSpecialDualFace && (
+                            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-center">
+                              <span className="text-xs font-semibold text-amber-700">
+                                ⚡ حالة خاصة: وجه محجوز ووجه متاح
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MapContainer>
+
+            {/* Map Legend */}
+            <div className="absolute bottom-4 left-4 bg-gray-700 p-3 rounded-lg shadow-lg z-[1000] border">
+              <h4 className="font-semibold text-sm mb-2">مفتاح الخريطة</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-green-500"></div>
+                  <span className="text-xs">لوحات متاحة</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                  <span className="text-xs">لوحات محجوزة</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-amber-500"></div>
+                  <span className="text-xs">وجه محجوز ووجه متاح</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                  <span className="text-xs">موقعك الحالي</span>
+                </div>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Map */}
-      <div className="h-96 rounded-lg overflow-hidden border shadow-sm relative">
-        <MapContainer
-          center={[24.7136, 46.6753]}
-          zoom={10}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl={true}
-        >
-          {/* Zoom to searched location */}
-          {selectedLocation && (
-            <MapZoomToLocation location={selectedLocation} />
-          )}
-
-          {/* Tile Layer */}
-          {viewType === "satellite" ? (
-            <TileLayer
-              url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
-              attribution='&copy; <a href="https://maps.google.com">Google</a>'
-              maxZoom={20}
-            />
-          ) : (
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              maxZoom={19}
-            />
-          )}
-
-          {/* User Location */}
-          <UserLocation />
-
-          {/* Road Signs Markers */}
-          {roadSignsWithCoordinates.map((roadSign) => {
-            const coordinates = getCoordinates(roadSign);
-            if (!coordinates) return null;
-
-            const hasActiveBookings = roadSign.bookings && roadSign.bookings.some(booking => {
-              if (!booking.end_date) return false;
-              const endDate = new Date(booking.end_date);
-              const today = new Date();
-              return endDate >= today;
-            });
-
-            const markerColor = hasActiveBookings ? '#dc2626' : '#3388ff';
-
-            const CustomIcon = L.divIcon({
-              className: 'custom-marker',
-              html: `
-                <div style="
-                  background-color: ${markerColor};
-                  width: 25px;
-                  height: 41px;
-                  border-radius: 50% 50% 50% 0;
-                  transform: rotate(-45deg);
-                  position: relative;
-                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                ">
-                  <div style="
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%) rotate(45deg);
-                    color: white;
-                    font-size: 12px;
-                    font-weight: bold;
-                  ">🚸</div>
+            {/* Current Location Display */}
+            <div className="absolute top-4 right-4 bg-white p-2 rounded-lg shadow-lg z-[1000] border">
+              {selectedLocation ? (
+                <div className="text-xs">
+                  <div className="font-semibold">الموقع المحدد:</div>
+                  <div>{selectedLocation.name}</div>
+                  <div className="text-gray-500 text-[10px]">
+                    {selectedLocation.coords[0].toFixed(4)}, {selectedLocation.coords[1].toFixed(4)}
+                  </div>
                 </div>
-              `,
-              iconSize: [25, 41],
-              iconAnchor: [12, 41],
-            });
+              ) : (
+                <div className="text-xs text-gray-500">لم يتم تحديد موقع</div>
+              )}
+            </div>
+          </div>
 
-            return (
-              <Marker
-                key={roadSign.id}
-                position={coordinates}
-                icon={CustomIcon}
-                eventHandlers={{
-                  click: () => handleMarkerClick(roadSign.id)
-                }}
-              >
-                <Popup>
-                  <RoadSignDetails roadSignId={selectedRoadSignId} />
-                </Popup>
-              </Marker>
-            );
-          })}
-        </MapContainer>
+          {/* Road Sign Summary */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">إجمالي اللوحات</p>
+                    <p className="text-2xl font-bold">{roadSigns.length}</p>
+                  </div>
+                  <div className="p-2 bg-blue-100 rounded-full">
+                    <NavigationIcon className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">اللوحات المعروضة</p>
+                    <p className="text-2xl font-bold">{filteredRoadSigns.length}</p>
+                  </div>
+                  <div className="p-2 bg-green-100 rounded-full">
+                    <MapPin className="w-5 h-5 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">بإحداثيات صالحة</p>
+                    <p className="text-2xl font-bold">{roadSignsWithCoordinates.length}</p>
+                  </div>
+                  <div className="p-2 bg-purple-100 rounded-full">
+                    <Ruler className="w-5 h-5 text-purple-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
-
-      {/* Statistics */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-center">
-            <div>
-              <p className="text-2xl font-bold text-blue-600">{roadSignsWithCoordinates.length}</p>
-              <p className="text-sm text-gray-600">اللوحات على الخريطة</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-green-600">
-                {roadSignsWithCoordinates.filter(sign => !sign.bookings || sign.bookings.length === 0).length}
-              </p>
-              <p className="text-sm text-gray-600">اللوحات المتاحة</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-orange-600">
-                {cities.length}
-              </p>
-              <p className="text-sm text-gray-600">عدد المدن</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-purple-600">
-                {regions.length}
-              </p>
-              <p className="text-sm text-gray-600">عدد المناطق</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Legend */}
-      <Card>
-        <CardContent className="p-4">
-          <h4 className="font-semibold mb-2">مفتاح الخريطة:</h4>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
-              <span>موقعك الحالي</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-6 bg-blue-500 rounded-sm transform rotate-45"></div>
-              <span>اللوحات المتاحة</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-6 bg-red-500 rounded-sm transform rotate-45"></div>
-              <span className="text-red-600 font-medium">اللوحات المحجوزة</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-red-500 rounded-full"></div>
-              <span className="text-red-600 font-medium">نتيجة البحث</span>
-            </div>
-          </div>
-          
-          {/* Search Tips */}
-          <div className="mt-4 pt-3 border-t">
-            <h5 className="font-medium text-sm mb-2">نصائح للبحث:</h5>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p>• ابحث بأي لغة: العربية، الإنجليزية، الفرنسية، إلخ</p>
-              <p>• ابحث عن أي دولة: فرنسا، ألمانيا، السعودية، مصر</p>
-              <p>• ابحث عن أي مدينة: حلب، دمشق، ركن الدين، نيويورك</p>
-              <p>• ابحث عن شوارع ومناطق: شارع الحمرا، وسط البلد</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };
