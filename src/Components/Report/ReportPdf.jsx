@@ -1,13 +1,13 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import "../../assets/fonts/Amiri-Regular.js";
+import logo from "../../assets/images/adv_syrian.png"; // Import the logo
 
 export const ReportPdf = ({
   customers,
   from_date,
   to_date,
   globalModelCounts,
-  total_advertising_space_all_customers,
   product,
   selectedCustomer,
   isFilteredByCustomer,
@@ -22,15 +22,32 @@ export const ReportPdf = ({
     doc.setFont("Amiri-Regular", "normal");
 
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 15;
+
+    // Add logo at the top
+    try {
+      // Add the logo image at top left
+      const logoWidth = 40; // Width in mm
+      const logoHeight = 35; // Height in mm
+      const logoX = margin; // Left margin
+      const logoY = margin; // Top margin
+      
+      // Add the logo image
+      doc.addImage(logo, 'PNG', logoX, logoY, logoWidth, logoHeight);
+    } catch (error) {
+      console.error("Error adding logo:", error);
+      // Continue without logo if there's an error
+    }
 
     // Dynamic title based on filter
     const title = isFilteredByCustomer 
       ? "تقرير حجوزات زبون"
       : "تقرير الحجز الأسبوعي";
     
+    // Move title text to the right to accommodate logo
     doc.setFontSize(18);
-    doc.text(title, pageWidth / 2, margin + 5, { align: "center" });
+    doc.text(title, pageWidth / 2, margin + 10, { align: "center" });
 
     doc.setFontSize(10);
     
@@ -45,110 +62,88 @@ export const ReportPdf = ({
     };
     
     // Add customer name if filtered
+    let infoY = margin + 25; // Adjusted for logo
+    
     if (isFilteredByCustomer && selectedCustomer) {
       const customerName = selectedCustomer.company_name || selectedCustomer.full_name || "غير معروف";
       doc.text(
         `الزبون: ${customerName}`,
         pageWidth - margin,
-        margin + 15,
+        infoY,
         { align: "right" }
       );
       doc.text(
         `من تاريخ: ${formatDate(from_date)}`,
         pageWidth - margin,
-        margin + 25,
+        infoY + 5,
         { align: "right" }
       );
       doc.text(
         `إلى تاريخ: ${formatDate(to_date)}`,
         pageWidth - margin,
-        margin + 30,
+        infoY + 10,
         { align: "right" }
       );
+      infoY += 15;
     } else {
       doc.text(
         `من تاريخ: ${formatDate(from_date)}`,
         pageWidth - margin,
-        margin + 15,
+        infoY,
         { align: "right" }
       );
       doc.text(
         `إلى تاريخ: ${formatDate(to_date)}`,
         pageWidth - margin,
-        margin + 20,
+        infoY + 5,
         { align: "right" }
       );
+      infoY += 10;
     }
     
     doc.text(
       `المنتج: ${product || "غير محدد"}`,
       pageWidth - margin,
-      margin + (isFilteredByCustomer ? 35 : 25),
+      infoY,
       { align: "right" }
     );
 
-    let currentY = margin + (isFilteredByCustomer ? 45 : 35);
+    let currentY = infoY + 15;
 
     // Check if there are customers to display
     if (customers && customers.length > 0) {
       customers.forEach((customer, index) => {
-        // Calculate this customer's total advertising space
-        let customerTotalSpace = 0;
-        if (customer.roadSigns && customer.roadSigns.length > 0) {
-          customerTotalSpace = customer.roadSigns.reduce((total, sign) => {
-            const space = parseFloat(sign.total_advertising_space) || 0;
-            return total + space;
-          }, 0);
-        }
-
         // Add new page for each customer after the first one
         if (index > 0) {
           doc.addPage();
-          currentY = margin;
+          // Add logo to new page
+          try {
+            doc.addImage(logo, 'PNG', margin, margin, 40, 15);
+          } catch (error) {
+            console.error("Error adding logo to new page:", error);
+          }
+          currentY = margin + 25;
         }
 
-        // Show customer name and their total
+        // Show customer name
         doc.setFontSize(14);
         const customerName = customer.full_name || customer.company_name || "غير معروف";
         
-        if (isFilteredByCustomer) {
-          // When filtered by customer, show name and total on same line
-          doc.text(
-            `اسم الزبون: ${customerName}`,
-            pageWidth - margin,
-            currentY,
-            { align: "right" }
-          );
-          currentY += 10;
-        } else {
-          // When showing all customers, show name and total separately
-          doc.text(
-            `اسم الزبون: ${customerName}`,
-            pageWidth - margin,
-            currentY,
-            { align: "right" }
-          );
-          currentY += 7;
-          
-          // Show customer-specific total
-          doc.setFontSize(12);
-          doc.text(
-            `إجمالي الأمتار الإعلانية لهذا الزبون: ${customerTotalSpace.toFixed(2)}`,
-            pageWidth - margin,
-            currentY,
-            { align: "right" }
-          );
-          currentY += 10;
-        }
+        doc.text(
+          `اسم الزبون: ${customerName}`,
+          pageWidth - margin,
+          currentY,
+          { align: "right" }
+        );
+        currentY += 10;
 
         // Check if customer has roadSigns
         if (customer.roadSigns && customer.roadSigns.length > 0) {
           const roadSignsHeaders = [
             [
+              "الاتجاه",
               "تاريخ الانتهاء",
               "تاريخ البدء",
-              "عدد الأمتار الإعلانية",
-              "القياس",
               "عدد الأوجه",
               "التموضع",
               "ترميز اللوحة",
@@ -156,10 +151,9 @@ export const ReportPdf = ({
           ];
 
           const roadSignsData = customer.roadSigns.map((sign) => [
+            sign.direction || "-",
             sign.pivot?.end_date ? formatDate(sign.pivot.end_date) : "-",
             sign.pivot?.start_date ? formatDate(sign.pivot.start_date) : "-",
-            sign.total_advertising_space || "0.00",
-            sign.template?.advertising_space || "غير معروف",
             sign.pivot?.booking_faces || "غير معروف",
             sign.place || "غير معروف",
             sign.template?.model || "غير معروف",
@@ -177,6 +171,7 @@ export const ReportPdf = ({
               textColor: [0, 0, 0],
               fontStyle: "normal",
               cellPadding: 2,
+              cellWidth: 'auto',
             },
             headStyles: {
               font: "Amiri-Regular",
@@ -188,17 +183,21 @@ export const ReportPdf = ({
               cellPadding: 3,
             },
             columnStyles: {
-              0: { cellWidth: 20 }, // End date
-              1: { cellWidth: 20 }, // Start date
-              2: { cellWidth: 25 }, // Advertising space
-              3: { cellWidth: 20 }, // Measurement
-              4: { cellWidth: 20 }, // Faces count
-              5: { cellWidth: 50 }, // Place
-              6: { cellWidth: 25 }, // Model
+              0: { cellWidth: 50 }, // الاتجاه - Wider for text
+              1: { cellWidth: 25 }, // End date
+              2: { cellWidth: 25 }, // Start date
+              3: { cellWidth: 25 }, // Faces count
+              4: { cellWidth: 40 }, // Place
+              5: { cellWidth: 30 }, // Model
             },
             didParseCell: (data) => {
               data.cell.styles.font = "Amiri-Regular";
               data.cell.styles.fontStyle = "normal";
+              // Word wrap for الاتجاه column
+              if (data.column.index === 0 && data.cell.raw && data.cell.raw.length > 30) {
+                data.cell.styles.fontSize = 8;
+                data.cell.styles.cellWidth = 60;
+              }
             },
             didDrawCell: (data) => {
               if (data.section === "head") {
@@ -208,18 +207,6 @@ export const ReportPdf = ({
             },
           });
           currentY = doc.lastAutoTable.finalY + 10;
-          
-          // When filtered by single customer, show their total at the end
-          if (isFilteredByCustomer) {
-            doc.setFontSize(12);
-            doc.text(
-              `إجمالي الأمتار الإعلانية للزبون: ${customerTotalSpace.toFixed(2)}`,
-              pageWidth - margin,
-              currentY,
-              { align: "right" }
-            );
-            currentY += 10;
-          }
         } else {
           doc.setFontSize(12);
           doc.text("لا توجد لوحات إعلانية لهذا الزبون", pageWidth - margin, currentY, { align: "right" });
@@ -238,7 +225,14 @@ export const ReportPdf = ({
     // Add model summary section if not filtered by customer
     if (!isFilteredByCustomer && globalModelCounts && globalModelCounts.length > 0) {
       doc.addPage();
-      currentY = margin;
+      // Add logo to summary page
+      try {
+        doc.addImage(logo, 'PNG', margin, margin, 40, 15);
+      } catch (error) {
+        console.error("Error adding logo to summary page:", error);
+      }
+      currentY = margin + 25;
+      
       doc.setFontSize(16);
       doc.text("ملخص النماذج", pageWidth / 2, currentY, { align: "center" });
       currentY += 10;
@@ -287,19 +281,20 @@ export const ReportPdf = ({
           }
         },
       });
-      currentY = doc.lastAutoTable.finalY + 10;
-      
-      // Show global total when viewing all customers
-      if (total_advertising_space_all_customers) {
-        doc.setFontSize(12);
-        doc.text(
-          `إجمالي الأمتار الإعلانية لجميع الزبائن: ${total_advertising_space_all_customers || "0.00"}`,
-          pageWidth - margin,
-          currentY,
-          { align: "right" }
-        );
-      }
     }
+
+    // Add footer with company name on all pages
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text("شركة الإعلانات السورية", pageWidth / 2, pageHeight - 10, { align: "center" });
+      doc.text(`الصفحة ${i} من ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: "right" });
+    }
+
+    // Reset text color
+    doc.setTextColor(0, 0, 0);
 
     // Dynamic filename based on filter
     const fileName = isFilteredByCustomer && selectedCustomer

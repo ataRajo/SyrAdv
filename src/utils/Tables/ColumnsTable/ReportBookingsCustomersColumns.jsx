@@ -34,6 +34,11 @@ const ReportBookingsCustomersColumns = [
     accessor: "total_advertising_space",
     cellClassName: "text-center",
   }, 
+    {
+    header: "الاتجاه",
+    accessor: "direction", // This should work now
+    cellClassName: "text-center",
+  },
 ];
 
 export { ReportBookingsCustomersColumns }; 

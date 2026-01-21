@@ -6,12 +6,24 @@ import { useGetOneBookingsQuery } from "../../RtkQuery/Slice/Booking/BookingApi"
 import { styles } from "./ContractStyle";
 import DOMPurify from "dompurify";
 
-// Define booking type mappings (same as in your BookingColumns)
 const BookingType = {
-  1: "مؤقت",  // Temporary
-  2: "دائم",  // Permanent
-  // Add other types if they exist
+  1: "مؤقت",  
+  2: "دائم",  
 };
+
+
+const getBase64FromUrl = (url) => {
+  return fetch(url)
+    .then(res => res.blob())
+    .then(blob => new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    }));
+};
+
+
+
 
 const ContractPage = () => {
   const contentRef = useRef(null);
@@ -19,12 +31,56 @@ const ContractPage = () => {
 
   const { data: getBooking, isSuccess, isLoading, error } = useGetOneBookingsQuery(bookingId);
 
-  // ✅ 1. CALCULATE PRINTING TOTAL PRICE
+  // ✅ 1. GROUP SIMILAR ROADSIGNS
+  const groupedRoadsigns = useMemo(() => {
+    if (!getBooking?.roadsigns) return [];
+
+    const groups = {};
+    
+    getBooking.roadsigns.forEach(roadsign => {
+      // Create a unique key based on grouping criteria
+      const key = [
+        roadsign.template?.model || "غير محدد",
+        roadsign.template?.type || "غير محدد",
+        roadsign?.place || "غير محدد",
+        roadsign?.directions || "غير محدد",
+        roadsign?.pivot?.days_of_reservation || "غير محدد"
+      ].join("|");
+
+      if (!groups[key]) {
+        groups[key] = {
+          template_model: roadsign.template?.model,
+          template_type: roadsign.template?.type,
+          place: roadsign?.place,
+          directions: roadsign?.directions,
+          days_of_reservation: roadsign?.pivot?.days_of_reservation,
+          booking_faces: roadsign?.pivot?.booking_faces || 0,
+          total_faces_price: roadsign?.pivot?.total_faces_price || 0,
+          count: 1,
+          items: [roadsign],
+          // Get region from the first item in the group
+          region_name: roadsign?.region?.name || "غير محدد"
+        };
+      } else {
+        // Add to existing group
+        groups[key].booking_faces += roadsign?.pivot?.booking_faces || 0;
+        groups[key].total_faces_price += roadsign?.pivot?.total_faces_price || 0;
+        groups[key].count += 1;
+        groups[key].items.push(roadsign);
+      }
+    });
+
+    // Convert to array
+    return Object.values(groups);
+  }, [getBooking]);
+
+  // ✅ 2. CALCULATE PRINTING TOTAL PRICE
   const printingTotalPrice = useMemo(() => {
     if (!getBooking?.printing?.price || !getBooking?.total_printing_space) return 0;
     return getBooking.printing.price * getBooking.total_printing_space;
   }, [getBooking]);
 
+  // ✅ 3. CALCULATE ADVERTISING PERIODS
   const calculateAdvertisingPeriods = useMemo(() => {
     if (!getBooking) return 1;
     
@@ -32,7 +88,6 @@ const ContractPage = () => {
     const roadsigns = getBooking.roadsigns || [];
     
     if (bookingType === 1) { // Temporary
-      // For temporary: Each roadsign has its own periods (booking_faces)
       let totalPeriods = 0;
       roadsigns.forEach(roadsign => {
         const periods = roadsign.pivot?.booking_faces || 1;
@@ -40,12 +95,11 @@ const ContractPage = () => {
       });
       return totalPeriods;
     } else { // Permanent
-      // For permanent: Use units field
       return getBooking.units || 1;
     }
   }, [getBooking]);
 
-  // ✅ 3. FORMAT PERIOD TEXT WITH CORRECT GRAMMAR
+  // ✅ 4. FORMAT PERIOD TEXT
   const periodText = useMemo(() => {
     const periods = calculateAdvertisingPeriods;
     if (periods === 1) return "1 فترة إعلانية";
@@ -54,26 +108,13 @@ const ContractPage = () => {
     return `${periods} فترة إعلانية`;
   }, [calculateAdvertisingPeriods]);
 
-  // ✅ 4. FORMAT PERIOD NUMBER ONLY (for table headers)
-  const periodNumberText = useMemo(() => {
-    const periods = calculateAdvertisingPeriods;
-    return `${periods}`;
-  }, [calculateAdvertisingPeriods]);
-
-  // Debug logs to verify calculations
+  // Debug logs
   console.log("📊 CONTRACT CALCULATIONS:");
-  console.log("Booking Data:", getBooking);
-  console.log("Booking Type:", getBooking?.type, "(", BookingType[getBooking?.type] || "غير محدد", ")");
-  console.log("Original Units:", getBooking?.units);
-  console.log("Calculated Advertising Periods:", calculateAdvertisingPeriods);
-  console.log("Period Text:", periodText);
-  console.log("Printing Price per unit:", getBooking?.printing?.price);
-  console.log("Total Printing Space:", getBooking?.total_printing_space);
-  console.log("Printing Total Price:", printingTotalPrice);
-  console.log("Total Price Before Discount:", getBooking?.total_price_befor_discount);
-  console.log("Total Price:", getBooking?.total_price);
+  console.log("Original roadsigns count:", getBooking?.roadsigns?.length);
+  console.log("Grouped roadsigns count:", groupedRoadsigns.length);
+  console.log("Grouped roadsigns:", groupedRoadsigns);
 
-  // Prepare contract details for display.
+  // Prepare contract details
   const contractDetails = {
     firstParty: {
       name: getBooking?.user?.full_name || "غير محدد",
@@ -97,10 +138,83 @@ const ContractPage = () => {
     },
   };
 
-  // Determine booking type with numeric check
+  // Determine booking type
   const bookingType = getBooking?.type;
-  const isTemporaryBooking = bookingType === 1; // Check for numeric 1
+  const isTemporaryBooking = bookingType === 1;
   const bookingTypeText = BookingType[bookingType] || "غير محدد";
+
+const generateWord = async () => {
+  const element = contentRef.current;
+  if (!element) {
+    console.error("No content element found");
+    return;
+  }
+
+  // Convert logo to base64 so Word can display it
+  const logoBase64 = await getBase64FromUrl(logo);
+
+  // Clone content
+  const contentClone = element.cloneNode(true);
+
+  // Remove export buttons
+  const exportButtons = contentClone.querySelectorAll("button[id*='export-button']");
+  exportButtons.forEach(button => button.remove());
+
+  // Replace all images with embedded base64
+  contentClone.querySelectorAll("img").forEach(img => {
+    img.src = logoBase64;
+  });
+
+  const htmlContent = contentClone.innerHTML;
+
+  const fullHtml = `
+  <!DOCTYPE html>
+  <html dir="rtl" lang="ar">
+  <head>
+    <meta charset="UTF-8">
+    <title>عقد إعلاني ${bookingTypeText}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        direction: rtl;
+        text-align: right;
+        margin: 40px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th, td {
+        border: 1px solid #000;
+        padding: 6px;
+        text-align: center;
+      }
+      img {
+        max-width: 120px;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    ${htmlContent}
+  </body>
+  </html>
+  `;
+
+  const blob = new Blob([fullHtml], { type: "application/msword" });
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `عقد_إعلاني_${bookingTypeText}_${new Date().toISOString().slice(0, 10)}.doc`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+
+  console.log("Word document generated with embedded images!");
+};
 
   const generatePdf = () => {
     const element = contentRef.current;
@@ -128,10 +242,11 @@ const ContractPage = () => {
           );
         },
         onclone: (document) => {
-          const button = document.getElementById("pdf-export-button");
-          if (button) {
+          // Hide all export buttons during PDF generation
+          const exportButtons = document.querySelectorAll("button[id*='export-button']");
+          exportButtons.forEach(button => {
             button.style.display = "none";
-          }
+          });
         },
       },
       jsPDF: {
@@ -179,7 +294,7 @@ const ContractPage = () => {
     return <div className="text-center mt-5">لا توجد بيانات للعقد</div>;
   }
 
-  // ✅ COMMON TABLE ROWS FOR BOTH CONTRACT TYPES
+  // ✅ COMMON TABLE ROWS
   const CommonTableRows = () => (
     <>
       <tr>
@@ -189,7 +304,6 @@ const ContractPage = () => {
         <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
       </tr>
       
-      {/* ✅ UPDATED: Show total printing price with calculation details */}
       {getBooking?.printing?.price && getBooking?.total_printing_space && (
         <tr>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
@@ -202,8 +316,7 @@ const ContractPage = () => {
       {getBooking?.value && (
         <tr>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-            الحسم
- المقدم من الشركة السورية   
+            الحسم المقدم من الشركة السورية   
           </th>
           <td style={styles.adTableThTd}>
             {getBooking.discount_type === 1 ? (
@@ -217,14 +330,14 @@ const ContractPage = () => {
       
       <tr>
         <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-القيمة الكلية للعقد
+          القيمة الكلية للعقد
         </th>
         <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
       </tr>
     </>
   );
 
-  // ✅ COMMON PRINTING INFO FOR BOTH CONTRACT TYPES
+  // ✅ COMMON PRINTING INFO
   const CommonPrintingInfo = () => (
     <div style={{ margin: "20px 0" }}>
       <strong>
@@ -245,7 +358,6 @@ const ContractPage = () => {
         إجمالي الأمتار الطباعية : {getBooking?.total_printing_space} م²
       </div>
       
-      {/* ✅ UPDATED: Show printing price calculation details */}
       {getBooking?.printing?.price && getBooking?.total_printing_space && (
         <div style={{ marginTop: "10px", padding: "8px", backgroundColor: "#f0f8ff", border: "1px solid #d1e7ff" }}>
           <small>
@@ -255,6 +367,69 @@ const ContractPage = () => {
         </div>
       )}
     </div>
+  );
+
+  // ✅ COMMON TABLE ROW FOR GROUPED ROADSIGNS - UPDATED TO INCLUDE REGION
+  const GroupedRoadsignsTable = () => (
+    <table style={styles.adTable}>
+      <thead>
+        <tr>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>النموذج</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>النوع</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>المنطقة</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>مكان التموضع</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>الإتجاه</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>عدد الأوجه</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>المدة الإعلانية (بالايام)</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>السعر الإفرادي</th>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>العدد</th>
+        </tr>
+      </thead>
+      <tbody>
+        {groupedRoadsigns.map((group, index) => (
+          <tr key={index}>
+            <td style={styles.adTableThTd}>{group.template_model}</td>
+            <td style={styles.adTableThTd}>{group.template_type}</td>
+            <td style={styles.adTableThTd}>
+              {group.region_name}
+              {/* You can also show city if needed:
+              {group.items[0]?.city?.name && ` - ${group.items[0].city.name}`}
+              */}
+            </td>
+            <td style={styles.adTableThTd}>{group.place}</td>
+            <td style={styles.adTableThTd}>{group.directions}</td>
+            <td style={styles.adTableThTd}>
+              {group.booking_faces} وجه اعلاني
+              {group.count > 1 && (
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  ({group.booking_faces / group.count} لكل لوحة)
+                </div>
+              )}
+            </td>
+            <td style={styles.adTableThTd}>{group.days_of_reservation} يوم</td>
+            <td style={styles.adTableThTd}>
+              {group.total_faces_price} $
+              {group.count > 1 && (
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  ({group.total_faces_price / group.count}$ لكل لوحة)
+                </div>
+              )}
+            </td>
+            <td style={styles.adTableThTd}>
+              <div style={{ 
+                backgroundColor: group.count > 1 ? '#e8f5e9' : '#f5f5f5',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontWeight: group.count > 1 ? 'bold' : 'normal'
+              }}>
+                {group.count}
+                {group.count > 1 && ' لوحة'}
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 
   // Temporary Contract Component
@@ -299,41 +474,21 @@ const ContractPage = () => {
         <ul style={{ listStyle: "decimal", paddingRight: "20px" }}>
           <li>هذا العقد ساري المفعول للفترة المحددة في الجدول أدناه فقط</li>
           <li> قابل للتمديد بعد انتهاء المدة</li>
-          <li className="text-red-500">لديك 24 ساعة للتأكيد اذا كنت تريد تأكيد هذا الحجز أم لا </li>
+          <li className="text-red-500">لديك 48 ساعة للتأكيد اذا كنت تريد تأكيد هذا الحجز أم لا </li>
         </ul>
       </div>
 
-      {/* Advertising details table */}
+      {/* Advertising details table - NOW GROUPED */}
       <div style={styles.adDetailsSection}>
         <h2 style={styles.adDetailsSectionH2}>
           1- يتم الإعلان المؤقت من خلال اللوحات المبنية بالجدول التالي:
+          {groupedRoadsigns.length !== getBooking?.roadsigns?.length && (
+            <span style={{ fontSize: '14px', color: '#666', marginRight: '10px' }}>
+              (تم تجميع {getBooking?.roadsigns?.length} لوحة في {groupedRoadsigns.length} مجموعة)
+            </span>
+          )}
         </h2>
-        <table style={styles.adTable}>
-          <thead>
-            <tr>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>النموذج</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>النوع</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>مكان التموضع</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>الإتجاه</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>عدد الأوجه</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>المدة الإعلانية (بالايام)</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>السعر الإفرادي</th>
-            </tr>
-          </thead>
-          <tbody>
-            {getBooking?.roadsigns?.map((ad, index) => (
-              <tr key={index}>
-                <td style={styles.adTableThTd}>{ad.template?.model}</td>
-                <td style={styles.adTableThTd}>{ad.template?.type}</td>
-                <td style={styles.adTableThTd}>{ad?.place}</td>
-                <td style={styles.adTableThTd}>{ad?.directions}</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.booking_faces} وجه اعلاني</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.days_of_reservation} يوم</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.total_faces_price} $</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <GroupedRoadsignsTable />
       </div>
 
       {/* Price summary table */}
@@ -429,37 +584,17 @@ const ContractPage = () => {
         </p>
       </div>
 
-      {/* Advertising details table */}
+      {/* Advertising details table - NOW GROUPED */}
       <div style={styles.adDetailsSection}>
         <h2 style={styles.adDetailsSectionH2}>
           1- يتم الإعلان من خلال اللوحات المبنية بالجدول التالي:
+          {groupedRoadsigns.length !== getBooking?.roadsigns?.length && (
+            <span style={{ fontSize: '14px', color: '#666', marginRight: '10px' }}>
+              (تم تجميع {getBooking?.roadsigns?.length} لوحة في {groupedRoadsigns.length} مجموعة)
+            </span>
+          )}
         </h2>
-        <table style={styles.adTable}>
-          <thead>
-            <tr>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>النموذج</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>النوع</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>مكان التموضع</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>الإتجاه</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>عدد الأوجه</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>المدة الإعلانية (بالايام)</th>
-              <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>السعر الإفرادي</th>
-            </tr>
-          </thead>
-          <tbody>
-            {getBooking?.roadsigns?.map((ad, index) => (
-              <tr key={index}>
-                <td style={styles.adTableThTd}>{ad.template?.model}</td>
-                <td style={styles.adTableThTd}>{ad.template?.type}</td>
-                <td style={styles.adTableThTd}>{ad?.place}</td>
-                <td style={styles.adTableThTd}>{ad?.directions}</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.booking_faces} وجه اعلاني</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.days_of_reservation} يوم</td>
-                <td style={styles.adTableThTd}>{ad?.pivot.total_faces_price} $</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <GroupedRoadsignsTable />
       </div>
 
       {/* Price summary table */}
@@ -527,9 +662,56 @@ const ContractPage = () => {
 
   return (
     <div style={styles.contractPageContainer}>
-      <button id="pdf-export-button" style={styles.pdfExportButton} onClick={generatePdf}>
-        تصدير إلى PDF ({bookingTypeText})
-      </button>
+      {/* Export Buttons positioned absolutely */}
+      <div style={{
+        position: "absolute",
+        top: "10px",
+        right: "10px",
+        display: "flex",
+        gap: "10px",
+        zIndex: 100
+      }}>
+        <button 
+          id="pdf-export-button" 
+          style={{
+            ...styles.pdfExportButton,
+            backgroundColor: "#007bff",
+            right: "auto",
+            position: "relative",
+            top: "auto",
+            margin: 0
+          }} 
+          onClick={generatePdf}
+        >
+          تصدير إلى PDF ({bookingTypeText})
+          {groupedRoadsigns.length !== getBooking?.roadsigns?.length && (
+            <span style={{ fontSize: '12px', marginRight: '5px' }}>
+              (مجمعة: {groupedRoadsigns.length} من أصل {getBooking?.roadsigns?.length})
+            </span>
+          )}
+        </button>
+        
+        <button 
+          id="word-export-button" 
+          style={{
+            ...styles.pdfExportButton,
+            backgroundColor: "#28a745",
+            borderColor: "#218838",
+            right: "auto",
+            position: "relative",
+            top: "auto",
+            margin: 0
+          }} 
+          onClick={generateWord}
+        >
+          تصدير إلى Word ({bookingTypeText})
+          {groupedRoadsigns.length !== getBooking?.roadsigns?.length && (
+            <span style={{ fontSize: '12px', marginRight: '5px' }}>
+              (مجمعة: {groupedRoadsigns.length} من أصل {getBooking?.roadsigns?.length})
+            </span>
+          )}
+        </button>
+      </div>
 
       {isTemporaryBooking ? <TemporaryContract /> : <PermanentContract />}
     </div>

@@ -1,12 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react";
-
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import {
   useConfirmOnePaymentMutation,
   useDeletePaymentMutation,
   useGetPaymentsQuery,
   useGetTotalPaymentAndRemainingQuery,
 } from "../RtkQuery/Slice/Payments/PaymentsApi";
-
 import { showToast } from "../utils/Notifictions/showToast";
 import { Permissions } from "../Static/StaticData";
 
@@ -29,13 +27,13 @@ const useMangePayments = () => {
   const [confirmPayment, { isLoading: isLoadingConfirm }] =
     useConfirmOnePaymentMutation();
   const [selectedPayment, setSelectedPayment] = useState(null);
-  const { data: payments, isFetching: isFetchingPayments } =
+  const { data: payments = [], isFetching: isFetchingPayments } =
     useGetPaymentsQuery();
   const {
-    data: paymentIsNotReceived,
+    data: paymentIsNotReceived = [],
     isFetching: isFetchingPaymentsNotReceived,
   } = useGetPaymentsQuery({ is_received: false });
-  const { data: paymentIsReceived, isFetching: isFetchingPaymentsReceived } =
+  const { data: paymentIsReceived = [], isFetching: isFetchingPaymentsReceived } =
     useGetPaymentsQuery({ is_received: true });
   const [deletePayment, { isLoading: isLoadingDelete }] =
     useDeletePaymentMutation();
@@ -45,10 +43,134 @@ const useMangePayments = () => {
     {
       from_date: fromDate,
       to_date: toDate,
-      user_id: selectedUser, // Add user filter
-      customer_id: selectedCustomer, // Add customer filter
+      user_id: selectedUser,
+      customer_id: selectedCustomer,
     }
   );
+
+  // ✅ دالة يمكن إعادة استخدامها لحساب إشعارات أي مجموعة من الدفعات
+  const calculateBookingNotifications = useCallback((paymentData) => {
+    if (!paymentData || !paymentData.length) {
+      return {
+        totalBookings: 0,
+        pendingBookings: 0,
+        overdueBookings: 0,
+        completedBookings: 0,
+        bookingsMap: {},
+        pendingBookingsList: [],
+        completedBookingsList: [],
+        overdueBookingsList: []
+      };
+    }
+    
+    // تجميع الدفعات حسب الحجز (booking_id)
+    const bookingsMap = {};
+    
+    // أولاً: تجميع كل الدفعات حسب الحجز
+    paymentData.forEach(payment => {
+      const bookingId = payment.booking_id;
+      if (!bookingsMap[bookingId]) {
+        bookingsMap[bookingId] = {
+          bookingId: bookingId,
+          customerId: payment.customer_id,
+          customerName: payment.customer?.company_name || payment.customer?.full_name || 'غير معروف',
+          totalAmount: 0,
+          totalPaid: 0,
+          totalRemaining: 0,
+          payments: [],
+          lastPaymentDate: null,
+          isCompleted: false
+        };
+      }
+      
+      const booking = bookingsMap[bookingId];
+      const paymentAmount = parseFloat(payment.total) || 0;
+      const paymentPaid = parseFloat(payment.paid) || 0;
+      const paymentRemaining = parseFloat(payment.remaining) || 0;
+      
+      booking.totalAmount += paymentAmount;
+      booking.totalPaid += paymentPaid;
+      booking.totalRemaining += paymentRemaining;
+      booking.payments.push({
+        id: payment.id,
+        amount: paymentAmount,
+        paid: paymentPaid,
+        remaining: paymentRemaining,
+        date: payment.date,
+        status: payment.status
+      });
+      
+      // تحديث آخر تاريخ دفع
+      if (payment.date) {
+        const paymentDate = new Date(payment.date);
+        if (!booking.lastPaymentDate || paymentDate > booking.lastPaymentDate) {
+          booking.lastPaymentDate = paymentDate;
+        }
+      }
+    });
+    
+    // ثانياً: حساب الحجوزات التي لا تزال باقية (المجموع الكلي > 0)
+    const pendingBookingsList = [];
+    const completedBookingsList = [];
+    
+    Object.values(bookingsMap).forEach(booking => {
+      // تحديد إذا كان الحجز مكتملاً أم لا
+      booking.isCompleted = booking.totalRemaining <= 0;
+      
+      if (!booking.isCompleted) {
+        pendingBookingsList.push(booking);
+      } else {
+        completedBookingsList.push(booking);
+      }
+    });
+    
+    const pendingBookingsCount = pendingBookingsList.length;
+    
+    // ثالثاً: حساب الحجوزات المتأخرة
+    const overdueBookingsList = pendingBookingsList.filter(booking => {
+      if (!booking.lastPaymentDate) return false;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const paymentDate = new Date(booking.lastPaymentDate);
+      paymentDate.setHours(0, 0, 0, 0);
+      
+      // إذا كان آخر دفعة منذ أكثر من 3 أيام، تعتبر متأخرة
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(today.getDate() - 3);
+      return paymentDate < threeDaysAgo;
+    });
+    
+    const overdueBookingsCount = overdueBookingsList.length;
+    
+    return {
+      totalBookings: Object.keys(bookingsMap).length,
+      pendingBookings: pendingBookingsCount,
+      overdueBookings: overdueBookingsCount,
+      completedBookings: completedBookingsList.length,
+      bookingsMap,
+      pendingBookingsList,
+      completedBookingsList,
+      overdueBookingsList
+    };
+  }, []);
+
+  // ✅ حساب الإشعارات للبيانات غير المستلمة (للتخزين في localStorage)
+  const allNotifications = useMemo(() => {
+    return calculateBookingNotifications(paymentIsNotReceived);
+  }, [paymentIsNotReceived, calculateBookingNotifications]);
+
+  // ✅ تخزين الإشعارات الكاملة في localStorage
+  useEffect(() => {
+    if (paymentIsNotReceived.length === 0) {
+      localStorage.setItem('paymentsNotificationCount', '0');
+      localStorage.setItem('paymentsOverdueCount', '0');
+      return;
+    }
+
+    localStorage.setItem('paymentsNotificationCount', allNotifications.pendingBookings.toString());
+    localStorage.setItem('paymentsOverdueCount', allNotifications.overdueBookings.toString());
+  }, [allNotifications, paymentIsNotReceived]);
 
   const onShow = useCallback((row) => {
     setSelectedPayment(row);
@@ -114,7 +236,7 @@ const useMangePayments = () => {
   ];
 
   return {
-    data , 
+    data, 
     openAdd,
     setOpenAdd,
     openViewImage,
@@ -153,12 +275,14 @@ const useMangePayments = () => {
     setFromDate,
     toDate,
     setToDate,
-    // Add the new filter states and functions
     selectedUser,
     setSelectedUser,
     selectedCustomer,
     setSelectedCustomer,
     isFetchingBox,
+    // إرجاع دالة حساب الإشعارات والبيانات
+    calculateBookingNotifications, // ✅ أضف هذه الدالة
+    allNotifications, // ✅ إشعارات جميع البيانات
   };
 };
 

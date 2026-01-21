@@ -89,8 +89,63 @@ export const RegionsCityContextApi = ({ children }) => {
       }
     } catch (error) {
         showToast("error", `${error.data.message}`);
-
     }
+  };
+
+  // Reset functions
+  const resetCityForm = () => {
+    setCityForm({ name: "", is_active: 1 });
+    setEditCityId(null);
+  };
+
+  const resetRegionForm = () => {
+    setRegionForm({ name: "", city_id: "", is_active: 1 });
+    setEditRegionId(null);
+  };
+
+  // Handle opening dialog for add
+  const handleAddCity = () => {
+    resetCityForm();
+    setIsCityDialogOpen(true);
+  };
+
+  const handleAddRegion = () => {
+    resetRegionForm();
+    setIsRegionDialogOpen(true);
+  };
+
+  // Handle opening dialog for edit
+  const handleEditCity = (city) => {
+    setCityForm({ name: city.name, is_active: city.is_active });
+    setEditCityId(city.id);
+    setIsCityDialogOpen(true);
+  };
+
+  const handleEditRegion = (region) => {
+    setRegionForm({
+      name: region.name,
+      city_id: region.city_id,
+      is_active: region.is_active,
+    });
+    setEditRegionId(region.id);
+    setIsRegionDialogOpen(true);
+  };
+
+  // Handle dialog close
+  const handleCityDialogClose = () => {
+    setIsCityDialogOpen(false);
+    // Reset form after animation
+    setTimeout(() => {
+      resetCityForm();
+    }, 300);
+  };
+
+  const handleRegionDialogClose = () => {
+    setIsRegionDialogOpen(false);
+    // Reset form after animation
+    setTimeout(() => {
+      resetRegionForm();
+    }, 300);
   };
 
   // Context value
@@ -133,19 +188,17 @@ export const RegionsCityContextApi = ({ children }) => {
       ),
     handleEdit: (type, item) => {
       if (type === "city") {
-        setCityForm({ name: item.name, is_active: item.is_active });
-        setEditCityId(item.id);
-        setIsCityDialogOpen(true);
+        handleEditCity(item);
       } else {
-        setRegionForm({
-          name: item.name,
-          city_id: item.city_id,
-          is_active: item.is_active,
-        });
-        setEditRegionId(item.id);
-        setIsRegionDialogOpen(true);
+        handleEditRegion(item);
       }
     },
+    handleAddCity,
+    handleAddRegion,
+    handleCityDialogClose,
+    handleRegionDialogClose,
+    resetCityForm,
+    resetRegionForm,
     handleDeleteDialog: (type, id) => {
       setDeleteId(id);
       if (type === "city") {

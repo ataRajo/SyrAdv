@@ -37,7 +37,7 @@ export const BookingSlice = createApi({
       providesTags: (result, error, id) => [{ type: "bookings", id }],
     }),
 
-    // ✅ Update booking (PUT via _method)
+    // ✅ Update booking 
     updateBookings: builder.mutation({
       query: (data) => ({
         url: `bookings/${data.id}`,
@@ -66,7 +66,7 @@ export const BookingSlice = createApi({
       }),
       invalidatesTags: (result, error, { id }) => [
     { type: "bookings", id },
-    { type: "bookings", id: "LIST" }, // 👈 force list refetch
+    { type: "bookings", id: "LIST" }, 
   ],
 }),
 
@@ -85,9 +85,6 @@ export const BookingSlice = createApi({
       }),
       invalidatesTags: [{ type: "bookings", id: "LIST" }],
     }),
-    // ============   ============
-
-
 
     // ✅ Update status (with reject reason if needed)
     

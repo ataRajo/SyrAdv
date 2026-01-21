@@ -19,7 +19,6 @@ import { BASE_URL } from "../../../Api/baseUrl";
 
 const DAYS_PER_PERIOD = 14;
 const EXTRA_DAYS = 2;
-const TOTAL_DAYS_PER_PERIOD = DAYS_PER_PERIOD + EXTRA_DAYS;
 
 const BookingFields = () => {
   const { formik, customers, isLoadingCustomers, bookingData } =
@@ -28,27 +27,30 @@ const BookingFields = () => {
   const [printingTypes, setPrintingTypes] = useState([]);
   const [loadingPrintingTypes, setLoadingPrintingTypes] = useState(false);
   
-  // استخدام Redux query
   const { 
     data: directionsData = [], 
     isLoading: loadingDirections,
     error: directionsError 
   } = useGetRoadSignsDirectionsQuery();
 
-  // ✅ حالة للبحث أثناء الكتابة
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
+  // ✅ FIXED: Match the logic from calculatePeriodsFromDates
   const calculateEndDate = (startDateString, numberOfPeriods) => {
     if (!startDateString) return "";
     const startDate = new Date(startDateString);
-    const totalDays = numberOfPeriods * TOTAL_DAYS_PER_PERIOD;
+    // Formula derived from calculatePeriodsFromDates:
+    // periods = Math.ceil(((days_between + 1) - 2) / 14)
+    // So: days_between = (periods × 14) + 1
+    const totalDays = (numberOfPeriods * DAYS_PER_PERIOD) + 1;
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + totalDays);
     return endDate.toISOString().slice(0, 10);
   };
 
+  // ✅ Keep your original logic
   const calculatePeriodsFromDates = (startDate, endDate) => {
     if (!startDate || !endDate) return 1;
     
@@ -127,7 +129,6 @@ const BookingFields = () => {
     }
   };
 
-  // ✅ تحضير جميع الاتجاهات مع قيمة فارغة لـ "كل الاتجاهات"
   const allDirections = useMemo(() => {
     if (!directionsData || !Array.isArray(directionsData)) {
       return [{ value: "", label: "كل الاتجاهات" }];
@@ -135,7 +136,6 @@ const BookingFields = () => {
     
     const options = [{ value: "", label: "كل الاتجاهات" }];
     
-    // إضافة الاتجاهات الفريدة والمصفاة
     const uniqueDirections = new Set();
     directionsData.forEach((dir) => {
       if (dir && dir.trim() !== "") {
@@ -153,7 +153,6 @@ const BookingFields = () => {
     return options;
   }, [directionsData]);
 
-  // ✅ تصفية الاتجاهات عند الكتابة
   const filteredDirections = useMemo(() => {
     if (searchQuery.trim() === "") {
       return allDirections;
@@ -166,14 +165,12 @@ const BookingFields = () => {
     }
   }, [searchQuery, allDirections]);
 
-  // ✅ عند تغيير القيمة المختارة
   const handleDirectionSelect = (value) => {
     formik.setFieldValue("direction", value === "" ? "" : value);
     setSearchQuery(value || "");
     setShowDropdown(false);
   };
 
-  // ✅ عند الكتابة في حقل البحث
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -187,7 +184,6 @@ const BookingFields = () => {
     setShowDropdown(true);
   };
 
-  // ✅ عند النقر خارج القائمة
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -201,12 +197,10 @@ const BookingFields = () => {
     };
   }, []);
 
-  // ✅ عند التركيز على الحقل
   const handleFocus = () => {
     setShowDropdown(true);
   };
 
-  // ✅ تهيئة قيمة البحث من formik
   useEffect(() => {
     const directionValue = bookingData?.direction || formik.values.direction || "";
     setSearchQuery(directionValue);
@@ -262,7 +256,6 @@ const BookingFields = () => {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {/* الزبون */}
       <div>
         <label className="block text-sm font-medium mb-2">الزبون</label>
         <Select
@@ -290,7 +283,6 @@ const BookingFields = () => {
         </Select>
       </div>
 
-      {/* نوع الحجز */}
       <div>
         <label className="block text-sm font-medium mb-2">نوع الحجز</label>
         <Select
@@ -314,7 +306,6 @@ const BookingFields = () => {
         </Select>
       </div>
 
-      {/* تاريخ البداية */}
       <div>
         <label className="block text-sm font-medium mb-2">تاريخ البداية</label>
         <Input
@@ -327,7 +318,6 @@ const BookingFields = () => {
         />
       </div>
 
-      {/* الدورة (الفترات) */}
       <div>
         <label className="block text-sm font-medium mb-2">
           الدورة (الفترات)
@@ -352,7 +342,6 @@ const BookingFields = () => {
         </div>
       </div>
 
-      {/* تاريخ النهاية الفعلي */}
       <div>
         <label className="block text-sm font-medium mb-2">تاريخ النهاية الفعلي</label>
         <Input
@@ -364,11 +353,10 @@ const BookingFields = () => {
           className="w-full text-right"
         />
         <div className="text-xs text-gray-500 mt-1">
-          يتضمن {EXTRA_DAYS} أيام إضافية لكل فترة
+          يتضمن {EXTRA_DAYS} أيام إضافية ثابتة
         </div>
       </div>
 
-      {/* الاتجاه مع خاصية البحث */}
       <div ref={dropdownRef} className="relative">
         <label className="block text-sm font-medium mb-2">الاتجاه</label>
         
@@ -383,7 +371,6 @@ const BookingFields = () => {
             disabled={loadingDirections}
           />
           
-          {/* Dropdown arrow */}
           <div 
             className="absolute left-3 top-1/2 transform -translate-y-1/2 cursor-pointer"
             onClick={() => setShowDropdown(!showDropdown)}
@@ -396,7 +383,6 @@ const BookingFields = () => {
           </div>
         </div>
         
-        {/* ✅ Dropdown Menu */}
         {showDropdown && filteredDirections.length > 0 && (
           <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
             {filteredDirections.map((option, index) => (
@@ -420,7 +406,6 @@ const BookingFields = () => {
           </div>
         )}
         
-        {/* ✅ No results message */}
         {showDropdown && searchQuery && filteredDirections.length === 1 && filteredDirections[0].value === "" && (
           <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
             <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-right">
@@ -429,14 +414,12 @@ const BookingFields = () => {
           </div>
         )}
         
-        {/* ✅ رسالة الخطأ */}
         {formik.errors.direction && formik.touched.direction && (
           <div className="text-red-500 text-sm mt-1">
             {formik.errors.direction}
           </div>
         )}
         
-        {/* ✅ تلميح الاستخدام */}
         <div className="mt-1 text-xs text-gray-500">
           {loadingDirections ? 'جاري تحميل الاتجاهات...' : 
            searchQuery ? `البحث: "${searchQuery}" - ${filteredDirections.length} نتيجة` : 
@@ -444,7 +427,6 @@ const BookingFields = () => {
         </div>
       </div>
 
-      {/* نوع المنتج */}
       <div>
         <label className="block text-sm font-medium mb-2">نوع المنتج</label>
         <Select
@@ -468,7 +450,6 @@ const BookingFields = () => {
         </Select>
       </div>
 
-      {/* نوع الطباعة */}
       <div>
         <label className="block text-sm font-medium mb-2">نوع الطباعة *</label>
         <Select
@@ -494,7 +475,7 @@ const BookingFields = () => {
             ) : (
               printingTypes.map((printingType) => (
                 <SelectItem key={printingType.id} value={printingType.id.toString()}>
-                  {printingType.type} - {printingType.price?.toLocaleString()} ل.س
+                 $ {printingType.type} - {printingType.price?.toLocaleString()} 
                 </SelectItem>
               ))
             )}

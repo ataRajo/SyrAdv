@@ -1,34 +1,116 @@
 // AdministrationPageLayout.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Bell } from "lucide-react";
+import { Menu, X, Bell, AlertCircle } from "lucide-react";
 import { navLinksAdministrationPage } from "../Static/StaticData";
 import { useAuth } from "../Context/AuthProvider";
 import NotificationsModal from "../Components/NotificationNavBar/NotificationsModal";
-import { useGetOrdersQuery } from "../RtkQuery/Slice/Orders/OrdersApi"; // Add this import
+import { useGetOrdersQuery } from "../RtkQuery/Slice/Orders/OrdersApi";
 
 const AdministrationPageLayout = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { hasPermission } = useAuth();
+  
+  // State for notification counts
+  const [paymentsNotificationCount, setPaymentsNotificationCount] = useState(0);
+  const [paymentsOverdueCount, setPaymentsOverdueCount] = useState(0);
+  const [ordersNotificationCount, setOrdersNotificationCount] = useState(0);
 
-  // Add this query to get real orders data
+  // Get orders data
   const { data: orders = [], isLoading: isLoadingOrders } = useGetOrdersQuery();
 
-  // Calculate active orders count (status = 0)
-  const activeOrdersCount = React.useMemo(() => {
-    if (!orders || !Array.isArray(orders)) return 0;
-    return orders.filter(order => order.status === 0).length;
+  // Calculate orders count
+  useEffect(() => {
+    if (orders && Array.isArray(orders)) {
+      const activeOrders = orders.filter(order => order.status === 0).length;
+      setOrdersNotificationCount(activeOrders);
+      
+      // Store in localStorage if you want to share with other components
+      localStorage.setItem('ordersNotificationCount', activeOrders.toString());
+    }
   }, [orders]);
+
+  // Get payments notification count from localStorage
+  useEffect(() => {
+    const getNotificationCounts = () => {
+      const paymentsCount = localStorage.getItem('paymentsNotificationCount') || '0';
+      const overdueCount = localStorage.getItem('paymentsOverdueCount') || '0';
+      setPaymentsNotificationCount(parseInt(paymentsCount));
+      setPaymentsOverdueCount(parseInt(overdueCount));
+    };
+    
+    // Check initially
+    getNotificationCounts();
+    
+    // Listen for storage changes
+    const handleStorageChange = (e) => {
+      if (e.key === 'paymentsNotificationCount' || e.key === 'paymentsOverdueCount') {
+        getNotificationCounts();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Poll for changes every 2 seconds
+    const interval = setInterval(getNotificationCounts, 2000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   const isActive = (path) => {
     if (path === "") {
       return location.pathname.endsWith("administration-page");
     }
     return location.pathname.includes(path);
+  };
+
+  // Helper function to render notification badge
+  const renderNotificationBadge = (count, overdueCount = 0, isMobile = false) => {
+    if (count <= 0) return null;
+    
+    if (isMobile) {
+      return (
+        <div className="flex items-center gap-1">
+          <span className="bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+            {count}
+          </span>
+          {overdueCount > 0 && (
+            <AlertCircle className="text-amber-500 w-4 h-4" />
+          )}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="absolute -top-2 -right-2 flex flex-col items-center">
+        <div className="relative">
+          {overdueCount > 0 && (
+            <div className="animate-ping absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 opacity-75"></div>
+          )}
+          <span className="bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center relative">
+            {count > 99 ? "99+" : count}
+          </span>
+        </div>
+        {/*
+        
+        {overdueCount > 0 && (
+          <div className="text-[10px] text-amber-600 font-bold mt-0.5">
+            {overdueCount} متأخرة
+          </div>
+        )}
+        */}
+
+
+        
+      </div>
+    );
   };
 
   return (
@@ -57,18 +139,21 @@ const AdministrationPageLayout = () => {
                   asChild
                   variant={isActive(link.to) ? "default" : "ghost"}
                   className={cn(
-                    "justify-start relative",
+                    "justify-start relative min-h-[40px]",
                     !isActive(link.to) &&
                       "text-muted-foreground hover:text-primary"
                   )}
                 >
-                  <Link to={link.to} className="flex items-center gap-2">
+                  <Link to={link.to} className="flex items-center gap-2 px-4">
                     {link.text}
-                    {/* Show order count only for orders link */}
-                    {link.to === "orders" && activeOrdersCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
-                        {activeOrdersCount}
-                      </span>
+                    
+                    {/* Show orders notification badge */}
+                    {link.to === "orders" && renderNotificationBadge(ordersNotificationCount)}
+                    
+                    {/* Show payments notification badge */}
+                    {link.to === "payments" && renderNotificationBadge(
+                      paymentsNotificationCount, 
+                      paymentsOverdueCount
                     )}
                   </Link>
                 </Button>
@@ -76,8 +161,7 @@ const AdministrationPageLayout = () => {
             ))}
 
             {/*
-            
- <div className="relative">
+            <div className="relative">
               <Button
                 variant="ghost"
                 onClick={() => setNotificationsOpen(true)}
@@ -92,10 +176,7 @@ const AdministrationPageLayout = () => {
                 )}
               </Button>
             </div>
-
-            
             */}
-           
           </div>
         </div>
 
@@ -133,13 +214,20 @@ const AdministrationPageLayout = () => {
                   )}
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <Link to={link.to} className="flex items-center justify-between w-full">
+                  <Link to={link.to} className="flex items-center justify-between w-full px-4 py-3">
                     <span>{link.mobileText}</span>
-                    {/* Show order count only for orders link on mobile */}
-                    {link.to === "orders" && activeOrdersCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
-                        {activeOrdersCount}
-                      </span>
+                    
+                    {/* Show notification badges for mobile */}
+                    {link.to === "orders" && renderNotificationBadge(
+                      ordersNotificationCount, 
+                      0, 
+                      true
+                    )}
+                    
+                    {link.to === "payments" && renderNotificationBadge(
+                      paymentsNotificationCount, 
+                      paymentsOverdueCount, 
+                      true
                     )}
                   </Link>
                 </Button>

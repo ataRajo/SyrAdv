@@ -70,30 +70,36 @@ export const PaymentsColumns = [
     cellClassName: "font-medium",
     priority: 1,
   },
+  /*
   {
     header: "المبلغ الكلي",
     accessor: "total",
-    format: (value) => `${parseFloat(value).toFixed(2)}`,
+    format: (value) => `${parseInt(value) || 0}`, 
     className: "text-right min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
     cellClassName: "text-right font-mono",
     priority: 2,
   },
+  */
+
   {
     header: "المبلغ المدفوع",
     accessor: "paid",
-    format: (value) => `${parseFloat(value).toFixed(2)}`,
+    format: (value) => `${parseInt(value) || 0}`, 
     className: "text-right min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
     cellClassName: "text-right font-mono",
     priority: 3,
   },
+  /*
   {
     header: "المبلغ الباقي",
     accessor: "remaining",
-    format: (value) => `${parseFloat(value).toFixed(2)}`,
+    format: (value) => `${parseInt(value) || 0}`, 
     className: "text-right min-w-[100px] sm:min-w-[120px] md:min-w-[150px]",
     cellClassName: "text-right font-mono",
     priority: 4,
   },
+  */
+ 
   {
     header: "التاريخ",
     accessor: "date",
@@ -105,6 +111,6 @@ export const PaymentsColumns = [
     accessor: "status",
     className: "min-w-[140px]",
     priority: 6,
-    cell: ({ row }) => <StatusDropdown payment={row} />, // ✅ safe hook usage
+    cell: ({ row }) => <StatusDropdown payment={row} />, 
   },
 ];

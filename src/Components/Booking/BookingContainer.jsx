@@ -1,4 +1,4 @@
-// BookingContainer.jsx - WITHOUT StatusSelectorWithButton
+// BookingContainer.jsx - UPDATED WITH TEMPORARY BOOKINGS ICON & DETAILS
 import React, { useState, useMemo, useEffect } from "react";
 import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import { BookingColumns } from "../../utils/Tables/ColumnsTable/BookingColumns";
@@ -11,6 +11,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUpdateBookingStatusMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { 
+  useConfirmBookingMutation 
+} from "../../RtkQuery/Slice/Booking/BookingApi";
+
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const approvementStatusMap = {
   "1": "انتظار",
@@ -21,18 +41,15 @@ const approvementStatusMap = {
 
 const bookingStatusMap = {
   1: "نشط",
-  2: "مكتمل", 
+  2: "مكتمل",
   3: "ملغي",
   4: "متوقف مؤقت"
 };
 
-// Create enhanced columns with both status displays
 const EnhancedBookingColumns = [...BookingColumns];
 
-// Find and update the status column to show both statuses
 const statusIndex = EnhancedBookingColumns.findIndex(col => col.accessor === "approvement_status");
 if (statusIndex !== -1) {
-  // Update the existing status cell to show both statuses WITHOUT StatusSelectorWithButton
   EnhancedBookingColumns[statusIndex] = {
     ...EnhancedBookingColumns[statusIndex],
     cell: ({ row }) => (
@@ -87,15 +104,18 @@ const BookingContainer = () => {
     handelCancelBooking,
   } = useGetBookings();
 
-  // ✅ Filter state
+  // ✅ Filter states
   const [statusFilter, setStatusFilter] = useState("");
-  
+  const [archiveFilter, setArchiveFilter] = useState("active");
+  const [customerNameFilter , setCustomerNameFilter] = useState("")
+
   // Pause booking state
   const [pauseStartDate, setPauseStartDate] = useState("");
   const [pauseEndDate, setPauseEndDate] = useState("");
   const [selectedBookingForPause, setSelectedBookingForPause] = useState(null);
   const [pauseDaysAvailable, setPauseDaysAvailable] = useState(0);
   const [pauseValidationError, setPauseValidationError] = useState("");
+  const [confirmBooking, { isLoading: isConfirming }] = useConfirmBookingMutation();
 
   // Status change state
   const [openStatusDialog, setOpenStatusDialog] = useState(false);
@@ -104,9 +124,98 @@ const BookingContainer = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  // Temporary Bookings Dialog state
+  const [openTemporaryDialog, setOpenTemporaryDialog] = useState(false);
+
   // RTK Query mutation for updating booking status
   const [updateBookingStatus] = useUpdateBookingStatusMutation();
 
+  // Calculate counts
+  const temporaryBookingsCount = useMemo(() => {
+    if (!data || !Array.isArray(data)) return 0;
+    return data.filter(booking => booking.type === 1 && booking.is_archived === 0).length;
+  }, [data]);
+
+  const pendingApprovalsCount = useMemo(() => {
+    if (!data || !Array.isArray(data)) return 0;
+    return data.filter(booking => booking.approvement_status === 1 && booking.is_archived === 0).length;
+  }, [data]);
+
+  const pausedBookingsCount = useMemo(() => {
+    if (!data || !Array.isArray(data)) return 0;
+    return data.filter(booking => booking.status === 4 && booking.is_archived === 0).length;
+  }, [data]);
+
+  const archivedBookingsCount = useMemo(() => {
+    if (!data || !Array.isArray(data)) return 0;
+    return data.filter(booking => booking.is_archived === 1).length;
+  }, [data]);
+
+  const activeBookingsCount = useMemo(() => {
+    if (!data || !Array.isArray(data)) return 0;
+    return data.filter(booking => booking.is_archived === 0).length;
+  }, [data]);
+
+  // Get temporary bookings for display
+  const temporaryBookings = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
+    return data.filter(booking => booking.type === 1 && booking.is_archived === 0);
+  }, [data]);
+
+  // Calculate total notifications
+  const totalNotifications = useMemo(() => {
+    return temporaryBookingsCount + pendingApprovalsCount + pausedBookingsCount;
+  }, [temporaryBookingsCount, pendingApprovalsCount, pausedBookingsCount]);
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return "غير محدد";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ar-EG', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  // Calculate remaining days
+  const calculateRemainingDays = (endDate) => {
+    if (!endDate) return 0;
+    const end = new Date(endDate);
+    const today = new Date();
+    const diffTime = end - today;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  // Handle view booking details
+  const handleViewBookingDetails = (bookingId) => {
+    navigate(`/dashboard/booking/${bookingId}`);
+    setOpenTemporaryDialog(false);
+  };
+
+  // Handle edit temporary booking
+  const handleEditBooking = (bookingId) => {
+    navigate(`/dashboard/booking/edit/${bookingId}`);
+    setOpenTemporaryDialog(false);
+  };
+
+  const handleConfirmBooking = async (bookingId) => {
+    if (isConfirming) return;
+    
+    // Optional: Add confirmation dialog
+    const userConfirmed = window.confirm(`هل تريد تأكيد الحجز رقم ${bookingId}؟`);
+    if (!userConfirmed) return;
+    
+    try {
+      await confirmBooking(bookingId).unwrap();
+      toast.success(`تم تأكيد الحجز رقم ${bookingId} بنجاح`);
+      // The table will automatically refresh due to invalidated tags
+    } catch (error) {
+      console.error("Error confirming booking:", error);
+      toast.error(error?.data?.message || "فشل في تأكيد الحجز");
+    }
+  }
+  
   // Calculate pause duration dynamically
   const calculatePauseDuration = () => {
     if (!pauseStartDate || !pauseEndDate) return 0;
@@ -154,10 +263,9 @@ const BookingContainer = () => {
     setOpenStatusDialog(true);
   };
 
-  // ✅ Handle extend booking - FIXED
+  // ✅ Handle extend booking
   const handleExtendBooking = (booking) => {
     console.log("Extend booking clicked:", booking);
-    // Navigate to the extend booking page
     navigate(`/dashboard/booking/extend/${booking.id}`);
   };
 
@@ -245,7 +353,7 @@ const BookingContainer = () => {
       };
       
       console.log("Pausing booking:", pauseData);
-      alert(`تم إيقاف الحجز ${pauseData.bookingId} مؤقتاً من ${pauseData.startDate} إلى ${pauseData.endDate}`);
+      toast.success(`تم إيقاف الحجز ${pauseData.bookingId} مؤقتاً`);
       
       // Reset and close
       setSelectedBookingForPause(null);
@@ -253,6 +361,10 @@ const BookingContainer = () => {
       setPauseValidationError("");
     }
   };
+
+  useEffect(() => {
+    localStorage.setItem('bookingsNotificationCount', totalNotifications.toString());
+  }, [totalNotifications]);
 
   // Handle start date change
   const handlePauseStartDateChange = (e) => {
@@ -268,27 +380,120 @@ const BookingContainer = () => {
     }
   };
 
-  // Handle end date change
   const handlePauseEndDateChange = (e) => {
     setPauseEndDate(e.target.value);
     setPauseValidationError("");
   };
 
-  // ✅ Filtered data
-  const filteredData = useMemo(() => {
-    if (!statusFilter) return data;
-    return data.filter((booking) => String(booking.approvement_status) === statusFilter);
-  }, [data, statusFilter]);
+// ✅ Filtered data with BOTH statusFilter and archiveFilter
+const filteredData = useMemo(() => {
+  if (!data || !Array.isArray(data)) return [];
+  
+  let filtered = [...data];
+  
+  // 1. Apply archive filter
+  if (archiveFilter === "active") {
+    filtered = filtered.filter(booking => booking.is_archived === 0);
+  } else if (archiveFilter === "archived") {
+    filtered = filtered.filter(booking => booking.is_archived === 1);
+  }
+  // "all" option shows both archived and active
+  
+  // 2. Apply status filter (if selected)
+  if (statusFilter) {
+    filtered = filtered.filter((booking) => String(booking.approvement_status) === statusFilter);
+  }
+  
+  // 3. Apply customer name filter (if entered)
+  if (customerNameFilter.trim()) {
+    const searchTerm = customerNameFilter.toLowerCase().trim();
+    filtered = filtered.filter((booking) => {
+      const customer = booking.customer;
+      if (!customer) return false;
+      
+      // Search in both full_name and company_name
+      const fullName = customer.full_name?.toLowerCase() || '';
+      const companyName = customer.company_name?.toLowerCase() || '';
+      const phone = customer.phone_number?.toLowerCase() || '';
+      
+      return fullName.includes(searchTerm) || 
+             companyName.includes(searchTerm) || 
+             phone.includes(searchTerm);
+    });
+  }
+  
+  return filtered;
+}, [data, statusFilter, archiveFilter, customerNameFilter]); // ← Add customerNameFilter to dependencies
 
-  console.log("BookingContainer - Has extend permission:", hasPermission(permissions?.extend));
 
   return (
     <div className="p-4 sm:p-6 w-full mx-auto space-y-6 overflow-x-auto">
-      <div className="flex my-6 px-3 flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Icon icon="mdi:template" className="text-blue-500" />
-          {"الحجوزات"}
-        </h1>
+      {/* HEADER WITH TEMPORARY BOOKINGS ICON */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Icon icon="mdi:template" className="text-blue-500" />
+            {"الحجوزات"}
+          </h1>
+          
+          {temporaryBookingsCount > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setOpenTemporaryDialog(true)}
+                    className="relative group"
+                  >
+                    <div className="relative p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors duration-200">
+                      <Icon 
+                        icon="mdi:clock-outline" 
+                        className="w-6 h-6 text-amber-600 dark:text-amber-400"
+                      />
+                      <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold shadow-lg group-hover:bg-amber-600 transition-colors duration-200">
+                        {temporaryBookingsCount}
+                      </div>
+                    </div>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-amber-50 dark:bg-amber-900 border-amber-200 dark:border-amber-800">
+                  <p className="text-amber-800 dark:text-amber-300 font-medium">
+                    {temporaryBookingsCount} حجز مؤقت
+                  </p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    انقر لعرض التفاصيل
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* TOTAL NOTIFICATIONS BELL */}
+          {totalNotifications > 0 && archiveFilter === "active" && temporaryBookingsCount === 0 && (
+            <div className="relative">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                      <Icon 
+                        icon="mdi:bell" 
+                        className="w-6 h-6 text-red-500 dark:text-red-400"
+                      />
+                      <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {totalNotifications}
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-800">
+                    <p className="text-red-800 dark:text-red-300 font-medium">
+                      {totalNotifications} إشعار
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+        </div>
+        
         {hasPermission(Permissions.CreateBookings) && (
           <Button
             onClick={() => navigate("/dashboard/booking/add")}
@@ -300,62 +505,160 @@ const BookingContainer = () => {
         )}
       </div>
 
-      {/* ✅ Filter dropdown */}
-      <div className="flex items-center gap-2 mb-4">
-        <label className="font-medium dark:text-gray-300">تصفية حسب حالة الموافقة:</label>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="border dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded px-2 py-1 text-gray-600 dark:text-gray-300 font-semibold outline-none cursor-pointer"
-        >
-          <option value="">الكل</option>
-          {Object.entries(approvementStatusMap).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
+{/* Customer Name Filter */}
+<div className="flex items-center gap-2">
+  <label className="font-medium dark:text-gray-300">اسم العميل:</label>
+  <div className="relative w-48">
+    <Input
+      type="text"
+      placeholder="ابحث باسم العميل..."
+      value={customerNameFilter}
+      onChange={(e) => setCustomerNameFilter(e.target.value)}
+      className="pr-8"
+    />
+   {customerNameFilter && (
+  <div className="flex items-center gap-2 mt-2">
+    <Icon icon="mdi:account" className="text-purple-500" />
+    <span className="text-sm text-purple-600 dark:text-purple-400">
+      تصفية حسب العميل: "{customerNameFilter}"
+    </span>
+    <button
+      onClick={() => setCustomerNameFilter("")}
+      className="text-purple-400 hover:text-purple-600"
+    >
+      <Icon icon="mdi:close" className="w-4 h-4" />
+    </button>
+  </div>
+)}
+  </div>
+</div>
 
-      {/* Status Filter Legend */}
-      <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <h4 className="font-semibold mb-2 dark:text-gray-300">دلالات الألوان:</h4>
-        <div className="flex flex-wrap gap-3">
+
+      {/* ✅ FILTERS SECTION */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        {/* Archive Filter */}
+        <div className="flex items-center gap-2">
+          <label className="font-medium dark:text-gray-300">تصفية حسب:</label>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            <span className="text-sm dark:text-gray-300">نشط / موافقة</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-            <span className="text-sm dark:text-gray-300">مكتمل</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <span className="text-sm dark:text-gray-300">ملغي / مرفوض</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <span className="text-sm dark:text-gray-300">متوقف مؤقت</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-            <span className="text-sm dark:text-gray-300">غير معروف</span>
+            <Button
+              variant={archiveFilter === "active" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setArchiveFilter("active")}
+              className={`px-3 ${archiveFilter === "active" ? "bg-blue-600 text-white" : ""}`}
+            >
+              <Icon icon="mdi:check-circle" className="ml-1" />
+              نشط
+            </Button>
+            
+            <Button
+              variant={archiveFilter === "archived" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setArchiveFilter("archived")}
+              className={`px-3 ${archiveFilter === "archived" ? "bg-gray-600 text-white" : ""}`}
+            >
+              <Icon icon="mdi:archive" className="ml-1" />
+              مؤرشفة
+            </Button>
+            
+            <Button
+              variant={archiveFilter === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setArchiveFilter("all")}
+              className={`px-3 ${archiveFilter === "all" ? "bg-green-600 text-white" : ""}`}
+            >
+              <Icon icon="mdi:view-list" className="ml-1" />
+              الكل
+            </Button>
           </div>
         </div>
+        
+        {/* Approval Status Filter */}
+        {archiveFilter !== "archived" && (
+          <div className="flex items-center gap-2">
+            <label className="font-medium dark:text-gray-300">حالة الموافقة:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="border dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded px-2 py-1 text-gray-600 dark:text-gray-300 font-semibold outline-none cursor-pointer"
+            >
+              <option value="">الكل</option>
+              {Object.entries(approvementStatusMap).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-       <DynamicTable
+      {/* ✅ Active Filters Info */}
+      {archiveFilter !== "all" && (
+        <div className={`mb-4 p-3 rounded-lg ${
+          archiveFilter === "active" 
+            ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800" 
+            : "bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700"
+        }`}>
+          <div className="flex items-center gap-2">
+            <Icon 
+              icon={archiveFilter === "active" ? "mdi:check-circle" : "mdi:archive"} 
+              className={archiveFilter === "active" ? "text-blue-500" : "text-gray-500"} 
+            />
+            <div>
+              <span className="font-medium">
+                {archiveFilter === "active" ? "عرض الحجوزات النشطة" : "عرض الحجوزات المؤرشفة"}
+              </span>
+              <span className="mr-2 text-sm text-gray-600 dark:text-gray-400">
+                ({filteredData?.length || 0} حجز)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Dynamic Table */}
+      <DynamicTable
         data={filteredData || []}
-        columns={EnhancedBookingColumns} // Use enhanced columns
+        columns={EnhancedBookingColumns}
         isLoading={isLoading}
         onShow={(row) => navigate(`/dashboard/booking/${row.id}`)}
-        onEditBooking={(row) => navigate(`/dashboard/booking/edit/${row.id}`)}
-        onDeleteBooking={handleDelete}
-        onUnconfirmOrder={handlePauseBooking}
-        onStatusChange={handleStatusChange}
-        onExtendBooking={handleExtendBooking}
+        onEditBooking={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all") {
+            toast.warning("لا يمكن تعديل هذا الحجز");
+            return;
+          }
+          navigate(`/dashboard/booking/edit/${row.id}`);
+        }}
+        onDeleteBooking={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all") {
+            toast.warning("لا يمكن حذف هذا الحجز");
+            return;
+          }
+          handleDelete(row);
+        }}
+        onUnconfirmOrder={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all") {
+            toast.warning("لا يمكن إيقاف هذا الحجز");
+            return;
+          }
+          handlePauseBooking(row);
+        }}
+        onStatusChange={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all") {
+            toast.warning("لا يمكن تغيير حالة هذا الحجز");
+            return;
+          }
+          handleStatusChange(row);
+        }}
+        onExtendBooking={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all") {
+            toast.warning("لا يمكن تمديد هذا الحجز");
+            return;
+          }
+          handleExtendBooking(row);
+        }}
         permissions={permissions}
-        showTemporaryBookingIcon={true}
+        showTemporaryBookingIcon={archiveFilter === "active"}
         isOrdersTable={false}
       />
 
@@ -402,6 +705,13 @@ const BookingContainer = () => {
                       "bg-gray-100 text-gray-800"
                     }`}>
                       {bookingStatusMap[selectedBookingForStatus.status] || "غير معروف"}
+                    </span>
+                  </span></div>
+                  <div className="dark:text-gray-400">حالة الأرشيف: <span className="font-bold dark:text-white">
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      selectedBookingForStatus.is_archived === 1 ? "bg-gray-100 text-gray-800" : "bg-green-100 text-green-800"
+                    }`}>
+                      {selectedBookingForStatus.is_archived === 1 ? "مؤرشف" : "نشط"}
                     </span>
                   </span></div>
                 </div>
@@ -497,6 +807,13 @@ const BookingContainer = () => {
                       {approvementStatusMap[selectedBookingForPause.approvement_status] || "غير معروف"}
                     </span>
                   </span></div>
+                  <div className="dark:text-gray-400">حالة الأرشيف: <span className="font-bold dark:text-white">
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      selectedBookingForPause.is_archived === 1 ? "bg-gray-100 text-gray-800" : "bg-green-100 text-green-800"
+                    }`}>
+                      {selectedBookingForPause.is_archived === 1 ? "مؤرشف" : "نشط"}
+                    </span>
+                  </span></div>
                   <div className="col-span-2 dark:text-gray-400">
                     الأيام المتبقية: <span className="font-bold text-blue-600 dark:text-blue-400">{pauseDaysAvailable} يوم</span>
                   </div>
@@ -586,6 +903,149 @@ const BookingContainer = () => {
           cancelText="إلغاء"
         />
       )}
+
+      {/* TEMPORARY BOOKINGS DIALOG */}
+      <Dialog open={openTemporaryDialog} onOpenChange={setOpenTemporaryDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] dark:bg-gray-900 dark:border-gray-700">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <Icon icon="mdi:clock-outline" className="w-6 h-6" />
+              الحجوزات المؤقتة
+              <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                {temporaryBookingsCount}
+              </Badge>
+            </DialogTitle>
+            <DialogDescription className="text-gray-600 dark:text-gray-400">
+              قائمة الحجوزات المؤقتة التي تحتاج إلى تأكيد
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Separator className="dark:bg-gray-700" />
+          
+          <ScrollArea className="max-h-[60vh] pr-4">
+            {temporaryBookings.length === 0 ? (
+              <div className="text-center py-8">
+                <Icon icon="mdi:check-circle" className="w-16 h-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-700 dark:text-gray-300">لا توجد حجوزات مؤقتة</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">جميع الحجوزات مؤكدة</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {temporaryBookings.map((booking) => (
+                  <div
+                    key={booking.id}
+                    className="p-4 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 hover:shadow-md transition-shadow duration-200"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">
+                              الحجز #{booking.id}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                                <Icon icon="mdi:clock-outline" className="w-3 h-3 ml-1" />
+                                مؤقت
+                              </Badge>
+                              <Badge className={
+                                booking.approvement_status === 1 
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" 
+                                  : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
+                              }>
+                                {approvementStatusMap[booking.approvement_status]}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <div className="text-sm text-gray-500 dark:text-gray-400">تاريخ الإنشاء</div>
+                            <div className="font-medium text-gray-700 dark:text-gray-300">
+                              {formatDate(booking.created_at)}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div className="space-y-1">
+                            <div className="text-sm text-gray-500 dark:text-gray-400">الموقع</div>
+                            <div className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                              <Icon icon="mdi:map-marker" className="w-4 h-4" />
+                              {booking.roadsigns?.[0]?.place || "غير محدد"}
+                            </div>
+                          </div>
+                          {/*
+                          
+
+                          <div className="space-y-1">
+                            <div className="text-sm text-gray-500 dark:text-gray-400">فترة الحجز</div>
+                            <div className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                              <Icon icon="mdi:calendar-range" className="w-4 h-4" />
+                              {formatDate(booking.start_date)} → {formatDate(booking.end_date)}
+                            </div>
+                          </div>
+                          
+                          */}
+                          
+                          
+                          <div className="space-y-1">
+                            <div className="text-sm text-gray-500 dark:text-gray-400">الأيام المتبقية</div>
+                            <div className="font-bold text-lg text-blue-600 dark:text-blue-400">
+                              {calculateRemainingDays(booking.end_date)} يوم
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {booking.notes && (
+                          <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">ملاحظات</div>
+                            <div className="text-gray-700 dark:text-gray-300">{booking.notes}</div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleViewBookingDetails(booking.id)}
+                          className="gap-2"
+                          variant="outline"
+                        >
+                          <Icon icon="mdi:eye" />
+                          عرض التفاصيل
+                        </Button>
+                        
+                        <Button
+                          size="sm"
+                          onClick={() => handleConfirmBooking(booking.id)}
+                          className="gap-2 bg-green-600 hover:bg-green-700"
+                        >
+                          <Icon icon="mdi:check" />
+                          تأكيد الحجز
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex justify-between items-center pt-4 border-t dark:border-gray-700">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              عرض {temporaryBookings.length} من {temporaryBookingsCount} حجز مؤقت
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setOpenTemporaryDialog(false)}
+              className="gap-2"
+            >
+              <Icon icon="mdi:close" />
+              إغلاق
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

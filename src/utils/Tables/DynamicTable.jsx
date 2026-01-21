@@ -264,10 +264,11 @@ export const DynamicTable = ({
                                 </Button>
                               )}
 
-                            {(row.status === 1 || row?.status === 2) &&
+                            {/* Pause/Unconfirm Button - REMOVED only from booking table */}
+                            {/* Remove this button when showTemporaryBookingIcon is true (booking table) */}
+                            {!showTemporaryBookingIcon && (row.status === 1 || row?.status === 2) &&
                               onUnconfirmOrder &&
                               hasPermission(permissions?.unConfirm) && (
-                                
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -275,21 +276,17 @@ export const DynamicTable = ({
                                   className="h-7 w-7 p-0 bg-transparent "
                                   title="إيقاف مؤقت للحجز"
                                 >
-                                  {/*
-                                  
                                   <Icon
                                     icon="mdi:pause-circle-outline"
                                     className="text-yellow-600 dark:text-yellow-400"
                                   />
-                                  */ }
-                                  
                                 </Button>
                               )}
                           </>
-
                         )}
 
-                        {onEdit && hasPermission(permissions?.edit) && (
+                        {/* Edit Button - Show in all tables EXCEPT booking table */}
+                        {onEdit && hasPermission(permissions?.edit) && !showTemporaryBookingIcon && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -300,9 +297,11 @@ export const DynamicTable = ({
                           </Button>
                         )}
 
+                        {/* Edit Booking Button - Show in all tables EXCEPT booking table */}
                         {onEditBooking &&
                           hasPermission(permissions?.edit) &&
-                          row?.status == 1 && (
+                          row?.status == 1 && 
+                          !showTemporaryBookingIcon && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -383,26 +382,26 @@ export const DynamicTable = ({
                             </Button>
                           </Link>
                         )}
-
-                       {onExtendBooking && 
-  !isOrdersTable &&
-  (hasPermission(permissions?.extend) || true) &&
-  row?.approvement_status === 2 &&
-  [1, 2].includes(row?.type) &&  
-  new Date(row.end_date) > new Date() && (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => onExtendBooking(row)}
-      className="h-7 w-7 p-0 bg-orange-50 border-orange-200 hover:bg-orange-100"
-      title="تمديد الحجز"
-    >
-      <Icon
-        icon="mdi:calendar-plus"
-        className="text-orange-600"
-      />
-    </Button>
-  )}
+                        
+                        {onExtendBooking && 
+                          !isOrdersTable &&
+                          (hasPermission(permissions?.extend) || true) &&
+                          row?.approvement_status === 2 &&
+                          [2].includes(row?.type) &&  
+                          new Date(row.end_date) > new Date() && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onExtendBooking(row)}
+                              className="h-7 w-7 p-0 bg-orange-50 border-orange-200 hover:bg-orange-100"
+                              title="تمديد الحجز"
+                            >
+                              <Icon
+                                icon="mdi:calendar-plus"
+                                className="text-orange-600"
+                              />
+                            </Button>
+                          )}
 
                       </div>
                     </TableCell>

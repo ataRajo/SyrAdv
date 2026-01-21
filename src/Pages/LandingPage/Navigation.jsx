@@ -162,6 +162,8 @@ const scrollToSection = (sectionId) => {
                     )}
                   </motion.button>
                 ))}
+                {/*
+                
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -169,6 +171,9 @@ const scrollToSection = (sectionId) => {
                 >
                   احصل على عرض سعر
                 </motion.button>
+                */ }
+
+                
               </div>
 
               {/* Mobile Menu Button */}

@@ -217,22 +217,21 @@ const BranchesSection = forwardRef(({ inView, isDarkMode }, ref) => {
             </MapContainer>
             
             {/* Map Overlay Info */}
-            <div className={`absolute top-4 right-4 left-4 p-3 rounded-lg backdrop-blur-sm border ${
-              isDarkMode 
-                ? 'bg-gray-900/80 border-gray-700 text-white' 
-                : 'bg-white/80 border-gray-200 text-gray-800'
-            }`} dir="rtl">
+            
               <div className="flex items-center justify-center space-x-4 text-sm">
                 <div className="flex items-center space-x-1">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span>المكاتب الرئيسية</span>
                 </div>
                 <div className="flex items-center space-x-1">
+                 {/*
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                   <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+
                   <span>الأفرع الثانوية</span>
+                  <span>المكاتب الرئيسية</span>
+                  
+                 */}
                 </div>
               </div>
-            </div>
           </motion.div>
 
           <motion.div
@@ -309,7 +308,7 @@ const BranchesSection = forwardRef(({ inView, isDarkMode }, ref) => {
                       <span className={`text-xs font-medium ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-500'
                       }`}>
-                        %{80 + (index * 10)} تغطية
+                        %{70 + (index * 10)} تغطية
                       </span>
                     </div>
                   </div>

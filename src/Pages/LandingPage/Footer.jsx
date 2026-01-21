@@ -12,6 +12,14 @@ const Footer = ({ companyName, arabicName, isDarkMode }) => {
     { id: 'advertisers', label: 'كبار المعلنين' }
   ];
 
+  const emailAddresses = [
+    { address: 'aleppo@sac.sy', label: '' },
+    { address: 'Damascus@sac.sy', label: '' },
+    { address: 'info@sac.sy', label: ' ' },
+    { address: 'PR@sac.sy', label: ' ' },
+    { address: 'sales@sac.sy', label: '' }
+  ];
+
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -33,18 +41,13 @@ const Footer = ({ companyName, arabicName, isDarkMode }) => {
               className="flex items-center space-x-3 mb-4 sm:mb-6"
             >
               <div className="relative w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
-                
                 {/*
-                
                 <img 
                   src="/src/assets/images/adv_syrian.png" 
                   alt="إعلان طرقية"
                   className="w-full h-full object-contain"
                 />
-
                 */}
-
-                
               </div>
               <div className="flex flex-col text-right">
                 <span className="text-xl sm:text-2xl font-bold">{companyName}</span>
@@ -116,16 +119,41 @@ const Footer = ({ companyName, arabicName, isDarkMode }) => {
                     <br />
                 طرطوس: 0944333322 - 0182221188
                 </span>
-                
-
-
-
                 <Icon icon="mdi:phone" className="text-lg flex-shrink-0" />
               </li>
-              <li className="flex items-center space-x-2 justify-end">
-                <a href="http://www.syrian-advertisment.com" target="_blank" rel="noopener noreferrer">www.syrian-advertisment.com</a>
-                <Icon icon="mdi:email" className="text-lg flex-shrink-0" />
+              
+              <li className="flex flex-col space-y-2">
+                <div className="flex items-center space-x-2 justify-end">
+                  <span className="text-right">البريد الإلكتروني:</span>
+                  <Icon icon="mdi:email-outline" className="text-lg flex-shrink-0" />
+                </div>
+                <div className="grid grid-cols-1 gap-1 text-right mr-8">
+                  {emailAddresses.map((email, index) => (
+                    <motion.a
+                      key={index}
+                      href={`mailto:${email.address}`}
+                      whileHover={{ x: -5 }}
+                      className="text-gray-400 hover:text-white transition-colors duration-300 text-sm"
+                    >
+                      <span className="text-gray-300">{email.label}: </span>
+                      {email.address}
+                    </motion.a>
+                  ))}
+                </div>
               </li>
+              
+              <li className="flex items-center space-x-2 justify-end">
+                <a 
+                  href="http://www.syrian-advertisment.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="hover:text-white transition-colors duration-300"
+                >
+                  www.syrian-advertisment.com
+                </a>
+                <Icon icon="mdi:web" className="text-lg flex-shrink-0" />
+              </li>
+              
               <li className="flex items-center space-x-2 justify-end">
                 <span>دمشق، سوريا</span>
                 <Icon icon="mdi:map-marker" className="text-lg flex-shrink-0" />

@@ -1,7 +1,8 @@
 import React from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import "../../assets/fonts/Amiri-Regular.js"; 
+import "../../assets/fonts/Amiri-Regular.js";
+import logo from "../../assets/images/adv_syrian.png";
 
 const InvoicePdf = ({
   customer,
@@ -9,52 +10,71 @@ const InvoicePdf = ({
   showCustomerPaymentsTable = false,
   showCustomerRemainingTable = false,
 }) => {
-  const generatePDF = () => {
-    // Initialize jsPDF with A4 landscape settings
+  const generatePDF = async () => {
+    // Initialize jsPDF
     const doc = new jsPDF({
       orientation: "landscape",
       unit: "mm",
       format: "a4",
     });
 
-    // Register Amiri font
     doc.setFont("Amiri-Regular", "normal");
 
-    // Define page dimensions for easier calculations
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-
-    // Set consistent margins
-    const margin = 15; // All-around margin for better visual balance
+    const margin = 15;
     const contentWidth = pageWidth - 2 * margin;
 
+    // Add logo at top left
+    try {
+      const logoBase64 = await getImageBase64(logo);
+      doc.addImage(logoBase64, 'PNG', margin, margin, 30, 15);
+    } catch (error) {
+      console.log("Could not load logo");
+    }
+
     // Add title in the center
-
     const title = showCustomerTable
-      ? `  كشف حساب الزبون`
-      : `  كشف حساب الزبائن`;
-    doc.setFontSize(18); // Slightly larger title for emphasis
-
-    doc.text(title, pageWidth / 2, margin + 5, { align: "center" });
+      ? `كشف دفعات الزبون`
+      : `كشف دفعات الزبائن`;
+    
+    doc.setFontSize(18);
+    doc.text(title, pageWidth / 2, margin + 10, { align: "center" });
+    
+    // Add date
+    doc.setFontSize(10);
     doc.text(
-      new Date().toLocaleDateString("en-US"),
+      `تاريخ التقرير: ${new Date().toLocaleDateString("ar-EG")}`,
       pageWidth / 2,
-      margin + 15,
+      margin + 18,
       { align: "center" }
     );
 
-    // متغير لتحديد موضع بدء الجدول التالي
-    let currentY = margin + 20;
+    // Helper function to convert image to base64
+    async function getImageBase64(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL("image/png"));
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+
+    let currentY = margin + 30;
 
     // Conditionally render customer info table
-    if (showCustomerTable) {
-      // Define customer info table headers and data
+    if (showCustomerTable && customer) {
       const customerHeaders = [
         [
-          "المبلغ المتبقي",
           "المبلغ المدفوع",
-          "المبلغ الكلي",
-          // "تاريخ الكشف",
           "رقم الهاتف",
           "اسم الشركة",
           "اسم الزبون",
@@ -63,30 +83,17 @@ const InvoicePdf = ({
 
       const customerData = [
         [
-          customer?.remaining || "0.00",
-          customer?.total_paid.toFixed(2) || "0.00",
-
-          customer?.total.toFixed(2) || "0.00",
-          // new Date().toLocaleDateString("en-US"),
-          customer.phone_number || "غير متوفر",
-          customer.company_name || "غير متوفر",
-          customer.full_name || "غير متوفر",
+          (customer?.total_paid || 0).toFixed(2),
+          customer?.phone_number || "غير متوفر",
+          customer?.company_name || "غير متوفر",
+          customer?.full_name || "غير متوفر",
         ],
       ];
 
-      // Calculate optimal column widths for customer table
-      const numCustomerColumns = customerHeaders[0].length;
-      const customerColumnWidth = contentWidth / numCustomerColumns;
-      const customerColumnStyles = {};
-      for (let i = 0; i < numCustomerColumns; i++) {
-        customerColumnStyles[i] = { cellWidth: customerColumnWidth };
-      }
-
-      // Generate customer info table
       autoTable(doc, {
         head: customerHeaders,
         body: customerData,
-        startY: currentY, // Start table below title
+        startY: currentY,
         margin: { top: margin, left: margin, right: margin, bottom: margin },
         styles: {
           font: "Amiri-Regular",
@@ -94,7 +101,7 @@ const InvoicePdf = ({
           fontSize: 10,
           textColor: [0, 0, 0],
           fontStyle: "normal",
-          cellPadding: 2,
+          cellPadding: 3,
         },
         headStyles: {
           font: "Amiri-Regular",
@@ -105,71 +112,40 @@ const InvoicePdf = ({
           fontStyle: "normal",
           cellPadding: 3,
         },
-        columnStyles: customerColumnStyles,
-        tableWidth: "wrap",
         theme: "grid",
-        didParseCell: (data) => {
-          data.cell.styles.font = "Amiri-Regular";
-          data.cell.styles.fontStyle = "normal";
-        },
-        didDrawCell: (data) => {
-          if (data.section === "head") {
-            data.cell.styles.font = "Amiri-Regular";
-            data.cell.styles.fontStyle = "normal";
-          }
-        },
       });
-      currentY = doc.lastAutoTable.finalY + 10; // Update starting Y for the next table
-
       
-    const paymentInfo = "تفاصيل الدفعات"
-    doc.setFontSize(18); // Slightly larger title for emphasis
-
-    doc.text(paymentInfo, pageWidth / 2, margin + 45, { align: "center" });
+      currentY = doc.lastAutoTable.finalY + 15;
+      
+      // Add payments title
+      doc.setFontSize(16);
+      doc.text("تفاصيل الدفعات", pageWidth / 2, currentY - 5, { align: "center" });
     }
 
-  
-
-    // Conditionally render customer Remaining  table
-    if (showCustomerRemainingTable) {
-      // Define customer info table headers and data
+    // Conditionally render customer remaining table
+    if (showCustomerRemainingTable && Array.isArray(customer)) {
       const customerHeaders = [
         [
-          "المبلغ المتبقي",
           "المبلغ المدفوع",
-          "المبلغ الكلي",
-
-          " العنوان",
+          "العنوان",
           "رقم الهاتف",
           "اسم الشركة",
           "اسم الزبون",
         ],
       ];
 
-      const customerData = customer?.map((c) => [
-        c?.remaining || "0.00",
-        c?.total_paid.toFixed(2) || "0.00",
-        c?.total.toFixed(2) || "0.00",
-
-        c?.address,
+      const customerData = customer.map((c) => [
+        (c?.total_paid || 0).toFixed(2),
+        c?.address || "غير متوفر",
         c?.phone_number || "غير متوفر",
-        c.company_name || "غير متوفر",
-        c.full_name || "غير متوفر",
+        c?.company_name || "غير متوفر",
+        c?.full_name || "غير متوفر",
       ]);
 
-      // Calculate optimal column widths for customer table
-      const numCustomerColumns = customerHeaders[0].length;
-      const customerColumnWidth = contentWidth / numCustomerColumns;
-      const customerColumnStyles = {};
-      for (let i = 0; i < numCustomerColumns; i++) {
-        customerColumnStyles[i] = { cellWidth: customerColumnWidth };
-      }
-
-      // Generate customer info table
       autoTable(doc, {
         head: customerHeaders,
         body: customerData,
-        startY: currentY, // Start table below title
+        startY: currentY,
         margin: { top: margin, left: margin, right: margin, bottom: margin },
         styles: {
           font: "Amiri-Regular",
@@ -188,74 +164,44 @@ const InvoicePdf = ({
           fontStyle: "normal",
           cellPadding: 3,
         },
-        columnStyles: customerColumnStyles,
-        tableWidth: "wrap",
         theme: "grid",
-        didParseCell: (data) => {
-          data.cell.styles.font = "Amiri-Regular";
-          data.cell.styles.fontStyle = "normal";
-        },
-        didDrawCell: (data) => {
-          if (data.section === "head") {
-            data.cell.styles.font = "Amiri-Regular";
-            data.cell.styles.fontStyle = "normal";
-          }
-        },
       });
-      currentY = doc.lastAutoTable.finalY + 10; // Update starting Y for the next table
+      
+      currentY = doc.lastAutoTable.finalY + 10;
     }
 
-    if (showCustomerPaymentsTable) {
-      // Define payment table headers
-      const paymentHeaders = !showCustomerTable
-        ? [
-            [
-              "الرصيد المتبقي",
-              "المبلغ المدفوع",
-              "تاريخ الدفع",
-              " المبلغ الكلي",
-              " اسم الموظف",
-              "رقم الهاتف",
-              " اسم الزبون",
-              "رقم الدفعة",
+    // Conditionally render payments table
+    if (showCustomerPaymentsTable && Array.isArray(customer?.payments)) {
+      // Define headers WITHOUT الرصيد المتبقي والمبلغ الكلي
+      const paymentHeaders = showCustomerTable
+        ? [["الموظف", "المبلغ المدفوع", "تاريخ الدفع", "رقم الدفعة"]]
+        : [["الموظف", "المبلغ المدفوع", "تاريخ الدفع", "رقم الهاتف", "اسم الزبون", "رقم الدفعة"]];
 
-            ],
-          ]
-        : [["الموظف ","الرصيد المتبقي", "المبلغ المدفوع",  "المبلغ الكلي",  "تاريخ الدفع", "رقم الدفعة"]];
+      // Map payment data WITHOUT الرصيد المتبقي والمبلغ الكلي
+      const tableData = customer.payments.map((payment) => {
+        if (showCustomerTable) {
+          return [
+            payment?.user?.full_name || "غير معروف",
+            (payment?.paid || 0).toFixed(2),
+            payment?.date || "غير محدد",
+            payment?.payment_number || "غير محدد",
+          ];
+        } else {
+          return [
+            payment?.user?.full_name || "غير معروف",
+            (payment?.paid || 0).toFixed(2),
+            payment?.date || "غير محدد",
+            payment?.customer?.phone_number || "غير محدد",
+            payment?.customer?.full_name || "غير محدد",
+            payment?.payment_number || "غير محدد",
+          ];
+        }
+      });
 
-      // Map payment data to table rows
-      const tableData = !showCustomerTable ? customer.payments.map((payment) => [
-        payment.remaining.toFixed(2) || "0.00",
-        payment.paid.toFixed(2) || "0.00",
-        payment.date || "غير متوفر",
-        payment.total.toFixed(2) || "غير متوفر",
-        payment?.user?.full_name || customer?.phone_number || "غير متوفر",
-        payment?.customer?.phone_number || customer?.phone_number || "غير متوفر",
-        payment?.customer?.full_name || customer?.full_name || "غير متوفر",
-        payment.payment_number || "غير متوفر",
-
-      ]) : customer.payments.map((payment) => [
-        payment?.user?.full_name || "0.00",
-        payment.remaining.toFixed(2) || "0.00",
-        payment.paid.toFixed(2) || "0.00",
-        payment.total.toFixed(2) || "غير متوفر",
-        payment.date || "غير متوفر",
-        payment.payment_number || "غير متوفر",
-      ])
-
-      // Calculate optimal column widths for payment table
-      const numPaymentColumns = paymentHeaders[0].length;
-      const paymentColumnWidth = contentWidth / numPaymentColumns;
-      const paymentColumnStyles = {};
-      for (let i = 0; i < numPaymentColumns; i++) {
-        paymentColumnStyles[i] = { cellWidth: paymentColumnWidth };
-      }
-
-      // Generate payment table
       autoTable(doc, {
         head: paymentHeaders,
         body: tableData,
-        startY: currentY, // Use the updated currentY
+        startY: currentY,
         margin: { top: margin, left: margin, right: margin, bottom: margin },
         styles: {
           font: "Amiri-Regular",
@@ -274,24 +220,17 @@ const InvoicePdf = ({
           fontStyle: "normal",
           cellPadding: 3,
         },
-        columnStyles: paymentColumnStyles,
-        tableWidth: "wrap",
         theme: "grid",
-        didParseCell: (data) => {
-          data.cell.styles.font = "Amiri-Regular";
-          data.cell.styles.fontStyle = "normal";
-        },
-        didDrawCell: (data) => {
-          if (data.section === "head") {
-            data.cell.styles.font = "Amiri-Regular";
-            data.cell.styles.fontStyle = "normal";
-          }
-        },
       });
     }
 
+    // Add footer
+    const footerY = pageHeight - 10;
+    doc.setFontSize(8);
+    doc.text("© الشركة السورية للإعلان", pageWidth / 2, footerY, { align: "center" });
+
     // Save the PDF
-    doc.save("كشف_حساب.pdf");
+    doc.save(`كشف_حساب_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   return (

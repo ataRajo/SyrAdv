@@ -75,7 +75,7 @@ const formik = useFormik({
     units: "1", // Add this
   },
   validationSchema,
-  onSubmit: async (values, { resetForm }) => { // REMOVE THE COLON BEFORE async
+  onSubmit: async (values, { resetForm }) => { 
     try {
       const bookingPayload = {
         customer_id: parseInt(values.customer_id),
@@ -143,6 +143,9 @@ const formik = useFormik({
       units: bookingData.units?.toString() || "1", // Add this
     });
     // ... rest of the code
+
+
+    
   }
 }, [bookingData, isEditMode, isLoadingBooking]);
   // Set notes for new bookings
@@ -163,6 +166,15 @@ const formik = useFormik({
       setQueryParams({});
     }
   }, [formik.values.start_date, formik.values.end_date]);
+
+
+useEffect(() => {
+  console.log("🟡 formik.isSubmitting changed to:", formik.isSubmitting);
+}, [formik.isSubmitting]);
+
+useEffect(() => {
+  console.log("🟡 selectedSigns count changed to:", selectedSigns.length);
+}, [selectedSigns.length]);
 
   // Remove unavailable signs
   useEffect(() => {
@@ -197,37 +209,31 @@ const formik = useFormik({
 
   // Handlers
  const addToCart = (sign) => {
-  // Check for start_date
   if (!formik.values.start_date) {
     showToast("error", "يرجى إدخال تاريخ البدء.");
     return;
   }
 
-  // Check for end_date
   if (!formik.values.end_date) {
     showToast("error", "يرجى إدخال تاريخ الانتهاء.");
     return;
   }
 
-  // Check for customer_id
   if (!formik.values.customer_id) {
     showToast("error", "يرجى اختيار العميل.");
     return;
   }
 
-  // Check for type
   if (!formik.values.type) {
     showToast("error", "يرجى إدخال نوع الحجز.");
     return;
   }
 
-  // Check for product_type
   if (!formik.values.product_type) {
     showToast("error", "يرجى إدخال نوع المنتج.");
     return;
   }
 
-  // Check for printing_id
   if (!formik.values.printing_id) {
     showToast("error", "يرجى إدخال رقم الطباعة.");
     return;

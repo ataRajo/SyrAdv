@@ -1,12 +1,10 @@
 // Columns for Bookings This Week
 export const ReportBookingsColumns = [
- 
   {
     header: "عدد الوجوه",
     accessor: "faces_number",
     cellClassName: "text-center",
   },
-  
   {
     header: "النموذج",
     accessor: "template.model",
@@ -15,6 +13,11 @@ export const ReportBookingsColumns = [
   {
     header: "الموقع",
     accessor: "place",
+    cellClassName: "text-center",
+  },
+  {
+    header: "الاتجاه",
+    accessor: "direction",
     cellClassName: "text-center",
   },
   {
@@ -27,5 +30,4 @@ export const ReportBookingsColumns = [
     accessor: "bookings.0.customer.company_name",
     cellClassName: "text-center",
   }
- 
 ];

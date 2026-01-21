@@ -1010,9 +1010,8 @@ const RoadSignsMapView = ({ viewType }) => {
                 // Get dual face info if available
                 const dualFaceInfo = getDualFaceInfo(roadSign, roadSigns);
                 
-                // Determine marker color based on booking status and special cases
-                let markerColor = "#6b7280"; // Default gray
-                let markerIcon = "🚦"; // Default icon
+                let markerColor = "#6b7280"; 
+                let markerIcon = "🚦"; 
                 let isBooked = isFaceBooked(roadSign);
                 
                 if (isSpecialDualFace) {

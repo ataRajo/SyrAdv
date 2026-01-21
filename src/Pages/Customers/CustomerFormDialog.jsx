@@ -40,6 +40,7 @@ const CustomerFormDialog = ({
       email: initialData?.email || "",
       username: initialData?.username || "",
       password: "",
+      //this is the Cart for the customer
       customer_account: initialData?.customer_account || "", // ✅ Fixed: Added customer_account
       alt_phone_number: initialData?.alt_phone_number?.length ? initialData.alt_phone_number : [""],
       is_tracking: !!(initialData?.customers && initialData.customers.length > 0),
@@ -223,9 +224,10 @@ const CustomerFormDialog = ({
             {formik.touched.username && formik.errors.username && <div className="text-red-500 text-sm mt-1">{formik.errors.username}</div>}
           </div>
 
-          {/* ✅ Fixed: Customer Account Field */}
+           {/*
+          
           <div>
-            <Label htmlFor="customer_account">دفعة بدائية</Label>
+            <Label htmlFor="customer_account">المحفظة</Label>
             <Input 
               id="customer_account" 
               name="customer_account" 
@@ -237,6 +239,13 @@ const CustomerFormDialog = ({
             />
             {formik.touched.customer_account && formik.errors.customer_account && <div className="text-red-500 text-sm mt-1">{formik.errors.customer_account}</div>}
           </div>
+
+
+           
+           */}
+
+          
+          
 
           {!isEditMode && (
             <div>

@@ -68,6 +68,12 @@ const DynamicDialog = ({
     switch (field.type) {
 case "select": {
   const options = field.options || (selectData[field.dataKey]?.data || []);
+  
+  // Check if this is the bookings select and there are no options but customer is selected
+  const isBookingsSelect = field.name === "booking_id";
+  const hasCustomerSelected = formik.values.customer_id && formik.values.customer_id !== "";
+  const hasNoBookings = options.length === 0;
+  
   const selectOptions = options.map((opt) => {
     const value = opt[field.valueKey] ?? opt.value ?? opt;
     const label = opt[field.displayKey] ?? opt.label ?? opt;
@@ -77,40 +83,74 @@ case "select": {
   return (
     <div key={field.name} className="space-y-2">
       <Label htmlFor={field.name}>{field.label}</Label>
-      <Select
-        className="text-red-600"
-        options={selectOptions}
-        value={
-          selectOptions.find((opt) => opt.value === formik.values[field.name]) || null
-        }
-        onChange={(selectedOption) => {
-          const value = selectedOption ? selectedOption.value : "";
-          formik.setFieldValue(field.name, value);
-          onFieldChange(field.name, value);
-        }}
-        onBlur={() => formik.setFieldTouched(field.name, true)}
-        placeholder={`اختر ${field.label}`}
-        isSearchable
-        noOptionsMessage={() => "لا توجد خيارات مطابقة"}
-        styles={{
-          control: (base) => ({
-            ...base,
-            borderColor:
-              formik.touched[field.name] && formik.errors[field.name]
-                ? "red"
-                : base.borderColor,
-            direction: "rtl",
-            textAlign: "right",
-          }),
-          menu: (base) => ({ ...base, direction: "rtl", zIndex: 9999 }),
-        }}
-      />
+      
+      {/* Special handling for bookings dropdown */}
+      {isBookingsSelect && hasCustomerSelected && hasNoBookings ? (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+          <p className="text-sm text-yellow-700 text-center">
+            ⚠️ هذا العميل ليس لديه حجوزات دائمة (نوع 2)
+          </p>
+          <input
+            type="hidden"
+            name={field.name}
+            value={formik.values[field.name] || ""}
+          />
+        </div>
+      ) : (
+        <Select
+          className="text-red-600"
+          options={selectOptions}
+          value={
+            selectOptions.find((opt) => opt.value === formik.values[field.name]) || null
+          }
+          onChange={(selectedOption) => {
+            const value = selectedOption ? selectedOption.value : "";
+            formik.setFieldValue(field.name, value);
+            onFieldChange(field.name, value);
+          }}
+          onBlur={() => formik.setFieldTouched(field.name, true)}
+          placeholder={
+            isBookingsSelect && !hasCustomerSelected 
+              ? "اختر العميل أولاً" 
+              : `اختر ${field.label}`
+          }
+          isDisabled={isBookingsSelect && !hasCustomerSelected}
+          isSearchable
+          noOptionsMessage={() => 
+            isBookingsSelect && hasCustomerSelected 
+              ? "لا توجد حجوزات دائمة لهذا العميل" 
+              : "لا توجد خيارات مطابقة"
+          }
+          styles={{
+            control: (base, state) => ({
+              ...base,
+              borderColor:
+                formik.touched[field.name] && formik.errors[field.name]
+                  ? "red"
+                  : state.isDisabled
+                  ? "#e5e7eb"
+                  : base.borderColor,
+              backgroundColor: state.isDisabled ? "#f9fafb" : base.backgroundColor,
+              cursor: state.isDisabled ? "not-allowed" : base.cursor,
+              direction: "rtl",
+              textAlign: "right",
+            }),
+            menu: (base) => ({ ...base, direction: "rtl", zIndex: 9999 }),
+            placeholder: (base) => ({
+              ...base,
+              color: isBookingsSelect && !hasCustomerSelected ? "#9ca3af" : base.color,
+            }),
+          }}
+        />
+      )}
+      
       {formik.touched[field.name] && formik.errors[field.name] && (
         <p className="text-sm text-destructive">{formik.errors[field.name]}</p>
       )}
     </div>
   );
 }
+
       case "array":
         return (
           <div key={field.name} className="space-y-2">

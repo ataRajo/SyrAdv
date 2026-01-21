@@ -2,16 +2,28 @@ import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReportBookingsColumns } from "../../utils/Tables/ColumnsTable/ReportBookingsColumns";
 import { ReportUnbookedSignsColumns } from "../../utils/Tables/ColumnsTable/ReportUnbookedSignsColumns";
-import { Loader, FileText, Printer } from "lucide-react";
+import { Loader, FileText, Printer, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import useReports from "../../hooks/useReports";
 import { jsPDF } from "jspdf";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { productTypeOptions } from "../../Static/StaticData";
 import html2canvas from "html2canvas";
+import logo from '../../assets/images/adv_syrian.png';
 
-const RoadSignsReport = () => {
+const getBase64FromUrl = (url) => {
+  return fetch(url)
+    .then(res => res.blob())
+    .then(blob => new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    }));
+};
+
+const RoadSignsReport = ({ isWeeklyReport = true }) => {
   const {
     setActiveTab,
     cityId,
@@ -43,7 +55,347 @@ const RoadSignsReport = () => {
     handleCustomerChange,
   } = useReports();
 
+  const [bookingsPage, setBookingsPage] = useState(1);
+  const [unbookedPage, setUnbookedPage] = useState(1);
+  const [bookingsPageSize, setBookingsPageSize] = useState(50);
+  const [unbookedPageSize, setUnbookedPageSize] = useState(50);
+  
+  const pageSizeOptions = [10, 25, 50, 100, 250];
+
+  const groupRoadSigns = (roadSigns, isUnbooked = false) => {
+    if (!roadSigns || !Array.isArray(roadSigns)) return [];
+    
+    const groupedMap = {};
+    
+    roadSigns.forEach(sign => {
+      const place = sign?.place || 'غير محدد';
+      const model = sign?.template?.model || sign?.template?.name || 'غير محدد';
+      const direction = sign?.directions || sign?.direction || 'غير محدد';
+      
+      const key = `${place}|${model}|${direction}`;
+      
+      if (!groupedMap[key]) {
+        groupedMap[key] = {
+          ...sign,
+          key: key,
+          place: place,
+          model: model,
+          direction: direction,
+          groupedRecords: [sign],
+          allPlaces: new Set([place]),
+          ...(isUnbooked ? {} : {
+            bookings: sign.bookings ? [{
+              ...sign.bookings[0],
+              pivot: {
+                ...sign.bookings[0]?.pivot,
+                booking_faces: sign.bookings[0]?.pivot?.booking_faces || 0,
+                total_booking_faces: sign.bookings[0]?.pivot?.booking_faces || 0
+              }
+            }] : null
+          }),
+          grouped_count: 1,
+          template: sign.template,
+          region: sign.region
+        };
+      } else {
+        const existing = groupedMap[key];
+        existing.groupedRecords.push(sign);
+        existing.grouped_count += 1;
+        
+        existing.allPlaces.add(place);
+        
+        if (!isUnbooked && sign.bookings?.[0]?.pivot?.booking_faces && existing.bookings?.[0]?.pivot) {
+          existing.bookings[0].pivot.booking_faces = 
+            (existing.bookings[0].pivot.booking_faces || 0) + 
+            (sign.bookings[0].pivot.booking_faces || 0);
+          existing.bookings[0].pivot.total_booking_faces = 
+            (existing.bookings[0].pivot.total_booking_faces || 0) + 
+            (sign.bookings[0].pivot.booking_faces || 0);
+        }
+      }
+    });
+    
+    return Object.values(groupedMap).map(group => {
+      group.allPlaces = Array.from(group.allPlaces || []);
+      
+      if (!isUnbooked && group.grouped_count > 1 && group.groupedRecords.length > 0) {
+        const startDates = group.groupedRecords
+          .map(record => record.bookings?.[0]?.start_date)
+          .filter(Boolean);
+        const endDates = group.groupedRecords
+          .map(record => record.bookings?.[0]?.end_date)
+          .filter(Boolean);
+        
+        if (startDates.length > 0 && endDates.length > 0) {
+          const earliestStart = startDates.reduce((earliest, current) => 
+            current < earliest ? current : earliest
+          );
+          const latestEnd = endDates.reduce((latest, current) => 
+            current > latest ? current : latest
+          );
+          
+          return {
+            ...group,
+            bookings: group.bookings ? [{
+              ...group.bookings[0],
+              start_date: `${earliestStart} (${group.grouped_count})`,
+              end_date: `${latestEnd} (${group.grouped_count})`,
+              pivot: {
+                ...group.bookings[0]?.pivot,
+                booking_faces: group.bookings[0]?.pivot?.booking_faces || 0
+              }
+            }] : null
+          };
+        }
+      }
+      
+      return group;
+    });
+  };
+
+  const handleExportWord = async (isUnbooked = false) => {
+    const dataToExport = isUnbooked ? filteredUnbookedData : filteredBookingsData;
+    
+    if (dataToExport.length === 0) {
+      alert(`لا توجد بيانات ${isUnbooked ? 'لللوحات غير المحجوزة' : 'للتصدير'}`);
+      return;
+    }
+
+    setIsGeneratingPDF(true);
+
+    try {
+      const logoBase64 = await getBase64FromUrl(logo);
+      const htmlContent = isUnbooked ? createUnbookedWordHTML() : createReportHTML();
+const wordContent = `
+  <html xmlns:v="urn:schemas-microsoft-com:vml"
+        xmlns:o="urn:schemas-microsoft-com:office:office"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        xmlns="http://www.w3.org/TR/REC-html40">
+  <head>
+    <meta charset="UTF-8">
+    <!--[if gte mso 9]>
+    <xml>
+      <w:WordDocument>
+        <w:View>Print</w:View>
+        <w:Zoom>100</w:Zoom>
+        <w:DoNotOptimizeForBrowser/>
+      </w:WordDocument>
+    </xml>
+    <![endif]-->
+    <style>
+      body {
+        font-family: 'Traditional Arabic', Arial, sans-serif;
+        direction: rtl;
+        text-align: right;
+        margin: 20px;
+        background-color: #ffffff;
+        color: #333333;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        padding-bottom: 15px;
+        border-bottom: 3px solid #2c5282;
+      }
+     
+      h1 {
+        color: #2c5282;
+        margin: 10px 0;
+        font-size: 24px;
+      }
+      h2 {
+        color: #2d3748;
+        margin: 15px 0 10px 0;
+        font-size: 20px;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 5px;
+      }
+      h3 {
+        color: #4a5568;
+        margin: 12px 0 8px 0;
+        font-size: 18px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 15px 0;
+        border: 2px solid #2c5282;
+        font-size: 14px;
+      }
+      th {
+        background-color: #2c5282;
+        color: white;
+        padding: 10px 8px;
+        border: 1px solid #1a365d;
+        font-weight: bold;
+        text-align: center;
+      }
+      td {
+        border: 1px solid #a0aec0;
+        padding: 8px;
+        text-align: center;
+      }
+      tr:nth-child(even) {
+        background-color: #f7fafc;
+      }
+      tr:hover {
+        background-color: #ebf8ff;
+      }
+      .product-type-header {
+        background-color: #4a5568;
+        color: white;
+        padding: 12px;
+        margin: 20px 0 10px 0;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .customer-header {
+        background-color: #2d3748;
+        color: white;
+        padding: 10px;
+        margin: 15px 0 10px 0;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .city-header {
+        background-color: #742a2a;
+        color: white;
+        padding: 12px;
+        margin: 20px 0 10px 0;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .stats-box {
+        background-color: #e6fffa;
+        border: 2px solid #38b2ac;
+        padding: 12px;
+        margin: 15px 0;
+        border-radius: 6px;
+        font-weight: bold;
+        color: #234e52;
+      }
+      .warning-box {
+        background-color: #fed7d7;
+        border: 2px solid #e53e3e;
+        padding: 10px;
+        margin: 15px 0;
+        border-radius: 6px;
+        color: #742a2a;
+      }
+      .info-box {
+        background-color: #bee3f8;
+        color: #2c5282;
+        padding: 10px;
+        margin: 15px 0;
+        /* Removed border line */
+        border: none;
+      }
+      .sign-code {
+        font-family: 'Courier New', monospace;
+        direction: ltr;
+        text-align: left;
+        background-color: #f7fafc;
+        padding: 3px 6px;
+        border-radius: 3px;
+        border: 1px solid #cbd5e0;
+      }
+      .footer {
+        text-align: center;
+        margin-top: 40px;
+        color: #718096;
+        font-size: 12px;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 15px;
+      }
+      .total-cell {
+        background-color: #c6f6d5;
+        font-weight: bold;
+        color: #22543d;
+      }
+      .meter-cell {
+        background-color: #fed7d7;
+        font-weight: bold;
+        color: #742a2a;
+      }
+      .space-cell {
+        background-color: #e9d8fd;
+        font-weight: bold;
+        color: #553c9a;
+      }
+      .bold {
+        font-weight: bold;
+      }
+      .text-right {
+        text-align: right;
+      }
+      .text-center {
+        text-align: center;
+      }
+      .text-left {
+        text-align: left;
+      }
+      .mb-3 {
+        margin-bottom: 15px;
+      }
+      .mt-3 {
+        margin-top: 15px;
+      }
+      .p-3 {
+        padding: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>${isUnbooked ? 'تقرير اللوحات غير المحجوزة' : (isWeeklyReport ? 'التقرير العام ' : 'تقرير تفاصيل اللوحات')}</h1>
+      <div class="info-box">
+        <div>تاريخ التقرير: ${formatArabicDate(new Date())}</div>
+        <div>الفترة: من ${fromDate ? formatArabicDate(fromDate) : "غير محدد"} إلى ${toDate ? formatArabicDate(toDate) : "غير محدد"}</div>
+        ${templateNameFilter ? `<div>فلتر القالب: <span class="bold">${templateNameFilter}</span></div>` : ''}
+      </div>
+    </div>
+    ${htmlContent}
+    <div class="footer">
+      <p>تم الإنشاء آلياً بواسطة نظام الإعلانات - ${new Date().getFullYear()}</p>
+      <p>تاريخ الطباعة: ${formatArabicDate(new Date())}</p>
+    </div>
+  </body>
+  </html>
+`;
+
+      const blob = new Blob([wordContent], { type: "application/msword" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `تقرير_${isUnbooked ? 'اللوحات_غير_المحجوزة' : isWeeklyReport ? 'أسبوعي' : 'تفاصيل_اللوحات'}_${new Date().toISOString().split("T")[0]}.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error("Error exporting to Word:", error);
+      alert("حدث خطأ أثناء التصدير إلى Word");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
   const calculateBookingAdvertisingSpace = (booking) => {
+    if (!isWeeklyReport) return 0;
+    
+    if (booking.groupedRecords) {
+      let totalSpace = 0;
+      booking.groupedRecords.forEach(record => {
+        const advertisingSpace = parseFloat(record.template?.advertising_space) || 0;
+        const facesNumber = parseInt(record.faces_number) || 1;
+        const bookingFaces = parseInt(record.bookings?.[0]?.pivot?.booking_faces) || 
+                             parseInt(record.pivot?.booking_faces) || facesNumber;
+        totalSpace += advertisingSpace * bookingFaces;
+      });
+      return totalSpace;
+    }
+    
     const advertisingSpace = parseFloat(booking.template?.advertising_space) || 0;
     const facesNumber = parseInt(booking.faces_number) || 1;
     const bookingFaces = parseInt(booking.bookings?.[0]?.pivot?.booking_faces) || 
@@ -52,12 +404,15 @@ const RoadSignsReport = () => {
   };
 
   const calculateUnbookedAdvertisingSpace = (sign) => {
+    if (!isWeeklyReport) return 0;
+    
     const advertisingSpace = parseFloat(sign.template?.advertising_space) || 0;
     const facesNumber = parseInt(sign.faces_number) || 1;
     return advertisingSpace * facesNumber;
   };
 
   const [customerTypeFilter, setCustomerTypeFilter] = useState("");
+  const [templateNameFilter, setTemplateNameFilter] = useState("");
   const [filteredBookingsData, setFilteredBookingsData] = useState([]);
   const [filteredUnbookedData, setFilteredUnbookedData] = useState([]);
   const [localFilters, setLocalFilters] = useState({
@@ -69,32 +424,13 @@ const RoadSignsReport = () => {
     customerId: "",
   });
 
-  // Refs للطباعة
-  const printRef = useRef(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  // Initialize local filters from hook values
-  useEffect(() => {
-    setLocalFilters(prev => ({
-      ...prev,
-      cityId: cityId || "",
-      regionId: regionId || "",
-      model: model || "",
-      fromDate: fromDate || "",
-      toDate: toDate || "",
-      customerId: selectedCustomerId || "",
-    }));
-  }, [cityId, regionId, model, fromDate, toDate, selectedCustomerId]);
-
-  useEffect(() => {
-    if (!bookingsData || !Array.isArray(bookingsData)) {
-      setFilteredBookingsData([]);
-      return;
-    }
+  const memoizedBookingsData = useMemo(() => {
+    if (!bookingsData || !Array.isArray(bookingsData)) return [];
 
     let filtered = [...bookingsData];
 
-    // Apply city filter locally
     if (localFilters.cityId && localFilters.cityId !== "") {
       filtered = filtered.filter(booking => {
         const bookingCityId = booking.city_id || booking.city?.id;
@@ -102,8 +438,14 @@ const RoadSignsReport = () => {
       });
     }
 
-    // Apply customer type filter locally
-    if (customerTypeFilter && customerTypeFilter !== "" && customersData && customersData.length > 0) {
+    if (templateNameFilter && templateNameFilter !== "") {
+      filtered = filtered.filter(booking => {
+        const templateModel = booking.template?.model || booking.template?.name || '';
+        return templateModel === templateNameFilter;
+      });
+    }
+
+    if (isWeeklyReport && customerTypeFilter && customerTypeFilter !== "" && customersData && customersData.length > 0) {
       const selectedType = parseInt(customerTypeFilter);
       
       if (!isNaN(selectedType)) {
@@ -130,19 +472,14 @@ const RoadSignsReport = () => {
       }
     }
 
-    setFilteredBookingsData(filtered);
-  }, [bookingsData, customerTypeFilter, customersData, localFilters.cityId]);
+    return filtered;
+  }, [bookingsData, customerTypeFilter, customersData, localFilters.cityId, templateNameFilter, isWeeklyReport]);
 
-  // Filter unbooked signs data
-  useEffect(() => {
-    if (!unbookedSignsData || !Array.isArray(unbookedSignsData)) {
-      setFilteredUnbookedData([]);
-      return;
-    }
+  const memoizedUnbookedData = useMemo(() => {
+    if (!unbookedSignsData || !Array.isArray(unbookedSignsData)) return [];
 
     let filtered = [...unbookedSignsData];
     
-    // Apply city filter locally
     if (localFilters.cityId && localFilters.cityId !== "") {
       filtered = filtered.filter(sign => {
         const signCityId = sign.city_id || sign.city?.id;
@@ -150,16 +487,95 @@ const RoadSignsReport = () => {
       });
     }
 
-    setFilteredUnbookedData(filtered);
-  }, [unbookedSignsData, localFilters.cityId]);
+    if (templateNameFilter && templateNameFilter !== "") {
+      filtered = filtered.filter(sign => {
+        const templateModel = sign.template?.model || sign.template?.name || '';
+        return templateModel === templateNameFilter;
+      });
+    }
 
-  const customerTypeOptions = [
+    return filtered;
+  }, [unbookedSignsData, localFilters.cityId, templateNameFilter]);
+
+  const paginatedBookingsData = useMemo(() => {
+    const startIndex = (bookingsPage - 1) * bookingsPageSize;
+    const endIndex = startIndex + bookingsPageSize;
+    return memoizedBookingsData.slice(startIndex, endIndex);
+  }, [memoizedBookingsData, bookingsPage, bookingsPageSize]);
+
+  const paginatedUnbookedData = useMemo(() => {
+    const startIndex = (unbookedPage - 1) * unbookedPageSize;
+    const endIndex = startIndex + unbookedPageSize;
+    return memoizedUnbookedData.slice(startIndex, endIndex);
+  }, [memoizedUnbookedData, unbookedPage, unbookedPageSize]);
+
+  useEffect(() => {
+    setLocalFilters(prev => ({
+      ...prev,
+      cityId: cityId || "",
+      regionId: regionId || "",
+      model: model || "",
+      fromDate: fromDate || "",
+      toDate: toDate || "",
+      customerId: selectedCustomerId || "",
+    }));
+  }, [cityId, regionId, model, fromDate, toDate, selectedCustomerId]);
+
+  const getAllTemplateNames = () => {
+    const allData = [...(bookingsData || []), ...(unbookedSignsData || [])];
+    const templateNames = new Set();
+    
+    allData.forEach(item => {
+      const templateName = item.template?.model || item.template?.name;
+      if (templateName) {
+        templateNames.add(templateName);
+      }
+    });
+    
+    return Array.from(templateNames).sort();
+  };
+
+  const templateOptions = useMemo(() => getAllTemplateNames(), [bookingsData, unbookedSignsData]);
+
+  const totalBookingsPages = useMemo(() => 
+    Math.ceil((memoizedBookingsData?.length || 0) / bookingsPageSize),
+    [memoizedBookingsData, bookingsPageSize]
+  );
+
+  const totalUnbookedPages = useMemo(() => 
+    Math.ceil((memoizedUnbookedData?.length || 0) / unbookedPageSize),
+    [memoizedUnbookedData, unbookedPageSize]
+  );
+
+  const handleBookingsPageSizeChange = (value) => {
+    const newPageSize = parseInt(value);
+    setBookingsPageSize(newPageSize);
+    setBookingsPage(1);
+  };
+
+  const handleUnbookedPageSizeChange = (value) => {
+    const newPageSize = parseInt(value);
+    setUnbookedPageSize(newPageSize);
+    setUnbookedPage(1);
+  };
+
+  useEffect(() => {
+    setFilteredBookingsData(memoizedBookingsData);
+    setBookingsPage(1);
+  }, [memoizedBookingsData]);
+
+  useEffect(() => {
+    setFilteredUnbookedData(memoizedUnbookedData);
+    setUnbookedPage(1);
+  }, [memoizedUnbookedData]);
+
+  const customerTypeOptions = isWeeklyReport ? [
     { value: "", label: "جميع الأنواع" },
     ...productTypeOptions.map(option => ({
       value: option.value,
       label: option.label
     }))
-  ];
+  ] : [];
 
   const handleFilterChange = (filterName, value) => {
     setLocalFilters(prev => ({
@@ -178,48 +594,51 @@ const RoadSignsReport = () => {
     }
   };
 
+  const clearAllFilters = () => {
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+    
+    setFromDate(today.toISOString().split('T')[0]);
+    setToDate(nextWeek.toISOString().split('T')[0]);
+    
+    setCustomerTypeFilter("");
+    setTemplateNameFilter("");
+    handleCityChange({ target: { value: "" } });
+    
+    setLocalFilters({
+      cityId: "",
+      regionId: "",
+      model: "",
+      fromDate: today.toISOString().split('T')[0],
+      toDate: nextWeek.toISOString().split('T')[0],
+      customerId: "",
+    });
+    
+    setBookingsPage(1);
+    setUnbookedPage(1);
+  };
 
-  
- const clearAllFilters = () => {
-  // Reset to default dates (today to today+7 days)
-  const today = new Date();
-  const nextWeek = new Date();
-  nextWeek.setDate(today.getDate() + 7); // +7 أيام للأمام
-  
-  setFromDate(today.toISOString().split('T')[0]);
-  setToDate(nextWeek.toISOString().split('T')[0]);
-  
-  setCustomerTypeFilter("");
-  handleCityChange({ target: { value: "" } });
-  
-  setLocalFilters({
-    cityId: "",
-    regionId: "",
-    model: "",
-    fromDate: today.toISOString().split('T')[0],
-    toDate: nextWeek.toISOString().split('T')[0],
-    customerId: "",
-  });
-};
   const calculateTotalAdvertisingSpace = (data) => {
+    if (!isWeeklyReport) return "0.00";
     return data.reduce((total, booking) => {
       return total + calculateBookingAdvertisingSpace(booking);
     }, 0).toFixed(2);
   };
 
   const calculateTotalUnbookedAdvertisingSpace = (data) => {
+    if (!isWeeklyReport) return "0.00";
     return data.reduce((total, sign) => {
       return total + calculateUnbookedAdvertisingSpace(sign);
     }, 0).toFixed(2);
   };
 
   const getCustomerTypeLabel = () => {
-    if (!customerTypeFilter) return "";
+    if (!isWeeklyReport || !customerTypeFilter) return "";
     const option = productTypeOptions.find(opt => opt.value == customerTypeFilter);
     return option ? option.label : "";
   };
 
-  // دالة لتنسيق التاريخ بالعربية
   const formatArabicDate = (dateString) => {
     if (!dateString) return 'غير محدد';
     try {
@@ -239,445 +658,387 @@ const RoadSignsReport = () => {
     }
   };
 
+const normalizeSize = (size) => {
+  if (!size) return "غير محدد";
 
-useEffect(() => {
-  if (!bookingsData || !Array.isArray(bookingsData)) {
-    setFilteredBookingsData([]);
-    return;
+  // Convert to string and trim
+  size = String(size).trim();
+
+  // Handle empty cases
+  if (!size || size === 'null' || size === 'undefined' || size === '') {
+    return "غير محدد";
   }
 
-  console.log('📊 Original bookings data count:', bookingsData.length);
+  console.log('Processing size input:', size); // Debug
+
+  // Pattern 1: "X 100 200" → "200 X 100"
+  const xWithSpacesMatch = size.match(/^[xX]\s+(\d+)\s+(\d+)/i);
+  if (xWithSpacesMatch) {
+    const num1 = xWithSpacesMatch[1];
+    const num2 = xWithSpacesMatch[2];
+    // Put the larger number first: 200 X 100
+    const larger = Math.max(parseInt(num1), parseInt(num2));
+    const smaller = Math.min(parseInt(num1), parseInt(num2));
+    return `${larger} X ${smaller}`;
+  }
+
+  // Pattern 2: "X100200" (compact, no spaces) → "200 X 100"
+  const xCompactMatch = size.match(/^[xX](\d+)(\d{3,})/i);
+  if (xCompactMatch) {
+    const firstNum = parseInt(xCompactMatch[1]);
+    const secondNum = parseInt(xCompactMatch[2]);
+    const larger = Math.max(firstNum, secondNum);
+    const smaller = Math.min(firstNum, secondNum);
+    return `${larger} X ${smaller}`;
+  }
+
+  // Pattern 3: "100X200" or "100 X 200" → "200 X 100"
+  const middleXMatch = size.match(/(\d+)\s*[xX]\s*(\d+)/i);
+  if (middleXMatch) {
+    const num1 = parseInt(middleXMatch[1]);
+    const num2 = parseInt(middleXMatch[2]);
+    const larger = Math.max(num1, num2);
+    const smaller = Math.min(num1, num2);
+    return `${larger} X ${smaller}`;
+  }
+
+  // Pattern 4: "100 200" (just two numbers) → "200 X 100"
+  const twoNumbersMatch = size.match(/(\d+)\s+(\d+)/);
+  if (twoNumbersMatch) {
+    const num1 = parseInt(twoNumbersMatch[1]);
+    const num2 = parseInt(twoNumbersMatch[2]);
+    const larger = Math.max(num1, num2);
+    const smaller = Math.min(num1, num2);
+    return `${larger} X ${smaller}`;
+  }
+
+  // Pattern 5: Any two numbers in the string
+  const anyNumbersMatch = size.match(/\d+/g);
+  if (anyNumbersMatch && anyNumbersMatch.length >= 2) {
+    const num1 = parseInt(anyNumbersMatch[0]);
+    const num2 = parseInt(anyNumbersMatch[1]);
+    const larger = Math.max(num1, num2);
+    const smaller = Math.min(num1, num2);
+    return `${larger} X ${smaller}`;
+  }
+
+  // Fallback: Clean and return
+  const cleaned = size.replace(/[xX×]/g, ' ')
+                     .replace(/\s+/g, ' ')
+                     .trim();
   
-  // تحقق من تواريخ الحجوزات
-  bookingsData.forEach((booking, index) => {
-    const bookingStartDate = booking.bookings?.[0]?.start_date;
-    const bookingEndDate = booking.bookings?.[0]?.end_date;
-    console.log(`Booking ${index + 1}:`, {
-      start_date: bookingStartDate,
-      end_date: bookingEndDate,
-      customer: booking.bookings?.[0]?.customer?.company_name || booking.bookings?.[0]?.customer?.full_name
-    });
-  });
-
-  let filtered = [...bookingsData];
-
-  // Apply city filter locally
-  if (localFilters.cityId && localFilters.cityId !== "") {
-    filtered = filtered.filter(booking => {
-      const bookingCityId = booking.city_id || booking.city?.id;
-      return bookingCityId === parseInt(localFilters.cityId);
-    });
-  }
-
-  // Apply customer type filter locally
-  if (customerTypeFilter && customerTypeFilter !== "" && customersData && customersData.length > 0) {
-    const selectedType = parseInt(customerTypeFilter);
-    
-    if (!isNaN(selectedType)) {
-      const customersOfType = customersData.filter(customer => {
-        const customerType = parseInt(customer.type);
-        return !isNaN(customerType) && customerType === selectedType;
-      });
-      
-      if (customersOfType.length > 0) {
-        const customerIdsOfType = customersOfType.map(customer => customer.id);
-        
-        filtered = filtered.filter(booking => {
-          const bookingCustomerId = booking.bookings?.[0]?.customer?.id || 
-                                   booking.customer_id || 
-                                   booking.customer?.id;
-          
-          if (!bookingCustomerId) return false;
-          
-          return customerIdsOfType.includes(parseInt(bookingCustomerId));
-        });
-      } else {
-        filtered = [];
-      }
-    }
-  }
-
-  console.log('📊 Filtered bookings count after local filters:', filtered.length);
-  setFilteredBookingsData(filtered);
-}, [bookingsData, customerTypeFilter, customersData, localFilters.cityId]);
+  return cleaned || "غير محدد";
+};
 
 
-
-
-  // دالة لإنشاء HTML للتقرير
   const createReportHTML = () => {
     const customerTypeLabel = getCustomerTypeLabel();
     const currentDate = formatArabicDate(new Date());
     const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
     const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
-
-    // تجميع البيانات حسب نوع المنتج
-    const groupedByProductType = {};
     
-    // تهيئة المجموعات
-    productTypeOptions.forEach(type => {
-      groupedByProductType[type.value] = {
-        label: type.label,
-        bookings: [],
-        totalMeters: 0,
-        totalBookings: 0,
-        customers: {}
-      };
-    });
+    const groupedData = groupRoadSigns(filteredBookingsData, false);
 
-    groupedByProductType["unknown"] = {
-      label: "غير معروف",
-      bookings: [],
-      totalMeters: 0,
-      totalBookings: 0,
-      customers: {}
-    };
-
-    // تجميع البيانات
-    filteredBookingsData.forEach(booking => {
-      const customerId = booking.bookings?.[0]?.customer?.id || 
-                        booking.customer_id || 
-                        booking.customer?.id;
+    let html = '';
+    
+    if (isWeeklyReport) {
+      const groupedByProductType = {};
       
-      let productType = "unknown";
-      
-      if (customerId && customersData) {
-        const customer = customersData.find(c => c.id === parseInt(customerId));
-        if (customer && customer.type) {
-          productType = customer.type;
-        }
-      }
-      
-      if (!groupedByProductType[productType]) {
-        groupedByProductType[productType] = {
-          label: `النوع ${productType}`,
+      productTypeOptions.forEach(type => {
+        groupedByProductType[type.value] = {
+          label: type.label,
           bookings: [],
-          totalMeters: 0,
           totalBookings: 0,
-          customers: {}
+          customers: {},
+          totalSpace: 0
         };
-      }
-      
-      const advertisingSpace = calculateBookingAdvertisingSpace(booking);
-      groupedByProductType[productType].bookings.push(booking);
-      groupedByProductType[productType].totalMeters += advertisingSpace;
-      groupedByProductType[productType].totalBookings += 1;
-      
-      // تجميع حسب العميل
-      if (!groupedByProductType[productType].customers[customerId]) {
-        let customerName = "غير معروف";
+      });
+
+      groupedByProductType["unknown"] = {
+        label: "غير معروف",
+        bookings: [],
+        totalBookings: 0,
+        customers: {},
+        totalSpace: 0
+      };
+
+      groupedData.forEach(booking => {
+        const customerId = booking.bookings?.[0]?.customer?.id || 
+                          booking.customer_id || 
+                          booking.customer?.id;
+        
+        let productType = "unknown";
+        
         if (customerId && customersData) {
           const customer = customersData.find(c => c.id === parseInt(customerId));
-          if (customer) {
-            customerName = customer.company_name || customer.full_name || `زبون #${customerId}`;
+          if (customer && customer.type) {
+            productType = customer.type;
           }
         }
-        groupedByProductType[productType].customers[customerId] = {
-          name: customerName,
-          bookings: [],
-          totalMeters: 0
-        };
-      }
-      
-      groupedByProductType[productType].customers[customerId].bookings.push(booking);
-      groupedByProductType[productType].customers[customerId].totalMeters += advertisingSpace;
-    });
-
-    // إحصاءات القوالب
-    const templateStats = {};
-    filteredBookingsData.forEach(booking => {
-      const templateName = booking.template?.model || booking.template?.name || "غير معروف";
-      const advertisingSpace = calculateBookingAdvertisingSpace(booking);
-      const faces = parseInt(booking.bookings?.[0]?.pivot?.booking_faces) || 
-                   parseInt(booking.pivot?.booking_faces) || 
-                   parseInt(booking.faces_number) || 1;
-      
-      if (!templateStats[templateName]) {
-        templateStats[templateName] = {
-          count: 0,
-          totalFaces: 0,
-          totalMeters: 0
-        };
-      }
-      
-      templateStats[templateName].count += 1;
-      templateStats[templateName].totalFaces += faces;
-      templateStats[templateName].totalMeters += advertisingSpace;
-    });
-
-    // إنشاء HTML
-    let html = `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>تقرير المنتجات</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
-          
-          body {
-            font-family: 'Amiri', serif;
-            direction: rtl;
-            margin: 0;
-            padding: 20px;
-            background-color: #fff;
-            color: #000;
-            width: 100%;
-            max-width: 210mm;
-            margin: 0 auto;
-          }
-          
-          .report-container {
-            width: 100%;
-          }
-          
-          .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #333;
-            padding-bottom: 20px;
-          }
-          
-          .header h1 {
-            font-size: 28px;
-            color: #1a365d;
-            margin: 0 0 10px 0;
-          }
-          
-          .header .subtitle {
-            font-size: 16px;
-            color: #666;
-            margin: 5px 0;
-          }
-          
-          .report-info {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-right: 4px solid #4a90e2;
-          }
-          
-          .product-type-section {
-            margin-bottom: 30px;
-            page-break-inside: avoid;
-          }
-          
-          .product-type-header {
-            background-color: #2c5282;
-            color: white;
-            padding: 12px 15px;
-            border-radius: 6px 6px 0 0;
-            font-size: 18px;
-            font-weight: bold;
-            text-align: center;
-          }
-          
-          .product-type-stats {
-            background-color: #ebf8ff;
-            padding: 10px 15px;
-            border: 1px solid #bee3f8;
-            border-top: none;
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-          }
-          
-          .customer-section {
-            margin: 15px 0;
-            page-break-inside: avoid;
-          }
-          
-          .customer-header {
-            background-color: #fefcbf;
-            color: #000;
-            padding: 10px 15px;
-            border-radius: 4px;
-            font-size: 16px;
-            font-weight: bold;
-            border-right: 4px solid #ecc94b;
-          }
-          
-          .customer-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 12px;
-          }
-          
-          .customer-table th {
-            background-color: #4a90e2;
-            color: white;
-            padding: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-          }
-          
-          .customer-table td {
-            padding: 6px;
-            text-align: center;
-            border: 1px solid #ddd;
-          }
-          
-          .customer-table tr:nth-child(even) {
-            background-color: #f9f9f9;
-          }
-          
-          .customer-total {
-            text-align: left;
-            padding: 8px 15px;
-            font-weight: bold;
-            color: #276749;
-            background-color: #c6f6d5;
-            border-radius: 4px;
-            margin-top: 10px;
-            font-size: 13px;
-          }
-          
-          .template-summary {
-            margin-top: 40px;
-            page-break-before: always;
-          }
-          
-          .template-summary h2 {
-            text-align: center;
-            color: #6b46c1;
-            font-size: 22px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #9f7aea;
-          }
-          
-          .summary-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            font-size: 13px;
-          }
-          
-          .summary-table th {
-            background-color: #9f7aea;
-            color: white;
-            padding: 10px;
-            text-align: center;
-            border: 1px solid #ddd;
-          }
-          
-          .summary-table td {
-            padding: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-          }
-          
-          .summary-table tr:last-child {
-            background-color: #48bb78;
-            color: white;
-            font-weight: bold;
-          }
-          
-          .footer {
-            text-align: center;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #ccc;
-            color: #666;
-            font-size: 12px;
-          }
-          
-          .page-break {
-            page-break-after: always;
-          }
-          
-          @media print {
-            body {
-              width: 100%;
-              margin: 0;
-              padding: 10mm;
-            }
-            
-            .page-break {
-              page-break-after: always;
-            }
-            
-            .no-print {
-              display: none;
+        
+        if (!groupedByProductType[productType]) {
+          groupedByProductType[productType] = {
+            label: `نوع النموذج ${productType}`,
+            bookings: [],
+            totalBookings: 0,
+            customers: {},
+            totalSpace: 0
+          };
+        }
+        
+        const bookingSpace = calculateBookingAdvertisingSpace(booking);
+        groupedByProductType[productType].bookings.push(booking);
+        groupedByProductType[productType].totalBookings += 1;
+        groupedByProductType[productType].totalSpace += bookingSpace;
+        
+        if (!groupedByProductType[productType].customers[customerId]) {
+          let customerName = "غير معروف";
+          if (customerId && customersData) {
+            const customer = customersData.find(c => c.id === parseInt(customerId));
+            if (customer) {
+              customerName = customer.company_name || customer.full_name || `زبون #${customerId}`;
             }
           }
-        </style>
-      </head>
-      <body>
-        <div class="report-container">
-          <div class="header">
-            <h1>تقرير المنتجات - كشف الحجوزات</h1>
-            <div class="subtitle">تاريخ التقرير: ${currentDate}</div>
-            <div class="subtitle">الفترة: من ${fromDateText} إلى ${toDateText}</div>
-            ${customerTypeLabel ? `<div class="subtitle">نوع المنتج: ${customerTypeLabel}</div>` : ''}
-            <div class="subtitle">عدد الحجوزات: ${filteredBookingsData.length}</div>
-          </div>
-          
-          <div class="report-info">
-            <div style="text-align: center; font-size: 16px; font-weight: bold; color: #2d3748;">
-              إجمالي الأمتار الإعلانية: ${calculateTotalAdvertisingSpace(filteredBookingsData)} متر مربع
-            </div>
-          </div>
-    `;
+          groupedByProductType[productType].customers[customerId] = {
+            name: customerName,
+            bookings: [],
+            totalSpace: 0
+          };
+        }
+        
+        groupedByProductType[productType].customers[customerId].bookings.push(booking);
+        groupedByProductType[productType].customers[customerId].totalSpace += bookingSpace;
+      });
 
-    // إضافة كل نوع منتج
-    Object.entries(groupedByProductType).forEach(([typeKey, typeData]) => {
-      if (typeData.totalBookings === 0) return;
-      
-      html += `
-        <div class="product-type-section">
-          <div class="product-type-header">
-            نوع المنتج: ${typeData.label}
-          </div>
-          
-          <div class="product-type-stats">
-            <span>عدد الحجوزات: ${typeData.totalBookings}</span>
-            <span>الإجمالي: ${typeData.totalMeters.toFixed(0)} متر مربع</span>
-          </div>
+      html = `
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #1a365d; margin-bottom: 10px;">${isWeeklyReport ? 'التقرير العام ' : 'تقرير تفاصيل اللوحات'}</h1>
+          <div>تاريخ التقرير: ${currentDate}</div>
+          <div>الفترة: من ${fromDateText} إلى ${toDateText}</div>
+          ${isWeeklyReport && customerTypeLabel ? `<div>نوع المنتج: ${customerTypeLabel}</div>` : ''}
+          ${templateNameFilter ? `<div>فلتر القالب: ${templateNameFilter}</div>` : ''}
+        </div>
       `;
-      
-      // إضافة كل عميل في هذا النوع
-      Object.values(typeData.customers).forEach((customer, customerIndex) => {
+
+      const totalSpace = groupedData.reduce((total, booking) => total + calculateBookingAdvertisingSpace(booking), 0);
+      if (isWeeklyReport && totalSpace > 0) {
         html += `
-          <div class="customer-section">
-            <div class="customer-header">
+          <div style="background-color: #dbeafe; color: #1e40af; font-weight: bold; padding: 12px; text-align: center; border: 2px solid #3b82f6; border-radius: 6px; margin: 20px 0;">
+            إجمالي الأمتار الإعلانية: ${totalSpace.toFixed(2)} متر مربع
+          </div>
+        `;
+      }
+
+      Object.entries(groupedByProductType).forEach(([typeKey, typeData]) => {
+        if (typeData.totalBookings === 0) return;
+        
+        html += `
+          <div style="margin-bottom: 25px; border: 1px solid #ddd; border-radius: 5px;">
+            <div style="background-color: #2c5282; color: white; padding: 10px; border-radius: 5px 5px 0 0;">
+              نوع المنتج: ${typeData.label}
+              ${isWeeklyReport ? `<span style="float: left;">إجمالي: ${typeData.totalSpace.toFixed(2)} م²</span>` : ''}
+            </div>
+        `;
+        
+        Object.values(typeData.customers).forEach((customer, customerIndex) => {
+          html += `
+            <div style="margin: 15px;">
+              <div style="background-color: yellow; color: #000; padding: 8px; border-radius: 4px; margin-bottom: 10px; font-weight: bold;">
+                العميل: ${customer.name}
+                ${isWeeklyReport ? `<span style="float: left;">إجمالي: ${customer.totalSpace.toFixed(2)} م²</span>` : ''}
+              </div>
+              
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background-color: #e9ecef;">
+                    <th style="border: 1px solid #ddd; padding: 6px;">م</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">النموذج</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">القياس</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">عدد الأوجه</th>
+                    ${isWeeklyReport ? '<th style="border: 1px solid #ddd; padding: 6px;">المساحة (م²)</th>' : ''}
+                    <th style="border: 1px solid #ddd; padding: 6px;">المنطقة</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">الاتجاه</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">الأماكن</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+          
+          customer.bookings.forEach((booking, index) => {
+            const faces = booking.bookings?.[0]?.pivot?.booking_faces || 
+                         booking.pivot?.booking_faces || 
+                         booking.faces_number || 1;
+            const templateName = booking.template?.model || booking.template?.name || "غير معروف";
+            const templateSize = normalizeSize(booking.template?.size);
+
+            const direction = booking.directions || booking.direction || "غير محدد";
+            const regionName = booking.region?.name || booking.region_name || "غير محدد";
+            const isGrouped = booking.grouped_count > 1;
+            const bookingSpace = calculateBookingAdvertisingSpace(booking);
+            
+            let displayPlaces = [];
+            
+            if (isGrouped && booking.groupedRecords && booking.groupedRecords.length > 0) {
+              const placesSet = new Set();
+              booking.groupedRecords.forEach(record => {
+                if (record.place) {
+                  placesSet.add(record.place.trim());
+                }
+              });
+              displayPlaces = Array.from(placesSet);
+            } else if (isGrouped && booking.allPlaces && booking.allPlaces.length > 0) {
+              displayPlaces = booking.allPlaces.map(place => place.trim());
+            } else {
+              const place = booking.place || "غير محدد";
+              if (place) {
+                displayPlaces = [place.trim()];
+              }
+            }
+            
+            displayPlaces = displayPlaces.filter(place => place && place.trim() !== '');
+            let placesDisplay = displayPlaces.length > 0 ? displayPlaces.join("، ") : "غير محدد";
+            
+            const displayFaces = isGrouped ? booking.grouped_count : faces;
+            
+            html += `
+              <tr>
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${index + 1}</td>
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${templateName}</td>
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+  <span dir="ltr" style="unicode-bidi: bidi-override;">${templateSize}</span>
+</td>
+</td>
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+                  ${displayFaces}
+                  ${isGrouped ? `<br/><small>(مجموعة من ${booking.grouped_count} سجل)</small>` : ''}
+                </td>
+                ${isWeeklyReport ? `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-weight: bold;">${bookingSpace.toFixed(2)}</td>` : ''}
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${regionName}</td>
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${direction}</td>
+                <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${placesDisplay}</td>
+              </tr>
+            `;
+          });
+          
+          html += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        });
+        
+        html += `</div>`;
+      });
+    } else {
+      const groupedByCustomer = {};
+      
+      groupedData.forEach(booking => {
+        const customerId = booking.bookings?.[0]?.customer?.id || 
+                          booking.customer_id || 
+                          booking.customer?.id;
+        
+        if (!groupedByCustomer[customerId]) {
+          let customerName = "غير معروف";
+          if (customerId && customersData) {
+            const customer = customersData.find(c => c.id === parseInt(customerId));
+            if (customer) {
+              customerName = customer.company_name || customer.full_name || `زبون #${customerId}`;
+            }
+          }
+          
+          groupedByCustomer[customerId] = {
+            name: customerName,
+            bookings: []
+          };
+        }
+        
+        groupedByCustomer[customerId].bookings.push(booking);
+      });
+
+      html = `
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #1a365d; margin-bottom: 10px;">تقرير تفاصيل اللوحات</h1>
+          <div>تاريخ التقرير: ${currentDate}</div>
+          <div>الفترة: من ${fromDateText} إلى ${toDateText}</div>
+          ${templateNameFilter ? `<div>فلتر القالب: ${templateNameFilter}</div>` : ''}
+        </div>
+      `;
+
+      Object.values(groupedByCustomer).forEach((customer, customerIndex) => {
+        if (customer.bookings.length === 0) return;
+        
+        html += `
+          <div style="margin-bottom: 25px; border: 1px solid #ddd; border-radius: 5px;">
+            <div style="background-color: yellow; color: #000; padding: 8px; border-radius: 5px 5px 0 0; font-weight: bold;">
               العميل: ${customer.name}
             </div>
             
-            <table class="customer-table">
-              <thead>
-                <tr>
-                  <th>م</th>
-                  <th>النوع</th>
-                  <th>المساحة</th>
-                  <th>الوجوه</th>
-                  <th>الإجمالي</th>
-                  <th>المكان</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div style="margin: 15px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background-color: #e9ecef;">
+                    <th style="border: 1px solid #ddd; padding: 6px;">م</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">النموذج</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">القياس</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">عدد الأوجه</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">المنطقة</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">الاتجاه</th>
+                    <th style="border: 1px solid #ddd; padding: 6px;">الأماكن</th>
+                  </tr>
+                </thead>
+                <tbody>
         `;
         
         customer.bookings.forEach((booking, index) => {
-          const advertisingSpace = parseFloat(booking.template?.advertising_space) || 0;
-          const faces = parseInt(booking.faces_number) || 1;
-          const bookedFaces = parseInt(booking.bookings?.[0]?.pivot?.booking_faces) || 
-                            parseInt(booking.pivot?.booking_faces) || faces;
-          const totalMeters = advertisingSpace * bookedFaces;
+          const faces = booking.bookings?.[0]?.pivot?.booking_faces || 
+                       booking.pivot?.booking_faces || 
+                       booking.faces_number || 1;
           const templateName = booking.template?.model || booking.template?.name || "غير معروف";
-          const place = booking.place || "غير معروف";
+          const templateSize = normalizeSize(booking.template?.size);
+
+          const direction = booking.directions || booking.direction || "غير محدد";
+          const regionName = booking.region?.name || booking.region_name || "غير محدد";
+          const isGrouped = booking.grouped_count > 1;
+          
+          let displayPlaces = [];
+          
+          if (isGrouped && booking.groupedRecords && booking.groupedRecords.length > 0) {
+            const placesSet = new Set();
+            booking.groupedRecords.forEach(record => {
+              if (record.place) {
+                placesSet.add(record.place.trim());
+              }
+            });
+            displayPlaces = Array.from(placesSet);
+          } else if (isGrouped && booking.allPlaces && booking.allPlaces.length > 0) {
+            displayPlaces = booking.allPlaces.map(place => place.trim());
+          } else {
+            const place = booking.place || "غير محدد";
+            if (place) {
+              displayPlaces = [place.trim()];
+            }
+          }
+          
+          displayPlaces = displayPlaces.filter(place => place && place.trim() !== '');
+          let placesDisplay = displayPlaces.length > 0 ? displayPlaces.join("، ") : "غير محدد";
+          
+          const displayFaces = isGrouped ? booking.grouped_count : faces;
           
           html += `
             <tr>
-              <td>${index + 1}</td>
-              <td>${templateName}</td>
-              <td>${advertisingSpace.toFixed(2)}</td>
-              <td>${bookedFaces}</td>
-              <td>${totalMeters.toFixed(0)}</td>
-              <td>${place}</td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${index + 1}</td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${templateName}</td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+  <span dir="ltr" style="unicode-bidi: bidi-override;">${templateSize}</span>
+</td>
+</td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+                ${displayFaces}
+                ${isGrouped ? `<br/><small>(مجموعة من ${booking.grouped_count} سجل)</small>` : ''}
+              </td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${regionName}</td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${direction}</td>
+              <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${placesDisplay}</td>
             </tr>
           `;
         });
@@ -685,81 +1046,498 @@ useEffect(() => {
         html += `
               </tbody>
             </table>
-            
-            <div class="customer-total">
-              إجمالي العميل: ${customer.totalMeters.toFixed(0)} متر مربع
-            </div>
           </div>
+        </div>
+        `;
+      });
+    }
+
+    html += `
+      <div style="margin-top: 30px; text-align: center; color: #666; font-size: 12px;">
+        <p>تم الإنشاء آلياً بواسطة نظام ${isWeeklyReport ? 'التقرير العام ' : 'تفاصيل اللوحات'}</p>
+        <p>تاريخ الطباعة: ${currentDate}</p>
+        ${templateNameFilter ? `<p>فلتر القالب المطبق: ${templateNameFilter}</p>` : ''}
+      </div>
+    `;
+    
+    return html;
+  };
+
+  const createUnbookedWordHTML = () => {
+    const currentDate = formatArabicDate(new Date());
+    const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
+    const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
+    
+    const groupedData = groupRoadSigns(filteredUnbookedData, true);
+
+    const groupedByCity = {};
+    let totalMeters = isWeeklyReport ? 0 : 0;
+    
+    groupedData.forEach(sign => {
+      const cityName = sign.city?.name || "غير معروف";
+      const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
+      if (isWeeklyReport) totalMeters += advertisingSpace;
+      
+      if (!groupedByCity[cityName]) {
+        groupedByCity[cityName] = {
+          signs: [],
+          totalMeters: 0,
+          totalCount: 0
+        };
+      }
+      
+      groupedByCity[cityName].signs.push(sign);
+      groupedByCity[cityName].totalCount += 1;
+      if (isWeeklyReport) groupedByCity[cityName].totalMeters += advertisingSpace;
+    });
+
+    let html = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #dc2626; margin-bottom: 10px;">${isWeeklyReport ? 'التقرير العام  - اللوحات غير المحجوزة' : 'تقرير اللوحات غير المحجوزة'}</h1>
+        <div>تاريخ التقرير: ${currentDate}</div>
+        <div>الفترة: من ${fromDateText} إلى ${toDateText}</div>
+        <div>عدد اللوحات غير المحجوزة: ${groupedData.length} (بعد التجميع)</div>
+        ${templateNameFilter ? `<div>فلتر القالب: ${templateNameFilter}</div>` : ''}
+        <div style="color: #dc2626; background-color: #fef2f2; padding: 8px; margin-top: 10px;">
+          ملاحظة: تم تجميع السجلات حسب المكان والنموذج والاتجاه
+        </div>
+        ${isWeeklyReport && totalMeters > 0 ? `
+          <div style="background-color: #dbeafe; color: #1e40af; font-weight: bold; padding: 10px; margin-top: 15px; border: 2px solid #3b82f6; border-radius: 5px;">
+            إجمالي الأمتار الإعلانية غير المحجوزة: ${totalMeters.toFixed(0)} متر مربع
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    Object.entries(groupedByCity).forEach(([cityName, cityData]) => {
+      if (cityData.signs.length === 0) return;
+      
+      html += `
+        <div style="margin-bottom: 25px; border: 1px solid #ddd; border-radius: 5px;">
+          <div style="background-color: #991b1b; color: white; padding: 10px; border-radius: 5px 5px 0 0;">
+            المدينة: ${cityName}
+          </div>
+          
+          <div style="background-color: #fee2e2; padding: 8px; display: flex; justify-content: space-between;">
+            <span>عدد اللوحات: ${cityData.signs.length}</span>
+            ${isWeeklyReport ? `<span>الإجمالي: ${cityData.totalMeters.toFixed(0)} متر مربع</span>` : ''}
+          </div>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+              <tr style="background-color: #dc2626; color: white;">
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">م</th>
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">كود اللوحة</th>
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">النموذج</th>
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">عدد الأوجه</th>
+                ${isWeeklyReport ? '<th style="border: 1px solid #ddd; padding: 6px; text-align: center;">الإجمالي (م²)</th>' : ''}
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">المنطقة</th>
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">الاتجاه</th>
+                <th style="border: 1px solid #ddd; padding: 6px; text-align: center;">الأماكن</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      cityData.signs.forEach((sign, index) => {
+        const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
+        const faces = parseInt(sign.faces_number) || 1;
+        const templateName = sign.template?.model || sign.template?.name || "غير معروف";
+        const direction = sign.direction || sign.directions || "غير محدد";
+        const regionName = sign.region?.name || sign.region_name || "غير محدد";
+        const isGrouped = sign.grouped_count > 1;
+        const signCode = sign.roadsign_code || `X${sign.id.toString().padStart(6, '0')}`;
+        
+        let displayPlaces = [];
+        
+        if (isGrouped && sign.groupedRecords && sign.groupedRecords.length > 0) {
+          const placesSet = new Set();
+          sign.groupedRecords.forEach(record => {
+            if (record.place) {
+              placesSet.add(record.place.trim());
+            }
+          });
+          displayPlaces = Array.from(placesSet);
+        } else if (isGrouped && sign.allPlaces && sign.allPlaces.length > 0) {
+          displayPlaces = sign.allPlaces.map(place => place.trim());
+        } else {
+          const place = sign.place || "غير محدد";
+          if (place) {
+            displayPlaces = [place.trim()];
+          }
+        }
+        
+        displayPlaces = displayPlaces.filter(place => place && place.trim() !== '');
+        let placesDisplay = displayPlaces.length > 0 ? displayPlaces.join("، ") : "غير محدد";
+        
+        const displayFaces = isGrouped ? sign.grouped_count : faces;
+        
+        html += `
+          <tr>
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${index + 1}</td>
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-family: 'Courier New', monospace; direction: ltr;">${signCode}</td>
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${templateName}</td>
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+              ${displayFaces}
+              ${isGrouped ? `<br/><small style="color: #666; font-style: italic;">(مجموعة من ${sign.grouped_count} سجل)</small>` : ''}
+            </td>
+            ${isWeeklyReport ? `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-weight: bold;">${advertisingSpace.toFixed(0)}</td>` : ''}
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${regionName}</td>
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: right; direction: rtl;">${direction}</td>
+            <td style="border: 1px solid #ddd; padding: 6px; text-align: right; direction: rtl;">${placesDisplay}</td>
+          </tr>
         `;
       });
       
-      html += `</div>`;
-    });
-
-    // قسم إحصاءات القوالب
-    html += `
-      <div class="template-summary">
-        <h2>ملخص استخدام القوالب</h2>
-        
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>م</th>
-              <th>اسم القالب</th>
-              <th>عدد المرات</th>
-              <th>إجمالي الوجوه</th>
-              <th>المساحة الكلية (م²)</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-    
-    const statsArray = Object.entries(templateStats)
-      .map(([templateName, stats], index) => ({
-        index,
-        templateName,
-        stats
-      }))
-      .sort((a, b) => b.stats.count - a.stats.count);
-    
-    statsArray.forEach((item, i) => {
       html += `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${item.templateName}</td>
-          <td>${item.stats.count}</td>
-          <td>${item.stats.totalFaces}</td>
-          <td>${item.stats.totalMeters.toFixed(0)}</td>
-        </tr>
+            </tbody>
+          </table>
+          <div style="background-color: #e9ecef; padding: 8px; margin-top: 10px; border-radius: 4px; font-weight: bold;">
+            إجمالي مدينة ${cityName}: ${isWeeklyReport ? `${cityData.totalMeters.toFixed(0)} متر مربع` : `${cityData.totalCount} لوحة`}
+          </div>
+        </div>
       `;
     });
-    
-    // المجاميع الكلية
-    const totalCount = Object.values(templateStats).reduce((sum, stat) => sum + stat.count, 0);
-    const totalFaces = Object.values(templateStats).reduce((sum, stat) => sum + stat.totalFaces, 0);
-    const totalMeters = Object.values(templateStats).reduce((sum, stat) => sum + stat.totalMeters, 0);
-    
+
     html += `
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="2"><strong>المجموع الكلي</strong></td>
-              <td><strong>${totalCount}</strong></td>
-              <td><strong>${totalFaces}</strong></td>
-              <td><strong>${totalMeters.toFixed(0)}</strong></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-      
-      <div class="footer">
-        <p>---------------------------------------------</p>
-        <p>تم الإنشاء آلياً بواسطة نظام التقارير</p>
+      <div style="margin-top: 30px; text-align: center; color: #666; font-size: 12px;">
+        <p>تم الإنشاء آلياً بواسطة نظام ${isWeeklyReport ? 'التقرير العام ' : 'تفاصيل اللوحات'} - اللوحات غير المحجوزة</p>
+        <p>ملاحظة: البيانات مجمعة حسب المكان والنموذج والاتجاه</p>
+        ${templateNameFilter ? `<p>فلتر القالب المطبق: ${templateNameFilter}</p>` : ''}
         <p>تاريخ الطباعة: ${currentDate}</p>
       </div>
     `;
     
+    return html;
+  };
+
+  // Function to convert logo to base64 for HTML2Canvas
+  const getLogoBase64 = async () => {
+    try {
+      const response = await fetch(logo);
+      const blob = await response.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Error loading logo:", error);
+      return '';
+    }
+  };
+
+  const createUnbookedReportHTML = async (groupedData) => {
+    const currentDate = formatArabicDate(new Date());
+    const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
+    const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
+    
+    const groupedByCity = {};
+    let totalMeters = isWeeklyReport ? 0 : 0;
+    
+    groupedData.forEach(sign => {
+      const cityName = sign.city?.name || "غير معروف";
+      const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
+      if (isWeeklyReport) totalMeters += advertisingSpace;
+      
+      if (!groupedByCity[cityName]) {
+        groupedByCity[cityName] = {
+          signs: [],
+          totalMeters: 0,
+          totalCount: 0
+        };
+      }
+      
+      groupedByCity[cityName].signs.push(sign);
+      groupedByCity[cityName].totalCount += 1;
+      if (isWeeklyReport) groupedByCity[cityName].totalMeters += advertisingSpace;
+    });
+
+    // Get logo as base64
+    const logoBase64 = await getLogoBase64();
+
+    let html = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${isWeeklyReport ? 'التقرير العام  - اللوحات غير المحجوزة' : 'تقرير اللوحات غير المحجوزة'}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+          
+          body {
+            font-family: 'Amiri', serif;
+            direction: rtl;
+            background-color: #fff;
+            color: #000;
+            margin: 0;
+            padding: 10px;
+          }
+          
+          .header-container {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #dc2626;
+            padding-bottom: 15px;
+            gap: 20px;
+          }
+          
+          .logo-container {
+            flex-shrink: 0;
+            margin-top: 10px;
+          }
+          
+          .logo {
+            width: 100px;
+            height: auto;
+            max-width: 100px;
+          }
+          
+          .header-content {
+            flex-grow: 1;
+            text-align: center;
+          }
+          
+          .header-content h1 {
+            color: #dc2626;
+            margin-bottom: 10px;
+            margin-top: 0;
+          }
+          
+          ${isWeeklyReport ? `
+          .total-meters {
+            background-color: #dbeafe;
+            color: #1e40af;
+            font-weight: bold;
+            padding: 12px;
+            text-align: center;
+            border: 2px solid #3b82f6;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-size: 18px;
+          }
+          ` : ''}
+          
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+          }
+          
+          th {
+            background-color: #dc2626;
+            color: white;
+            padding: 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+            font-size: 13px;
+          }
+          
+          td {
+            padding: 6px;
+            text-align: center;
+            border: 1px solid #ddd;
+            font-size: 12px;
+          }
+          
+          .city-header {
+            background-color: #991b1b;
+            color: white;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px 5px 0 0;
+            font-size: 14px;
+          }
+          
+          .city-stats {
+            background-color: #fee2e2;
+            padding: 8px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+          }
+          
+          .city-total {
+            background-color: #e9ecef;
+            padding: 8px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 13px;
+          }
+          
+          .sign-code {
+            font-family: 'Courier New', monospace;
+            direction: ltr;
+            text-align: left;
+            font-size: 11px;
+          }
+          
+          .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 11px;
+            border-top: 1px solid #ccc;
+            padding-top: 15px;
+          }
+          
+          .group-note {
+            font-size: 10px;
+            color: #666;
+            font-style: italic;
+          }
+          
+          ${isWeeklyReport ? `
+          .total-meter-cell {
+            font-weight: bold;
+          }
+          ` : ''}
+          
+          .direction-cell, .places-cell {
+            text-align: right;
+            direction: rtl;
+          }
+          
+          @media print {
+            body {
+              padding: 5mm;
+            }
+            .logo {
+              width: 80px;
+            }
+            table {
+              font-size: 10px;
+            }
+            th, td {
+              padding: 4px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-container">
+          <div class="logo-container">
+            <img src="${logoBase64}" alt="Logo" class="logo" />
+          </div>
+          <div class="header-content">
+            <h1>${isWeeklyReport ? 'التقرير العام  - اللوحات غير المحجوزة' : 'تقرير اللوحات غير المحجوزة'}</h1>
+            <div>تاريخ التقرير: ${currentDate}</div>
+            <div>الفترة: من ${fromDateText} إلى ${toDateText}</div>
+            <div>عدد اللوحات غير المحجوزة: ${groupedData.length} (بعد التجميع)</div>
+            ${templateNameFilter ? `<div>فلتر القالب: ${templateNameFilter}</div>` : ''}
+            <div style="color: #dc2626; background-color: #fef2f2; padding: 8px; margin-top: 10px; border-radius: 4px; font-size: 12px;">
+              ملاحظة: تم تجميع السجلات حسب المكان والنموذج والاتجاه
+            </div>
+          </div>
+        </div>
+        
+        ${isWeeklyReport && totalMeters > 0 ? `
+          <div class="total-meters">
+            إجمالي الأمتار الإعلانية غير المحجوزة: ${totalMeters.toFixed(0)} متر مربع
+          </div>
+        ` : ''}
+    `;
+
+    Object.entries(groupedByCity).forEach(([cityName, cityData]) => {
+      if (cityData.signs.length === 0) return;
+      
+      html += `
+        <div class="city-header">
+          المدينة: ${cityName}
+        </div>
+        
+        <div class="city-stats">
+          <span>عدد اللوحات: ${cityData.signs.length}</span>
+          ${isWeeklyReport ? `<span>الإجمالي: ${cityData.totalMeters.toFixed(0)} متر مربع</span>` : ''}
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>م</th>
+              <th>كود اللوحة</th>
+              <th>النموذج</th>
+              <th>عدد الأوجه</th>
+              ${isWeeklyReport ? '<th>الإجمالي (م²)</th>' : ''}
+              <th>المنطقة</th>
+              <th>الاتجاه</th>
+              <th>الأماكن</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      cityData.signs.forEach((sign, index) => {
+        const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
+        const faces = parseInt(sign.faces_number) || 1;
+        const templateName = sign.template?.model || sign.template?.name || "غير معروف";
+        const direction = sign.direction || sign.directions || "غير محدد";
+        const regionName = sign.region?.name || sign.region_name || "غير محدد";
+        const isGrouped = sign.grouped_count > 1;
+        const signCode = sign.roadsign_code || `X${sign.id.toString().padStart(6, '0')}`;
+        
+        let displayPlaces = [];
+        
+        if (isGrouped && sign.groupedRecords && sign.groupedRecords.length > 0) {
+          const placesSet = new Set();
+          sign.groupedRecords.forEach(record => {
+            if (record.place) {
+              placesSet.add(record.place.trim());
+            }
+          });
+          displayPlaces = Array.from(placesSet);
+        } else if (isGrouped && sign.allPlaces && sign.allPlaces.length > 0) {
+          displayPlaces = sign.allPlaces.map(place => place.trim());
+        } else {
+          const place = sign.place || "غير محدد";
+          if (place) {
+            displayPlaces = [place.trim()];
+          }
+        }
+        
+        displayPlaces = displayPlaces.filter(place => place && place.trim() !== '');
+        let placesDisplay = displayPlaces.length > 0 ? displayPlaces.join("، ") : "غير محدد";
+        
+        const displayFaces = isGrouped ? sign.grouped_count : faces;
+        
+        html += `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="sign-code">${signCode}</td>
+            <td>${templateName}</td>
+            <td>
+              ${displayFaces}
+              ${isGrouped ? '<div class="group-note">(مجموعة)</div>' : ''}
+            </td>
+            ${isWeeklyReport ? `<td class="${isWeeklyReport ? 'total-meter-cell' : ''}">${advertisingSpace.toFixed(0)}</td>` : ''}
+            <td>${regionName}</td>
+            <td class="direction-cell">${direction}</td>
+            <td class="places-cell">${placesDisplay}</td>
+          </tr>
+        `;
+      });
+      
+      html += `
+          </tbody>
+        </table>
+        <div class="city-total">
+          إجمالي مدينة ${cityName}: ${isWeeklyReport ? `${cityData.totalMeters.toFixed(0)} متر مربع` : `${cityData.totalCount} لوحة`}
+        </div>
+      </div>
+      `;
+    });
+
     html += `
+        <div class="footer">
+          <p>تم الإنشاء آلياً بواسطة نظام ${isWeeklyReport ? 'التقرير العام ' : 'تفاصيل اللوحات'} - اللوحات غير المحجوزة</p>
+          <p>ملاحظة: البيانات مجمعة حسب المكان والنموذج والاتجاه</p>
+          ${templateNameFilter ? `<p>فلتر القالب المطبق: ${templateNameFilter}</p>` : ''}
+          <p>تاريخ الطباعة: ${currentDate}</p>
         </div>
       </body>
       </html>
@@ -768,7 +1546,6 @@ useEffect(() => {
     return html;
   };
 
-  // دالة الطباعة باستخدام HTML2Canvas
   const handlePrintReport = async () => {
     if (filteredBookingsData.length === 0) {
       alert("لا توجد بيانات للطباعة");
@@ -778,10 +1555,8 @@ useEffect(() => {
     setIsGeneratingPDF(true);
     
     try {
-      // إنشاء HTML للتقرير
-      const htmlContent = createReportHTML();
+      const htmlContent = await createReportHTMLForPDF();
       
-      // إنشاء نافذة جديدة وعرض HTML
       const printWindow = window.open('', '_blank', 'width=800,height=600');
       
       if (!printWindow) {
@@ -793,19 +1568,17 @@ useEffect(() => {
       printWindow.document.write(htmlContent);
       printWindow.document.close();
       
-      // انتظر حتى يتم تحميل الصفحة
       printWindow.onload = () => {
         setTimeout(async () => {
           try {
-            // استخدام html2canvas لالتقاط الصفحة
             const canvas = await html2canvas(printWindow.document.body, {
               scale: 2,
               useCORS: true,
               logging: false,
-              backgroundColor: '#ffffff'
+              backgroundColor: '#ffffff',
+              allowTaint: true
             });
             
-            // إنشاء PDF
             const pdf = new jsPDF({
               orientation: 'portrait',
               unit: 'mm',
@@ -820,11 +1593,9 @@ useEffect(() => {
             let heightLeft = imgHeight;
             let position = 0;
             
-            // إضافة الصورة إلى PDF
             pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
             heightLeft -= pageHeight;
             
-            // إضافة صفحات إضافية إذا لزم الأمر
             while (heightLeft > 0) {
               position = heightLeft - imgHeight;
               pdf.addPage();
@@ -832,11 +1603,9 @@ useEffect(() => {
               heightLeft -= pageHeight;
             }
             
-            // حفظ PDF
-            const fileName = `تقرير_المنتجات_${new Date().toISOString().split('T')[0]}.pdf`;
+            const fileName = `${isWeeklyReport ? 'التقرير_الأسبوعي' : 'تفاصيل_اللوحات'}_${new Date().toISOString().split('T')[0]}.pdf`;
             pdf.save(fileName);
             
-            // إغلاق النافذة
             printWindow.close();
             
           } catch (error) {
@@ -845,7 +1614,7 @@ useEffect(() => {
           } finally {
             setIsGeneratingPDF(false);
           }
-        }, 1000);
+        }, 1500);
       };
       
     } catch (error) {
@@ -855,14 +1624,631 @@ useEffect(() => {
     }
   };
 
-  // دالة بديلة أبسط للطباعة مباشرة
-  const handleSimplePrint = () => {
+  const createReportHTMLForPDF = async () => {
+    const customerTypeLabel = getCustomerTypeLabel();
+    const currentDate = formatArabicDate(new Date());
+    const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
+    const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
+    
+    const groupedData = groupRoadSigns(filteredBookingsData, false);
+
+    // Get logo as base64
+    const logoBase64 = await getLogoBase64();
+
+    let html = '';
+    
+    if (isWeeklyReport) {
+      const groupedByProductType = {};
+      
+      productTypeOptions.forEach(type => {
+        groupedByProductType[type.value] = {
+          label: type.label,
+          bookings: [],
+          totalBookings: 0,
+          customers: {},
+          totalSpace: 0
+        };
+      });
+
+      groupedByProductType["unknown"] = {
+        label: "غير معروف",
+        bookings: [],
+        totalBookings: 0,
+        customers: {},
+        totalSpace: 0
+      };
+
+      groupedData.forEach(booking => {
+        const customerId = booking.bookings?.[0]?.customer?.id || 
+                          booking.customer_id || 
+                          booking.customer?.id;
+        
+        let productType = "unknown";
+        
+        if (customerId && customersData) {
+          const customer = customersData.find(c => c.id === parseInt(customerId));
+          if (customer && customer.type) {
+            productType = customer.type;
+          }
+        }
+        
+        if (!groupedByProductType[productType]) {
+          groupedByProductType[productType] = {
+            label: `نوع النموذج ${productType}`,
+            bookings: [],
+            totalBookings: 0,
+            customers: {},
+            totalSpace: 0
+          };
+        }
+        
+        const bookingSpace = calculateBookingAdvertisingSpace(booking);
+        groupedByProductType[productType].bookings.push(booking);
+        groupedByProductType[productType].totalBookings += 1;
+        groupedByProductType[productType].totalSpace += bookingSpace;
+        
+        if (!groupedByProductType[productType].customers[customerId]) {
+          let customerName = "غير معروف";
+          if (customerId && customersData) {
+            const customer = customersData.find(c => c.id === parseInt(customerId));
+            if (customer) {
+              customerName = customer.company_name || customer.full_name || `زبون #${customerId}`;
+            }
+          }
+          groupedByProductType[productType].customers[customerId] = {
+            name: customerName,
+            bookings: [],
+            totalSpace: 0
+          };
+        }
+        
+        groupedByProductType[productType].customers[customerId].bookings.push(booking);
+        groupedByProductType[productType].customers[customerId].totalSpace += bookingSpace;
+      });
+
+      html = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${isWeeklyReport ? 'التقرير العام ' : 'تقرير تفاصيل اللوحات'}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+            
+            body {
+              font-family: 'Amiri', serif;
+              direction: rtl;
+              background-color: #fff;
+              color: #000;
+              margin: 0;
+              padding: 10px;
+            }
+            
+            .header-container {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              margin-bottom: 20px;
+              border-bottom: 2px solid #1a365d;
+              padding-bottom: 15px;
+              gap: 20px;
+            }
+            
+            .logo-container {
+              flex-shrink: 0;
+              margin-top: 10px;
+            }
+            
+            .logo {
+              width: 100px;
+              height: auto;
+              max-width: 100px;
+            }
+            
+            .header-content {
+              flex-grow: 1;
+              text-align: center;
+            }
+            
+            .header-content h1 {
+              color: #1a365d;
+              margin-bottom: 10px;
+              margin-top: 0;
+            }
+            
+            ${isWeeklyReport ? `
+            .total-space {
+              background-color: #dbeafe;
+              color: #1e40af;
+              font-weight: bold;
+              padding: 12px;
+              text-align: center;
+              border: 2px solid #3b82f6;
+              border-radius: 6px;
+              margin: 20px 0;
+              font-size: 18px;
+            }
+            ` : ''}
+            
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 10px;
+              font-size: 12px;
+            }
+            
+            th {
+              background-color: #e9ecef;
+              color: black;
+              padding: 8px;
+              text-align: center;
+              border: 1px solid #ddd;
+              font-size: 13px;
+            }
+            
+            td {
+              padding: 6px;
+              text-align: center;
+              border: 1px solid #ddd;
+              font-size: 12px;
+            }
+            
+            .product-type-header {
+              background-color: #2c5282;
+              color: white;
+              padding: 10px;
+              margin-top: 20px;
+              border-radius: 5px 5px 0 0;
+              font-size: 14px;
+            }
+            
+            .customer-header {
+              background-color: yellow;
+              color: #000;
+              padding: 8px;
+              margin: 15px 0 10px 0;
+              font-weight: bold;
+              border-radius: 4px;
+              font-size: 13px;
+            }
+            
+            .footer {
+              text-align: center;
+              margin-top: 30px;
+              color: #666;
+              font-size: 11px;
+              border-top: 1px solid #ccc;
+              padding-top: 15px;
+            }
+            
+            .group-note {
+              font-size: 10px;
+              color: #666;
+              font-style: italic;
+            }
+            
+            ${isWeeklyReport ? `
+            .space-cell {
+              font-weight: bold;
+            }
+            ` : ''}
+            
+            .direction-cell {
+              text-align: right;
+              direction: rtl;
+            }
+            
+            .places-cell {
+              text-align: right;
+              direction: rtl;
+              max-width: 150px;
+              word-wrap: break-word;
+            }
+            
+            @media print {
+              body {
+                padding: 5mm;
+              }
+              .logo {
+                width: 80px;
+              }
+              table {
+                font-size: 10px;
+              }
+              th, td {
+                padding: 4px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-container">
+            <div class="logo-container">
+              <img src="${logoBase64}" alt="Logo" class="logo" />
+            </div>
+            <div class="header-content">
+              <h1>${isWeeklyReport ? 'التقرير العام ' : 'تقرير تفاصيل اللوحات'}</h1>
+              <div>تاريخ التقرير: ${currentDate}</div>
+              <div>الفترة: من ${fromDateText} إلى ${toDateText}</div>
+              ${isWeeklyReport && customerTypeLabel ? `<div>نوع المنتج: ${customerTypeLabel}</div>` : ''}
+              ${templateNameFilter ? `<div>فلتر القالب: ${templateNameFilter}</div>` : ''}
+            </div>
+          </div>
+      `;
+
+      const totalSpace = groupedData.reduce((total, booking) => total + calculateBookingAdvertisingSpace(booking), 0);
+      if (isWeeklyReport && totalSpace > 0) {
+        html += `
+          <div class="total-space">
+            إجمالي الأمتار الإعلانية: ${totalSpace.toFixed(2)} متر مربع
+          </div>
+        `;
+      }
+
+      Object.entries(groupedByProductType).forEach(([typeKey, typeData]) => {
+        if (typeData.totalBookings === 0) return;
+        
+        html += `
+          <div class="product-type-header">
+            نوع المنتج: ${typeData.label}
+            ${isWeeklyReport ? `<span style="float: left;">إجمالي: ${typeData.totalSpace.toFixed(2)} م²</span>` : ''}
+          </div>
+        `;
+        
+        Object.values(typeData.customers).forEach((customer, customerIndex) => {
+          html += `
+            <div style="margin: 15px 0;">
+              <div class="customer-header">
+                العميل: ${customer.name}
+                ${isWeeklyReport ? `<span style="float: left;">إجمالي: ${customer.totalSpace.toFixed(2)} م²</span>` : ''}
+              </div>
+              
+              <table>
+                <thead>
+                  <tr>
+                    <th>م</th>
+                    <th>النموذج</th>
+                    <th>القياس</th>
+                    <th>عدد الأوجه</th>
+                    ${isWeeklyReport ? '<th>المساحة (م²)</th>' : ''}
+                    <th>المنطقة</th>
+                    <th>الاتجاه</th>
+                    <th>الأماكن</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+          
+          customer.bookings.forEach((booking, index) => {
+            const faces = booking.bookings?.[0]?.pivot?.booking_faces || 
+                         booking.pivot?.booking_faces || 
+                         booking.faces_number || 1;
+            const templateName = booking.template?.model || booking.template?.name || "غير معروف";
+            const templateSize = normalizeSize(booking.template?.size);
+
+            const direction = booking.directions || booking.direction || "غير محدد";
+            const regionName = booking.region?.name || booking.region_name || "غير محدد";
+            const isGrouped = booking.grouped_count > 1;
+            const bookingSpace = calculateBookingAdvertisingSpace(booking);
+            
+            let displayPlaces = [];
+            
+            if (isGrouped && booking.groupedRecords && booking.groupedRecords.length > 0) {
+              const placesSet = new Set();
+              booking.groupedRecords.forEach(record => {
+                if (record.place) {
+                  placesSet.add(record.place.trim());
+                }
+              });
+              displayPlaces = Array.from(placesSet);
+            } else if (isGrouped && booking.allPlaces && booking.allPlaces.length > 0) {
+              displayPlaces = booking.allPlaces.map(place => place.trim());
+            } else {
+              const place = booking.place || "غير محدد";
+              if (place) {
+                displayPlaces = [place.trim()];
+              }
+            }
+            
+            displayPlaces = displayPlaces.filter(place => place && place.trim() !== '');
+            let placesDisplay = displayPlaces.length > 0 ? displayPlaces.join("، ") : "غير محدد";
+            
+            const displayFaces = isGrouped ? booking.grouped_count : faces;
+            
+            html += `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${templateName}</td>
+                <td><span dir="ltr" style="unicode-bidi: bidi-override;">${templateSize}</span></td>
+
+                <td>
+                  ${displayFaces}
+                  ${isGrouped ? '<div class="group-note">(مجموعة)</div>' : ''}
+                </td>
+                ${isWeeklyReport ? `<td class="space-cell">${bookingSpace.toFixed(2)}</td>` : ''}
+                <td>${regionName}</td>
+                <td class="direction-cell">${direction}</td>
+                <td class="places-cell">${placesDisplay}</td>
+              </tr>
+            `;
+          });
+          
+          html += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        });
+      });
+    } else {
+      const groupedByCustomer = {};
+      
+      groupedData.forEach(booking => {
+        const customerId = booking.bookings?.[0]?.customer?.id || 
+                          booking.customer_id || 
+                          booking.customer?.id;
+        
+        if (!groupedByCustomer[customerId]) {
+          let customerName = "غير معروف";
+          if (customerId && customersData) {
+            const customer = customersData.find(c => c.id === parseInt(customerId));
+            if (customer) {
+              customerName = customer.company_name || customer.full_name || `زبون #${customerId}`;
+            }
+          }
+          
+          groupedByCustomer[customerId] = {
+            name: customerName,
+            bookings: []
+          };
+        }
+        
+        groupedByCustomer[customerId].bookings.push(booking);
+      });
+
+      html = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>تقرير تفاصيل اللوحات</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+            
+            body {
+              font-family: 'Amiri', serif;
+              direction: rtl;
+              background-color: #fff;
+              color: #000;
+              margin: 0;
+              padding: 10px;
+            }
+            
+            .header-container {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              margin-bottom: 20px;
+              border-bottom: 2px solid #1a365d;
+              padding-bottom: 15px;
+              gap: 20px;
+            }
+            
+            .logo-container {
+              flex-shrink: 0;
+              margin-top: 10px;
+            }
+            
+            .logo {
+              width: 100px;
+              height: auto;
+              max-width: 100px;
+            }
+            
+            .header-content {
+              flex-grow: 1;
+              text-align: center;
+            }
+            
+            .header-content h1 {
+              color: #1a365d;
+              margin-bottom: 10px;
+              margin-top: 0;
+            }
+            
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 10px;
+              font-size: 12px;
+            }
+            
+            th {
+              background-color: #e9ecef;
+              color: black;
+              padding: 8px;
+              text-align: center;
+              border: 1px solid #ddd;
+              font-size: 13px;
+            }
+            
+            td {
+              padding: 6px;
+              text-align: center;
+              border: 1px solid #ddd;
+              font-size: 12px;
+            }
+            
+            .customer-header {
+              background-color: yellow;
+              color: #000;
+              padding: 8px;
+              margin: 15px 0 10px 0;
+              font-weight: bold;
+              border-radius: 4px;
+              font-size: 13px;
+            }
+            
+            .footer {
+              text-align: center;
+              margin-top: 30px;
+              color: #666;
+              font-size: 11px;
+              border-top: 1px solid #ccc;
+              padding-top: 15px;
+            }
+            
+            .group-note {
+              font-size: 10px;
+              color: #666;
+              font-style: italic;
+            }
+            
+            .direction-cell {
+              text-align: right;
+              direction: rtl;
+            }
+            
+            .places-cell {
+              text-align: right;
+              direction: rtl;
+              max-width: 150px;
+              word-wrap: break-word;
+            }
+            
+            @media print {
+              body {
+                padding: 5mm;
+              }
+              .logo {
+                width: 80px;
+              }
+              table {
+                font-size: 10px;
+              }
+              th, td {
+                padding: 4px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-container">
+            <div class="logo-container">
+              <img src="${logoBase64}" alt="Logo" class="logo" />
+            </div>
+            <div class="header-content">
+              <h1>تقرير تفاصيل اللوحات</h1>
+              <div>تاريخ التقرير: ${currentDate}</div>
+              <div>الفترة: من ${fromDateText} إلى ${toDateText}</div>
+              ${templateNameFilter ? `<div>فلتر القالب: ${templateNameFilter}</div>` : ''}
+            </div>
+          </div>
+      `;
+
+      Object.values(groupedByCustomer).forEach((customer, customerIndex) => {
+        if (customer.bookings.length === 0) return;
+        
+        html += `
+          <div class="customer-header">
+            العميل: ${customer.name}
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>م</th>
+                <th>النموذج</th>
+                <th>القياس</th>
+                <th>عدد الأوجه</th>
+                <th>المنطقة</th>
+                <th>الاتجاه</th>
+                <th>الأماكن</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        
+        customer.bookings.forEach((booking, index) => {
+          const faces = booking.bookings?.[0]?.pivot?.booking_faces || 
+                       booking.pivot?.booking_faces || 
+                       booking.faces_number || 1;
+          const templateName = booking.template?.model || booking.template?.name || "غير معروف";
+          const templateSize = normalizeSize(booking.template?.size);
+
+          const direction = booking.directions || booking.direction || "غير محدد";
+          const regionName = booking.region?.name || booking.region_name || "غير محدد";
+          const isGrouped = booking.grouped_count > 1;
+          
+          let displayPlaces = [];
+          
+          if (isGrouped && booking.groupedRecords && booking.groupedRecords.length > 0) {
+            const placesSet = new Set();
+            booking.groupedRecords.forEach(record => {
+              if (record.place) {
+                placesSet.add(record.place.trim());
+              }
+            });
+            displayPlaces = Array.from(placesSet);
+          } else if (isGrouped && booking.allPlaces && booking.allPlaces.length > 0) {
+            displayPlaces = booking.allPlaces.map(place => place.trim());
+          } else {
+            const place = booking.place || "غير محدد";
+            if (place) {
+              displayPlaces = [place.trim()];
+            }
+          }
+          
+          displayPlaces = displayPlaces.filter(place => place && place.trim() !== '');
+          let placesDisplay = displayPlaces.length > 0 ? displayPlaces.join("، ") : "غير محدد";
+          
+          const displayFaces = isGrouped ? booking.grouped_count : faces;
+          
+          html += `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${templateName}</td>
+<td><span dir="ltr" style="unicode-bidi: bidi-override;">${templateSize}</span></td>
+              <td>
+                ${displayFaces}
+                ${isGrouped ? '<div class="group-note">(مجموعة)</div>' : ''}
+              </td>
+              <td>${regionName}</td>
+              <td class="direction-cell">${direction}</td>
+              <td class="places-cell">${placesDisplay}</td>
+            </tr>
+          `;
+        });
+        
+        html += `
+            </tbody>
+          </table>
+        `;
+      });
+    }
+
+    html += `
+        <div class="footer">
+          <p>تم الإنشاء آلياً بواسطة نظام ${isWeeklyReport ? 'التقرير العام ' : 'تفاصيل اللوحات'}</p>
+          <p>تاريخ الطباعة: ${currentDate}</p>
+          ${templateNameFilter ? `<p>فلتر القالب المطبق: ${templateNameFilter}</p>` : ''}
+        </div>
+      </body>
+      </html>
+    `;
+    
+    return html;
+  };
+
+  const handleSimplePrint = async () => {
     if (filteredBookingsData.length === 0) {
       alert("لا توجد بيانات للطباعة");
       return;
     }
 
-    const htmlContent = createReportHTML();
+    const htmlContent = await createReportHTMLForPDF();
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     
     if (!printWindow) {
@@ -873,7 +2259,6 @@ useEffect(() => {
     printWindow.document.write(htmlContent);
     printWindow.document.close();
     
-    // بعد تحميل المحتوى، قم بالطباعة
     printWindow.onload = () => {
       setTimeout(() => {
         printWindow.print();
@@ -890,368 +2275,8 @@ useEffect(() => {
     setIsGeneratingPDF(true);
     
     try {
-      // First, create the HTML content
-      const createUnbookedReportHTML = () => {
-        const currentDate = formatArabicDate(new Date());
-        const fromDateText = fromDate ? formatArabicDate(fromDate) : "غير محدد";
-        const toDateText = toDate ? formatArabicDate(toDate) : "غير محدد";
-
-        // Group by city
-        const groupedByCity = {};
-        
-        filteredUnbookedData.forEach(sign => {
-          const cityName = sign.city?.name || "غير معروف";
-          
-          if (!groupedByCity[cityName]) {
-            groupedByCity[cityName] = {
-              signs: [],
-              totalMeters: 0
-            };
-          }
-          
-          const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
-          groupedByCity[cityName].signs.push(sign);
-          groupedByCity[cityName].totalMeters += advertisingSpace;
-        });
-
-        // Template statistics
-        const templateStats = {};
-        filteredUnbookedData.forEach(sign => {
-          const templateName = sign.template?.model || sign.template?.name || "غير معروف";
-          const advertisingSpace = calculateUnbookedAdvertisingSpace(sign);
-          const faces = parseInt(sign.faces_number) || 1;
-          
-          if (!templateStats[templateName]) {
-            templateStats[templateName] = {
-              count: 0,
-              totalMeters: 0,
-              totalFaces: 0
-            };
-          }
-          
-          templateStats[templateName].count += 1;
-          templateStats[templateName].totalMeters += advertisingSpace;
-          templateStats[templateName].totalFaces += faces;
-        });
-
-        let html = `
-          <!DOCTYPE html>
-          <html dir="rtl" lang="ar">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>تقرير اللوحات غير المحجوزة</title>
-            <style>
-              @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
-              
-              body {
-                font-family: 'Amiri', serif;
-                direction: rtl;
-                margin: 0;
-                padding: 20px;
-                background-color: #fff;
-                color: #000;
-                width: 100%;
-                max-width: 210mm;
-                margin: 0 auto;
-              }
-              
-              .report-container {
-                width: 100%;
-              }
-              
-              .header {
-                text-align: center;
-                margin-bottom: 30px;
-                border-bottom: 2px solid #dc2626;
-                padding-bottom: 20px;
-              }
-              
-              .header h1 {
-                font-size: 28px;
-                color: #dc2626;
-                margin: 0 0 10px 0;
-              }
-              
-              .header .subtitle {
-                font-size: 16px;
-                color: #666;
-                margin: 5px 0;
-              }
-              
-              .report-info {
-                background-color: #fef2f2;
-                padding: 15px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-                border-right: 4px solid #dc2626;
-              }
-              
-              .city-section {
-                margin-bottom: 30px;
-                page-break-inside: avoid;
-              }
-              
-              .city-header {
-                background-color: #991b1b;
-                color: white;
-                padding: 12px 15px;
-                border-radius: 6px 6px 0 0;
-                font-size: 18px;
-                font-weight: bold;
-                text-align: center;
-              }
-              
-              .city-stats {
-                background-color: #fee2e2;
-                padding: 10px 15px;
-                border: 1px solid #fecaca;
-                border-top: none;
-                display: flex;
-                justify-content: space-between;
-                font-size: 14px;
-              }
-              
-              .signs-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-                font-size: 12px;
-              }
-              
-              .signs-table th {
-                background-color: #dc2626;
-                color: white;
-                padding: 8px;
-                text-align: center;
-                border: 1px solid #ddd;
-              }
-              
-              .signs-table td {
-                padding: 6px;
-                text-align: center;
-                border: 1px solid #ddd;
-              }
-              
-              .signs-table tr:nth-child(even) {
-                background-color: #f9f9f9;
-              }
-              
-              .city-total {
-                text-align: left;
-                padding: 8px 15px;
-                font-weight: bold;
-                color: #065f46;
-                background-color: #d1fae5;
-                border-radius: 4px;
-                margin-top: 10px;
-                font-size: 13px;
-              }
-              
-              .template-summary {
-                margin-top: 40px;
-                page-break-before: always;
-              }
-              
-              .template-summary h2 {
-                text-align: center;
-                color: #7c3aed;
-                font-size: 22px;
-                margin-bottom: 20px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid #a78bfa;
-              }
-              
-              .summary-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 15px;
-                font-size: 13px;
-              }
-              
-              .summary-table th {
-                background-color: #8b5cf6;
-                color: white;
-                padding: 10px;
-                text-align: center;
-                border: 1px solid #ddd;
-              }
-              
-              .summary-table td {
-                padding: 8px;
-                text-align: center;
-                border: 1px solid #ddd;
-              }
-              
-              .summary-table tr:last-child {
-                background-color: #10b981;
-                color: white;
-                font-weight: bold;
-              }
-              
-              .footer {
-                text-align: center;
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #ccc;
-                color: #666;
-                font-size: 12px;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="report-container">
-              <div class="header">
-                <h1>تقرير اللوحات غير المحجوزة</h1>
-                <div class="subtitle">تاريخ التقرير: ${currentDate}</div>
-                <div class="subtitle">الفترة: من ${fromDateText} إلى ${toDateText}</div>
-                <div class="subtitle">عدد اللوحات غير المحجوزة: ${filteredUnbookedData.length}</div>
-              </div>
-              
-              <div class="report-info">
-                <div style="text-align: center; font-size: 16px; font-weight: bold; color: #dc2626;">
-                  إجمالي الأمتار الإعلانية غير المحجوزة: ${calculateTotalUnbookedAdvertisingSpace(filteredUnbookedData)} متر مربع
-                </div>
-              </div>
-        `;
-
-        // Add each city section
-        Object.entries(groupedByCity).forEach(([cityName, cityData]) => {
-          if (cityData.signs.length === 0) return;
-          
-          html += `
-            <div class="city-section">
-              <div class="city-header">
-                المدينة: ${cityName}
-              </div>
-              
-              <div class="city-stats">
-                <span>عدد اللوحات: ${cityData.signs.length}</span>
-                <span>الإجمالي: ${cityData.totalMeters.toFixed(0)} متر مربع</span>
-              </div>
-              
-              <table class="signs-table">
-                <thead>
-                  <tr>
-                    <th>م</th>
-                    <th>الرمز</th>
-                    <th>النوع</th>
-                    <th>المساحة (م²)</th>
-                    <th>الوجوه</th>
-                    <th>الإجمالي (م²)</th>
-                    <th>المنطقة</th>
-                    <th>المكان</th>
-                  </tr>
-                </thead>
-                <tbody>
-          `;
-          
-          cityData.signs.forEach((sign, index) => {
-            const advertisingSpace = parseFloat(sign.template?.advertising_space) || 0;
-            const faces = parseInt(sign.faces_number) || 1;
-            const totalMeters = advertisingSpace * faces;
-            const templateName = sign.template?.model || sign.template?.name || "غير معروف";
-            const regionName = sign.region?.name || "غير محدد";
-            const place = sign.place || "غير محدد";
-            
-            html += `
-              <tr>
-                <td>${index + 1}</td>
-                <td>${sign.code || "غير محدد"}</td>
-                <td>${templateName}</td>
-                <td>${advertisingSpace.toFixed(2)}</td>
-                <td>${faces}</td>
-                <td>${totalMeters.toFixed(2)}</td>
-                <td>${regionName}</td>
-                <td>${place}</td>
-              </tr>
-            `;
-          });
-          
-          html += `
-                </tbody>
-              </table>
-              
-              <div class="city-total">
-                إجمالي المدينة: ${cityData.totalMeters.toFixed(0)} متر مربع
-              </div>
-            </div>
-          `;
-        });
-
-        // Template summary section
-        html += `
-          <div class="template-summary">
-            <h2>ملخص القوالب غير المحجوزة</h2>
-            
-            <table class="summary-table">
-              <thead>
-                <tr>
-                  <th>م</th>
-                  <th>اسم القالب</th>
-                  <th>عدد اللوحات</th>
-                  <th>إجمالي الوجوه</th>
-                  <th>المساحة الكلية (م²)</th>
-                </tr>
-              </thead>
-              <tbody>
-        `;
-        
-        const statsArray = Object.entries(templateStats)
-          .map(([templateName, stats], index) => ({
-            index,
-            templateName,
-            stats
-          }))
-          .sort((a, b) => b.stats.count - a.stats.count);
-        
-        statsArray.forEach((item, i) => {
-          html += `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${item.templateName}</td>
-              <td>${item.stats.count}</td>
-              <td>${item.stats.totalFaces}</td>
-              <td>${item.stats.totalMeters.toFixed(0)}</td>
-            </tr>
-          `;
-        });
-        
-        // Totals
-        const totalCount = Object.values(templateStats).reduce((sum, stat) => sum + stat.count, 0);
-        const totalFaces = Object.values(templateStats).reduce((sum, stat) => sum + stat.totalFaces, 0);
-        const totalMeters = Object.values(templateStats).reduce((sum, stat) => sum + stat.totalMeters, 0);
-        
-        html += `
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="2"><strong>المجموع الكلي</strong></td>
-                  <td><strong>${totalCount}</strong></td>
-                  <td><strong>${totalFaces}</strong></td>
-                  <td><strong>${totalMeters.toFixed(0)}</strong></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          
-          <div class="footer">
-            <p>---------------------------------------------</p>
-            <p>تم الإنشاء آلياً بواسطة نظام التقارير - اللوحات غير المحجوزة</p>
-            <p>تاريخ الطباعة: ${currentDate}</p>
-          </div>
-        `;
-        
-        html += `
-            </div>
-          </body>
-          </html>
-        `;
-        
-        return html;
-      };
-
-      const htmlContent = createUnbookedReportHTML();
+      const groupedData = groupRoadSigns(filteredUnbookedData, true);
+      const htmlContent = await createUnbookedReportHTML(groupedData);
       
       const printWindow = window.open('', '_blank', 'width=800,height=600');
       
@@ -1271,7 +2296,8 @@ useEffect(() => {
               scale: 2,
               useCORS: true,
               logging: false,
-              backgroundColor: '#ffffff'
+              backgroundColor: '#ffffff',
+              allowTaint: true
             });
             
             const pdf = new jsPDF({
@@ -1298,7 +2324,7 @@ useEffect(() => {
               heightLeft -= pageHeight;
             }
             
-            const fileName = `تقرير_اللوحات_غير_المحجوزة_${new Date().toISOString().split('T')[0]}.pdf`;
+            const fileName = `${isWeeklyReport ? 'التقرير_الأسبوعي' : 'تفاصيل_اللوحات'}_غير_المحجوزة_${new Date().toISOString().split('T')[0]}.pdf`;
             pdf.save(fileName);
             
             printWindow.close();
@@ -1309,7 +2335,7 @@ useEffect(() => {
           } finally {
             setIsGeneratingPDF(false);
           }
-        }, 1000);
+        }, 1500);
       };
       
     } catch (error) {
@@ -1317,6 +2343,146 @@ useEffect(() => {
       alert('حدث خطأ. يرجى المحاولة مرة أخرى.');
       setIsGeneratingPDF(false);
     }
+  };
+
+ const formatIndividualUnbookedSign = (sign) => {
+  const advertisingSpace = parseFloat(sign.template?.advertising_space) || 0;
+  const facesNumber = parseInt(sign.faces_number) || 1;
+  const totalAdvertisingSpace = advertisingSpace * facesNumber;
+  
+  // Here you're looking for sign.directions or sign.direction
+  const direction = sign.directions || sign.direction || "غير محدد";
+  
+  return {
+    ...sign,
+    id: sign.id,
+    roadsign_code: sign.roadsign_code || `X${sign.id.toString().padStart(6, '0')}`,
+    place: sign.place || 'غير محدد',
+    template_name: sign.template?.model || sign.template?.name || 'غير محدد',
+    advertising_space: isWeeklyReport ? totalAdvertisingSpace.toFixed(0) : undefined,
+    region_name: sign.region?.name || 'غير محدد',
+    direction: direction, // This should show the directions from your data
+    faces_number: sign.faces_number || 1,
+    panels_number: sign.panels_number || 1
+  };
+};
+
+  const Pagination = ({ currentPage, totalPages, onPageChange, dataType, pageSize, onPageSizeChange }) => {
+    if (totalPages <= 1 && pageSize === pageSizeOptions[0]) return null;
+    
+    const pagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(pagesToShow / 2));
+    let endPage = Math.min(totalPages, startPage + pagesToShow - 1);
+    
+    if (endPage - startPage + 1 < pagesToShow) {
+      startPage = Math.max(1, endPage - pagesToShow + 1);
+    }
+    
+    const pages = [];
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="pageSize" className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">
+              عدد السجلات:
+            </Label>
+            <Select value={pageSize.toString()} onValueChange={onPageSizeChange}>
+              <SelectTrigger className="w-[100px] h-9">
+                <SelectValue placeholder="10" />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((option) => (
+                  <SelectItem key={option} value={option.toString()}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
+            | عرض {dataType === 'bookings' ? 
+              `${paginatedBookingsData.length} من ${memoizedBookingsData.length}` :
+              `${paginatedUnbookedData.length} من ${memoizedUnbookedData.length}`
+            } سجل
+          </div>
+        </div>
+        
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+            
+            <div className="flex items-center gap-1">
+              {startPage > 1 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(1)}
+                    className="px-3 py-1 min-w-[40px]"
+                  >
+                    1
+                  </Button>
+                  {startPage > 2 && <span className="px-1 text-gray-500">...</span>}
+                </>
+              )}
+              
+              {pages.map(page => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onPageChange(page)}
+                  className="px-3 py-1 min-w-[40px]"
+                >
+                  {page}
+                </Button>
+              ))}
+              
+              {endPage < totalPages && (
+                <>
+                  {endPage < totalPages - 1 && <span className="px-1 text-gray-500">...</span>}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(totalPages)}
+                    className="px-3 py-1 min-w-[40px]"
+                  >
+                    {totalPages}
+                  </Button>
+                </>
+              )}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+        
+        <div className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">
+          الصفحة {currentPage} من {totalPages}
+        </div>
+      </div>
+    );
   };
 
   if (isBookingsLoading || isUnbookedLoading || isCustomersLoading) {
@@ -1330,11 +2496,18 @@ useEffect(() => {
 
   return (
     <div className="p-4 sm:p-6 max-w-full mx-auto space-y-6 bg-background rounded-lg shadow-sm dark:shadow-gray-800">
-      <h2 className="text-2xl font-bold text-foreground mb-4">التقارير</h2>
+      <h2 className="text-2xl font-bold text-foreground mb-4">{isWeeklyReport ? 'التقرير العام ' : 'تفاصيل اللوحات'}</h2>
       
-      {/* Filters Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        {/* City Filter */}
+      <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+        <h3 className="font-semibold text-yellow-700 dark:text-yellow-300">
+          ملاحظة: الجدول يظهر السجلات الفردية - التجميع يكون في التقرير PDF فقط
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          في الجدول: جميع السجلات الفردية | في PDF: يتم دمج السجلات المتشابهة في المكان والنموذج والاتجاه
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${isWeeklyReport ? '4' : '3'} gap-4 mb-6">
         <div>
           <Label
             htmlFor="city"
@@ -1362,29 +2535,68 @@ useEffect(() => {
           </select>
         </div>
 
-        {/* Customer Type Filter */}
         <div>
           <Label
-            htmlFor="customerType"
+            htmlFor="templateFilter"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
           >
-            نوع الزبون
+            اسم القالب
           </Label>
           <select
-            id="customerType"
-            value={customerTypeFilter}
-            onChange={(e) => setCustomerTypeFilter(e.target.value)}
+            id="templateFilter"
+            value={templateNameFilter}
+            onChange={(e) => setTemplateNameFilter(e.target.value)}
             className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {customerTypeOptions.map((type) => (
-              <option key={type.value || "all"} value={type.value}>
-                {type.label}
-              </option>
-            ))}
+            <option value="">جميع القوالب</option>
+            {templateOptions.length > 0 ? (
+              templateOptions.map((templateName, index) => (
+                <option key={index} value={templateName}>
+                  {templateName}
+                </option>
+              ))
+            ) : (
+              <option disabled>لا توجد قوالب في البيانات</option>
+            )}
           </select>
+          {templateNameFilter && (
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-xs text-green-600">✓ تم تطبيق الفلتر</span>
+              <button
+                onClick={() => setTemplateNameFilter("")}
+                className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
+                type="button"
+              >
+                <X size={12} />
+                إزالة الفلتر
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Clear Filters Button */}
+        {isWeeklyReport && (
+          <div>
+            <Label
+              htmlFor="customerType"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            >
+              نوع المنتج
+            </Label>
+            <select
+              id="customerType"
+              value={customerTypeFilter}
+              onChange={(e) => setCustomerTypeFilter(e.target.value)}
+              className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {customerTypeOptions.map((type) => (
+                <option key={type.value || "all"} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="flex items-end">
           <Button
             onClick={clearAllFilters}
@@ -1395,7 +2607,6 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* Date Filters */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div>
           <Label className="mb-2 text-sm font-medium text-right text-foreground">
@@ -1422,7 +2633,6 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* Tabs */}
       <Tabs
         defaultValue="bookings"
         onValueChange={setActiveTab}
@@ -1430,14 +2640,13 @@ useEffect(() => {
       >
         <TabsList className="grid w-full overflow-auto grid-cols-5 justify-between flex bg-card rounded-lg border border-border">
           <TabsTrigger value="bookings" className="text-sm font-medium">
-            الحجوزات ({filteredBookingsData.length})
+            الحجوزات ({memoizedBookingsData.length})
           </TabsTrigger>
           <TabsTrigger value="unbooked" className="text-sm font-medium">
-            اللوحات الغير محجوزة ({filteredUnbookedData.length})
+            اللوحات الغير محجوزة ({memoizedUnbookedData.length})
           </TabsTrigger>
         </TabsList>
 
-        {/* Bookings Table */}
         <TabsContent value="bookings">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
             <div className="flex-1">
@@ -1448,13 +2657,20 @@ useEffect(() => {
                   </h3>
                 </div>
               )}
+              {templateNameFilter && (
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg mt-2">
+                  <h3 className="font-semibold text-green-700 dark:text-green-300">
+                    فلتر القالب: "{templateNameFilter}"
+                  </h3>
+                </div>
+              )}
             </div>
             
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handlePrintReport}
-                disabled={isGeneratingPDF || isBookingsLoading || isBookingsFetching || filteredBookingsData.length === 0}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={isGeneratingPDF || isBookingsLoading || isBookingsFetching || memoizedBookingsData.length === 0}
+                className="flex items-center gap-2 bg-green-600 text-white"
               >
                 {isGeneratingPDF ? (
                   <>
@@ -1468,10 +2684,28 @@ useEffect(() => {
                   </>
                 )}
               </Button>
+
+              <Button
+                onClick={() => handleExportWord(false)}
+                disabled={isGeneratingPDF || isBookingsLoading || isBookingsFetching || memoizedBookingsData.length === 0}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isGeneratingPDF ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span>جاري التحميل...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4" />
+                    <span>تصدير Word</span>
+                  </>
+                )}
+              </Button>
               
               <Button
                 onClick={handleSimplePrint}
-                disabled={isBookingsLoading || isBookingsFetching || filteredBookingsData.length === 0}
+                disabled={isBookingsLoading || isBookingsFetching || memoizedBookingsData.length === 0}
                 className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white"
               >
                 <Printer className="w-4 h-4" />
@@ -1480,33 +2714,38 @@ useEffect(() => {
             </div>
           </div>
           
-          {filteredBookingsData.length > 0 ? (
+          {memoizedBookingsData.length > 0 ? (
             <>
               <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                 <h3 className="font-semibold text-green-700 dark:text-green-300">
-                  إجمالي الأمتار الإعلانية: {calculateTotalAdvertisingSpace(filteredBookingsData)}
+                  عدد السجلات: {memoizedBookingsData.length}
                 </h3>
                 <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                  عدد الحجوزات: {filteredBookingsData.length}
+                  ملاحظة: الجدول يظهر السجلات الفردية - التجميع يكون في التقرير PDF فقط
+                  {templateNameFilter && ` | مفلتر حسب القالب: "${templateNameFilter}"`}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  الصفحة الحالية: {bookingsPage} من {totalBookingsPages} (عرض {paginatedBookingsData.length} سجل من أصل {memoizedBookingsData.length})
                 </p>
               </div>
               
               <DynamicTable
-                data={filteredBookingsData}
-                columns={[
-                  ...ReportBookingsColumns.filter(col => col.accessor !== "total_advertising_space"),
-                  {
-                    header: "عدد الأمتار الإعلانية",
-                    accessor: "total_advertising_space",
-                    cellClassName: "text-center",
-                    cell: (row) => {
-                      const totalSpace = calculateBookingAdvertisingSpace(row);
-                      return totalSpace.toFixed(2);
-                    }
-                  }
-                ]}
+                data={paginatedBookingsData}
+                columns={ReportBookingsColumns.filter(col => 
+                  (!isWeeklyReport && col.accessor === "total_advertising_space") ||
+                  (!isWeeklyReport && col.accessor === "customer_type") ? false : true
+                )}
                 isLoading={isBookingsFetching}
                 className="bg-card rounded-lg shadow-sm border border-border w-full"
+              />
+              
+              <Pagination
+                currentPage={bookingsPage}
+                totalPages={totalBookingsPages}
+                onPageChange={setBookingsPage}
+                pageSize={bookingsPageSize}
+                onPageSizeChange={handleBookingsPageSizeChange}
+                dataType="bookings"
               />
             </>
           ) : (
@@ -1517,62 +2756,131 @@ useEffect(() => {
                   <span>جاري تحميل البيانات...</span>
                 </div>
               ) : (
-                "لا توجد حجوزات تطابق الفلاتر المحددة"
+                <>
+                  <p>لا توجد حجوزات تطابق الفلاتر المحددة</p>
+                  {templateNameFilter && (
+                    <p className="text-sm text-red-600 mt-2">
+                      لا توجد حجوزات للقالب: "{templateNameFilter}"
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
         </TabsContent>
 
-        {/* Unbooked Signs Table */}
         <TabsContent value="unbooked">
           <div className="flex justify-between items-center mb-4">
             <div className="flex-1">
-              {localFilters.customerId && (
+              {localFilters.cityId && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <h3 className="font-semibold text-blue-700 dark:text-blue-300">
                     عرض تقرير اللوحات غير المحجوزة
                   </h3>
                 </div>
               )}
+              {templateNameFilter && (
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg mt-2">
+                  <h3 className="font-semibold text-green-700 dark:text-green-300">
+                    فلتر القالب: "{templateNameFilter}"
+                  </h3>
+                </div>
+              )}
             </div>
             
-            <Button
-              onClick={generateUnbookedPdf}
-              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white"
-              disabled={isUnbookedLoading || isUnbookedFetching || filteredUnbookedData.length === 0}
-            >
-              <FileText className="w-4 h-4" />
-              <span>تصدير كملف PDF</span>
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={generateUnbookedPdf}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white"
+                disabled={isUnbookedLoading || isUnbookedFetching || memoizedUnbookedData.length === 0}
+              >
+                <FileText className="w-4 h-4" />
+                <span>تصدير PDF</span>
+              </Button>
+              
+              <Button
+                onClick={() => handleExportWord(true)}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={isUnbookedLoading || isUnbookedFetching || memoizedUnbookedData.length === 0}
+              >
+                <FileText className="w-4 h-4" />
+                <span>تصدير Word</span>
+              </Button>
+            </div>
           </div>
           
-          {filteredUnbookedData.length > 0 ? (
+          {memoizedUnbookedData.length > 0 ? (
             <>
               <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                 <h3 className="font-semibold text-green-700 dark:text-green-300">
-                  إجمالي الأمتار الإعلانية للوحات غير المحجوزة: {calculateTotalUnbookedAdvertisingSpace(filteredUnbookedData)}
+                  عدد السجلات: {memoizedUnbookedData.length}
                 </h3>
                 <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                  عدد اللوحات غير المحجوزة: {filteredUnbookedData.length}
+                  ملاحظة: الجدول يظهر السجلات الفردية - التجميع يكون في التقرير PDF فقط
+                  {templateNameFilter && ` | مفلتر حسب القالب: "${templateNameFilter}"`}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  الصفحة الحالية: {unbookedPage} من {totalUnbookedPages} (عرض {paginatedUnbookedData.length} سجل من أصل {memoizedUnbookedData.length})
                 </p>
               </div>
               
               <DynamicTable
-                data={filteredUnbookedData}
+                data={paginatedUnbookedData.map(formatIndividualUnbookedSign)}
                 columns={[
-                  ...ReportUnbookedSignsColumns.filter(col => col.accessor !== "total_advertising_space"),
                   {
-                    header: "عدد الأمتار الإعلانية",
-                    accessor: "total_advertising_space",
-                    cellClassName: "text-center",
-                    cell: (row) => {
-                      const totalSpace = calculateUnbookedAdvertisingSpace(row);
-                      return totalSpace.toFixed(2);
-                    }
+                    header: "كود اللوحة",
+                    accessor: "roadsign_code",
+                    cellClassName: "text-center font-mono"
+                  },
+                  {
+                    header: "النموذج",
+                    accessor: "template_name",
+                    cellClassName: "text-center"
+                  },
+                  ...(isWeeklyReport ? [{
+                    header: "الأمتار (م²)",
+                    accessor: "advertising_space",
+                    cellClassName: "text-center font-bold",
+                    cell: (row) => `${row.advertising_space || 0} م²`
+                  }] : []),
+                  {
+                    header: "المنطقة",
+                    accessor: "region_name",
+                    cellClassName: "text-center"
+                  },
+                {
+  header: "الاتجاه",
+  accessor: "direction",
+  cellClassName: "text-right",
+  cell: (row) => (
+    <div className="max-w-xs truncate" title={row.direction}>
+      {row.direction || "غير محدد"}
+    </div>
+  )
+} , 
+
+                  {
+                    header: "المكان",
+                    accessor: "place",
+                    cellClassName: "text-right"
+                  },
+                  {
+                    header: "عدد الأوجه",
+                    accessor: "faces_number",
+                    cellClassName: "text-center"
                   }
                 ]}
                 isLoading={isUnbookedFetching}
                 className="bg-card rounded-lg shadow-sm border border-border w-full"
+              />
+              
+              <Pagination
+                currentPage={unbookedPage}
+                totalPages={totalUnbookedPages}
+                onPageChange={setUnbookedPage}
+                pageSize={unbookedPageSize}
+                onPageSizeChange={handleUnbookedPageSizeChange}
+                dataType="unbooked"
               />
             </>
           ) : (
@@ -1583,7 +2891,14 @@ useEffect(() => {
                   <span>جاري تحميل البيانات...</span>
                 </div>
               ) : (
-                "لا توجد لوحات غير محجوزة تطابق الفلاتر المحددة"
+                <>
+                  <p>لا توجد لوحات غير محجوزة تطابق الفلاتر المحددة</p>
+                  {templateNameFilter && (
+                    <p className="text-sm text-red-600 mt-2">
+                      لا توجد لوحات غير محجوزة للقالب: "{templateNameFilter}"
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}

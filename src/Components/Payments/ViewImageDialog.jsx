@@ -13,24 +13,32 @@ import { showToast } from "../../utils/Notifictions/showToast";
 import imageURL from "../../../src/assets/images/adv_syrian.png";
 
 export const ViewImageDialog = ({ show, handleClose, payment }) => {
+  // The imageUrl should be taken directly from payment.payment_image
+  // It already contains the full URL from the API response
   const imageUrl = payment?.payment_image || imageURL;
 
   const handleDownload = () => {
-    if (!imageUrl) {
+    if (!imageUrl || imageUrl === imageURL) {
       showToast("error", "لا توجد صورة لتنزيلها.");
       return;
     }
-    const link = document.createElement("a");
-    link.href = imageUrl;
-    link.download = `payment_${payment?.payment_number || "image"}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("success", "تم تنزيل الصورة بنجاح.");
+    
+    try {
+      const link = document.createElement("a");
+      link.href = imageUrl;
+      link.download = `payment_${payment?.payment_number || "image"}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("success", "تم تنزيل الصورة بنجاح.");
+    } catch (error) {
+      console.error("Download failed:", error);
+      showToast("error", "فشل تنزيل الصورة.");
+    }
   };
 
   const handleMaximize = () => {
-    if (!imageUrl) {
+    if (!imageUrl || imageUrl === imageURL) {
       showToast("error", "لا توجد صورة لتكبيرها.");
       return;
     }
@@ -85,63 +93,64 @@ export const ViewImageDialog = ({ show, handleClose, payment }) => {
             </div>
             <div className="truncate">
               <strong className="ml-2">الزبون:</strong>
-              <span>{payment?.customer_name ?? payment?.customer_id ?? "-"}</span>
+              <span>{payment?.customer?.company_name ?? payment?.customer_id ?? "-"}</span>
             </div>
             <div className="truncate">
               <strong className="ml-2">رقم الحجز:</strong>
               <span>{payment?.booking_id ?? "-"}</span>
             </div>
             <div className="col-span-full break-words">
-              <strong className="ml-2">ملاحظة:</strong>
-              <span>{payment?.note ?? "-"}</span>
-            </div>
-            <div className="truncate">
               <strong className="ml-2">تاريخ الإنشاء:</strong>
               <span>
                 {payment?.created_at ? new Date(payment.created_at).toLocaleString() : "-"}
               </span>
-            </div>
-            <div className="truncate">
-              {/*
-              
-
-              <strong className="ml-2">حالة الاستلام:</strong>
-              <span>{payment?.received ? "مستلمة" : "غير مستلمة"}</span>
-
-              */}
             </div>
           </div>
         </div>
 
         {/* Image */}
         <div className="flex flex-col items-center py-4">
-          {imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={`صورة الدفعة رقم ${payment?.payment_number || ""}`}
-              className="max-w-full md:max-w-[60%] h-auto rounded-md object-contain bg-white"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = imageURL;
-                toast.error("تعذر تحميل الصورة.");
-              }}
-            />
+          {imageUrl && imageUrl !== imageURL ? (
+            <div className="w-full flex flex-col items-center">
+              <img
+                src={imageUrl}
+                alt={`صورة الدفعة رقم ${payment?.payment_number || ""}`}
+                className="max-w-full md:max-w-[80%] max-h-[400px] rounded-md object-contain bg-white"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = imageURL;
+                  toast.error("تعذر تحميل الصورة.");
+                }}
+              />
+              <p className="text-sm text-gray-500 mt-2">
+                {imageUrl.includes('192.168.1.222') ? '' : 'Image from server'}
+              </p>
+            </div>
           ) : (
-            <div className="w-full h-48 flex items-center justify-center bg-gray-100 text-gray-500 rounded-md border border-dashed">
-              لا توجد صورة متوفرة لهذه الدفعة.
+            <div className="w-full h-48 flex flex-col items-center justify-center bg-gray-100 text-gray-500 rounded-md border border-dashed">
+              <div>لا توجد صورة متوفرة لهذه الدفعة.</div>
+              <div className="mt-2">
+                <img
+                  src={imageURL}
+                  alt="صورة افتراضية"
+                  className="w-32 h-auto object-contain"
+                />
+              </div>
             </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-2 mt-4">
-          <Button onClick={handleDownload} disabled={!imageUrl} variant="outline">
-            <Download className="mr-2 h-4 w-4" /> تنزيل
-          </Button>
-          <Button onClick={handleMaximize} disabled={!imageUrl} variant="outline">
-            <Maximize className="mr-2 h-4 w-4" /> تكبير
-          </Button>
-        </div>
+        {/* Actions - Only show if there's an actual payment image */}
+        {imageUrl && imageUrl !== imageURL && (
+          <div className="flex justify-end gap-2 mt-4">
+            <Button onClick={handleDownload} variant="outline">
+              <Download className="mr-2 h-4 w-4" /> تنزيل
+            </Button>
+            <Button onClick={handleMaximize} variant="outline">
+              <Maximize className="mr-2 h-4 w-4" /> تكبير
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

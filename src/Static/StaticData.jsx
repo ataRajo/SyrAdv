@@ -129,13 +129,14 @@ export const navLinkSidebar = [
     url: "/dashboard/bookings",
     icon: IconCalendarEvent,
     permission: Permissions.ViewBookings,
+    // Add this to indicate it can have notifications
+    hasNotifications: true,
   },
   {
     title: "الدفعات",
     url: "/dashboard/payments",
     icon: IconCash,
     permission: Permissions.ViewPayments,
-
   },
   {
     title: "النماذج",
@@ -149,7 +150,6 @@ export const navLinkSidebar = [
     icon: IconRoad,
     permission: Permissions.ViewRoadSigns,
   },
-
   {
     title: "سعر الطباعة",
     url: "/dashboard/PrintPrice",
@@ -163,7 +163,7 @@ export const navLinksAdministrationPage = [
     to: "",
     text: "الاحصائيات",
     mobileText: "الرئيسية",
-    permission: "view-road-signs", // أو Permissions.ViewRoadSigns
+    permission: "view-road-signs", // 
   },
   {
     to: "orders",
