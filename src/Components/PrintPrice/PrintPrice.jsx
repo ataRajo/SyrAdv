@@ -65,7 +65,6 @@ const PrintPrice = () => {
     }
   };
 
-  // Create axios instance with auth headers
   const createAxiosInstance = () => {
     const token = getAuthToken();
     const instance = axios.create({
@@ -205,7 +204,6 @@ const PrintPrice = () => {
     }, 3000);
   };
 
-  // Filter and sort functionality
   const filteredTypes = printTypes.filter(type => 
     type.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     type.price?.toString().includes(searchTerm)
@@ -467,20 +465,6 @@ const PrintPrice = () => {
                           <Pencil className="w-4 h-4" />
                           <span className="text-sm font-medium hidden md:inline">تعديل</span>
                         </button>
-                        {/*
-                        
-                        <button
-                          onClick={() => handleDelete(type.id)}
-                          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-800/30 dark:to-red-700/30 text-red-700 dark:text-red-400 hover:from-red-100 hover:to-red-200 dark:hover:from-red-700/50 dark:hover:to-red-600/50 rounded-lg transition-all duration-200 border border-red-200 dark:border-red-800/50 hover:border-red-300 dark:hover:border-red-700 hover:scale-[1.02] active:scale-[0.98]"
-                          title="حذف"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span className="text-sm font-medium hidden md:inline">حذف</span>
-                        </button>
-
-
-                        */}
-
                         
                       </div>
                     </td>
@@ -585,17 +569,7 @@ const PrintPrice = () => {
                       step="0.01"
                       required
                       placeholder="0.00"
-                    />
-                    {/*
-                   
-                   
-                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">
-                      ل.س
-                    </div>
-                    */}
-
-
-                    
+                    />                    
                   </div>
                 </div>
               </div>
@@ -621,7 +595,6 @@ const PrintPrice = () => {
         </div>
       )}
 
-      {/* Snackbar */}
       {snackbar.open && (
         <div className={`fixed bottom-6 right-6 z-50 px-5 py-4 rounded-xl shadow-2xl transform transition-all duration-300 animate-slideUp ${
           snackbar.type === "success" 
@@ -645,7 +618,6 @@ const PrintPrice = () => {
         </div>
       )}
 
-      {/* Add CSS animation for snackbar */}
       <style jsx>{`
         @keyframes slideUp {
           from {

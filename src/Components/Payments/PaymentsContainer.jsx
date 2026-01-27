@@ -293,7 +293,7 @@ const PaymentsContainer = () => {
     };
   }, [selectedCustomerData, filteredPayments, dataInvoicePdf]);
 
- const handleExportWord = async () => {
+const handleExportWord = async () => {
   if (filteredPayments.length === 0) {
     alert("لا توجد بيانات للتصدير");
     return;
@@ -366,7 +366,7 @@ const PaymentsContainer = () => {
             text-align: right;
             margin: 20px 40px;
             line-height: 1.6;
-            color: #000;
+            color: #000000;
             background-color: #fff;
           }
           
@@ -375,21 +375,19 @@ const PaymentsContainer = () => {
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 30px;
-            border-bottom: 2px solid #000;
+            border-bottom: 2px solid #000000;
             padding-bottom: 15px;
             width: 100%;
           }
           
           .logo-container {
-            flex-shrink: 0;
             margin-left: 0;
             margin-right: 20px;
           }
           
           .logo {
-            width: 120px;
-            height: auto;
-            max-height: 80px;
+            width: 100px;
+            height: 400px;
           }
           
           .header-content {
@@ -399,13 +397,13 @@ const PaymentsContainer = () => {
           
           .header h1 {
             font-size: 24px;
-            color: #1a365d;
+            color: #000000;
             margin: 0 0 10px 0;
           }
           
           .header .subtitle {
             font-size: 16px;
-            color: #666;
+            color: #000000;
             margin: 5px 0;
           }
           
@@ -414,7 +412,7 @@ const PaymentsContainer = () => {
             padding: 15px;
             border-radius: 6px;
             margin-bottom: 20px;
-            border-right: 4px solid #4a90e2;
+            border-right: 4px solid #000000;
           }
           
           .summary-cards {
@@ -427,7 +425,7 @@ const PaymentsContainer = () => {
           .summary-card {
             background-color: white;
             padding: 15px;
-            border: 1px solid #ddd;
+            border: 1px solid #000000;
             border-radius: 6px;
             text-align: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -436,13 +434,13 @@ const PaymentsContainer = () => {
           .summary-value {
             font-size: 18px;
             font-weight: bold;
-            color: #1e40af;
+            color: #000000;
             margin: 10px 0;
           }
           
           .summary-label {
             font-size: 12px;
-            color: #666;
+            color: #000000;
           }
           
           table {
@@ -453,19 +451,20 @@ const PaymentsContainer = () => {
           }
           
           table th {
-            background-color: #1e40af;
-            color: white;
+            background-color: #000000;
+            color: #ffffff;
             padding: 12px 8px;
             text-align: center;
             font-weight: bold;
-            border: 1px solid #ddd;
+            border: 1px solid #000000;
             font-size: 13px;
           }
           
           table td {
             padding: 10px 8px;
             text-align: center;
-            border: 1px solid #ddd;
+            border: 1px solid #000000;
+            color: #000000;
           }
           
           table tr:nth-child(even) {
@@ -474,27 +473,27 @@ const PaymentsContainer = () => {
           
           .amount-cell {
             font-weight: bold;
-            color: #1e40af;
+            color: #000000;
             direction: ltr;
           }
           
           .total-row {
-            background-color: #1e40af !important;
-            color: white !important;
+            background-color: #000000 !important;
+            color: #ffffff !important;
             font-weight: bold;
             font-size: 13px;
           }
           
           .total-row td {
-            color: white !important;
+            color: #ffffff !important;
           }
           
           .footer {
             margin-top: 40px;
             padding-top: 20px;
-            border-top: 1px solid #ddd;
+            border-top: 1px solid #000000;
             text-align: center;
-            color: #666;
+            color: #000000;
             font-size: 12px;
           }
           
@@ -517,8 +516,8 @@ const PaymentsContainer = () => {
           .logo-placeholder {
             width: 120px;
             height: 80px;
-            background-color: #1e40af;
-            color: white;
+            background-color: #000000;
+            color: #ffffff;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -544,7 +543,7 @@ const PaymentsContainer = () => {
         </div>
         
         <div class="report-info">
-          <h3 style="color: #1a365d; margin-bottom: 10px;">ملخص التقرير</h3>
+          <h3 style="color: #000000; margin-bottom: 10px;">ملخص التقرير</h3>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
             <div>
               <strong>العميل:</strong> ${customerLabel}

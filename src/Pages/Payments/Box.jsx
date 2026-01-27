@@ -43,17 +43,10 @@ const Box = () => {
   const { data: usersData, isLoading: isLoadingUsers } = useGetUsersQuery();
   const { data: customersData, isLoading: isLoadingCustomers } = useGetCustomersQuery();
 
-  // Debug: Check API responses
-  console.log('🔍 Users API Response:', usersData);
-  console.log('🔍 Customers API Response:', customersData);
 
   // Get the actual data array - try different possible structures
   const usersArray = usersData?.data || usersData || [];
   const customersArray = customersData?.data || customersData || [];
-
-  console.log('👥 Users Array:', usersArray);
-  console.log('👥 Customers Array:', customersArray);
-  console.log('👥 Customers Count:', customersArray.length);
 
   return (
     <div>

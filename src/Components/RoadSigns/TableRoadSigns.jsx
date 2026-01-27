@@ -780,7 +780,8 @@ const TableRoadSigns = ({ isLoading }) => {
         </div>
       )}
 
-      {/* PDF Export Button */}
+
+    {/*
       <Button
         onClick={() => {
           const { generatePDF } = RoadSignsPdf({ roadSigns: filteredRoadSigns || [] });
@@ -791,6 +792,12 @@ const TableRoadSigns = ({ isLoading }) => {
       >
         تحميل ملف تموضع اللوحات ({filteredRoadSigns?.length || 0})
       </Button>
+    
+    
+    */}
+
+
+    
 
       <HeaderComponent
         title={"اللوحات الطرقية"}
@@ -830,7 +837,7 @@ const TableRoadSigns = ({ isLoading }) => {
         onShow={handleShow}
         onExchange={handleExchange}
         permissions={permissions}
-        hideDeleteIcon={true}
+        hideDeleteIcon={false} // props for delete icon visibility
       />
 
       {/* Dialogs */}

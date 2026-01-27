@@ -7,97 +7,79 @@ import { Provider } from 'react-redux'
 import { ThemeProvider } from '@/Components/theme-provider.jsx'
 import { AuthProvider } from './Context/AuthProvider.jsx'
 
-// Register service worker with better error handling
+// Register service worker
 const registerServiceWorker = () => {
-// In main.jsx, replace your service worker code with:
-
-// Register service worker on page load
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-  window.addEventListener('load', function() {
-    // Clear old service workers
-    navigator.serviceWorker.getRegistrations().then(function(registrations) {
-      for (let registration of registrations) {
-        registration.unregister();
-      }
-      
-      // Register new one
-      navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        .then(function(registration) {
-          console.log('✅ Service Worker registered:', registration.scope);
-          
-          // Check if it's controlling the page
-          if (navigator.serviceWorker.controller) {
-            console.log('✅ Service Worker is controlling the page');
-          }
-        })
-        .catch(function(error) {
-          console.error('❌ Service Worker registration failed:', error);
-        });
-    });
-  });
-}
-
-// Optional: Add foreground messaging
-const setupForegroundMessaging = async () => {
-  try {
-    const { messaging } = await import('./firebase.js');
-    if (messaging) {
-      const { onMessage } = await import('firebase/messaging');
-      onMessage(messaging, (payload) => {
-        console.log('📱 Foreground message:', payload);
-        
-        if (Notification.permission === 'granted') {
-          new Notification(payload.notification?.title || 'New', {
-            body: payload.notification?.body,
-            icon: '/vite.svg'
-          });
-        }
+  if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+    window.addEventListener('load', () => {
+      // Unregister old service workers then register the new one
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(reg => reg.unregister());
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .then(reg => {
+            console.log('✅ Service Worker registered:', reg.scope);
+            if (navigator.serviceWorker.controller) {
+              console.log('✅ Service Worker is controlling the page');
+            }
+          })
+          .catch(err => console.error('❌ Service Worker registration failed:', err));
       });
-      console.log('✅ Foreground messaging setup');
-    }
-  } catch (error) {
-    console.log('Foreground messaging not available:', error.message);
+    });
   }
 };
 
-// Call it after a delay
-setTimeout(setupForegroundMessaging, 3000);
-};
-
-// Initialize foreground messaging
+// Single foreground messaging handler (reads payload.data and shows it)
 const setupForegroundMessaging = async () => {
   try {
-    const { messaging, initializeMessaging } = await import('./firebase.js');
-    
-    // Wait for messaging to be ready
-    setTimeout(async () => {
-      const messagingInstance = messaging || await initializeMessaging();
-      
-      if (messagingInstance) {
-        const { onMessage } = await import('firebase/messaging');
-        
-        onMessage(messagingInstance, (payload) => {
-          console.log('📩 Foreground message received:', payload);
-          
-          // Show notification in foreground
-          if (Notification.permission === 'granted') {
-            new Notification(payload.notification?.title || 'إشعار جديد', {
-              body: payload.notification?.body,
-              icon: payload.notification?.icon || '/firebase-logo.png',
-              badge: '/firebase-logo.png'
-            });
-          }
+    const { initializeMessaging } = await import('./firebase.js');
+    const messaging = await initializeMessaging();
+    if (!messaging) return;
+
+    const { onMessage } = await import('firebase/messaging');
+
+    onMessage(messaging, (payload) => {
+      console.log('📩 Foreground message received:', payload);
+
+      const title = payload.notification?.title || payload.data?.title || 'إشعار جديد';
+      const bodyBase = payload.notification?.body || payload.data?.body || '';
+
+      // Build readable customers list if customer_* keys exist
+      const customers = Object.keys(payload.data || {})
+        .filter(k => k.startsWith('customer_'))
+        .map(k => payload.data[k]);
+
+      const customersList = customers.length
+        ? '\nالعملاء:\n- ' + customers.join('\n- ')
+        : '';
+
+      // If you prefer raw JSON of the whole data object, uncomment the next line and use dataString instead:
+      // const dataString = payload.data ? `\n${JSON.stringify(payload.data, null, 2)}` : '';
+
+      const body = bodyBase + customersList; // or bodyBase + dataString
+
+      const show = () => {
+        new Notification(title, {
+          body,
+        icon: '/adv_syrian.png',
+         badge: '/adv_syrian.png'
         });
-        
-        console.log('✅ Foreground messaging setup complete');
+      };
+
+      if (Notification.permission === 'granted') {
+        show();
+      } else {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') show();
+        });
       }
-    }, 2000); // Wait 2 seconds for service worker to activate
-  } catch (error) {
-    console.error('❌ Foreground messaging setup failed:', error);
+    });
+
+    console.log('✅ Foreground messaging setup complete');
+  } catch (err) {
+    console.error('❌ Foreground messaging setup failed:', err);
   }
 };
 
-// Run setup functions
+// Run setup
 registerServiceWorker();
 setupForegroundMessaging();
 

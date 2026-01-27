@@ -21,7 +21,7 @@ interface UserCampaignData {
 }
 
 async function parseYourCSVData(): Promise<Billboard[]> {
-  console.log('📁 Loading YOUR data.csv with 34 columns...');
+  ('📁 Loading YOUR data.csv with 34 columns...');
   
   try {
     const response = await fetch('/data.csv');
@@ -38,7 +38,7 @@ async function parseYourCSVData(): Promise<Billboard[]> {
     
     // Parse headers
     const headers = lines[0].split(',').map(h => h.trim());
-    console.log(`📋 CSV has ${headers.length} columns:`, headers);
+    (`📋 CSV has ${headers.length} columns:`, headers);
     
     // Map column indices based on YOUR CSV structure
     const columnMap = {
@@ -55,7 +55,7 @@ async function parseYourCSVData(): Promise<Billboard[]> {
       location_type: headers.indexOf('location_type')
     };
     
-    console.log('📍 Column mapping:', columnMap);
+    ('📍 Column mapping:', columnMap);
     
     // Parse data rows
     const billboards: Billboard[] = [];
@@ -192,20 +192,20 @@ async function parseYourCSVData(): Promise<Billboard[]> {
       }
     }
     
-    console.log(`✅ Successfully parsed ${billboards.length} REAL billboards`);
+    (`✅ Successfully parsed ${billboards.length} REAL billboards`);
     
     // Show statistics by city
     const cityStats: Record<string, number> = {};
     billboards.forEach(b => {
       cityStats[b.city] = (cityStats[b.city] || 0) + 1;
     });
-    console.log('🏙️ Billboards by city:', cityStats);
+    ('🏙️ Billboards by city:', cityStats);
     
     // Show sample
     if (billboards.length > 0) {
-      console.log('📊 Sample of YOUR real data:');
+      ('📊 Sample of YOUR real data:');
       billboards.slice(0, 3).forEach((b, idx) => {
-        console.log(`  ${idx + 1}. ${b.id} - ${b.city} - ${b.location.substring(0, 30)}... - $${b.monthlyCost} - ${b.dailyTraffic} cars/day`);
+        (`  ${idx + 1}. ${b.id} - ${b.city} - ${b.location.substring(0, 30)}... - $${b.monthlyCost} - ${b.dailyTraffic} cars/day`);
       });
     }
     
@@ -219,17 +219,17 @@ async function parseYourCSVData(): Promise<Billboard[]> {
 
 // MAIN MATCHING FUNCTION FOR YOUR CSV - FIXED VERSION
 export async function matchBillboards(userData: UserCampaignData): Promise<Billboard[]> {
-  console.log('🎯 User searching with:', userData);
+  ('🎯 User searching with:', userData);
   
   // Load ALL data
   const allBillboards = await parseYourCSVData();
   
   if (allBillboards.length === 0) {
-    console.log('❌ No data loaded');
+    ('❌ No data loaded');
     return getFallbackBillboards();
   }
   
-  console.log(`📊 Total billboards in CSV: ${allBillboards.length}`);
+  (`📊 Total billboards in CSV: ${allBillboards.length}`);
   
   // Step 1: Normalize city input
   const userCity = userData.city ? userData.city.trim().toLowerCase() : '';
@@ -242,7 +242,7 @@ export async function matchBillboards(userData: UserCampaignData): Promise<Billb
     targetCity = 'حلب';
   }
   
-  console.log(`📍 User input: "${userData.city}" → Target city: "${targetCity}"`);
+  (`📍 User input: "${userData.city}" → Target city: "${targetCity}"`);
   
   // Step 2: Filter by city (STRICT FILTERING)
   let filteredBillboards = allBillboards;
@@ -255,11 +255,11 @@ export async function matchBillboards(userData: UserCampaignData): Promise<Billb
       return billboardCity.includes(targetCity.toLowerCase());
     });
     
-    console.log(`📍 Strict city filter for "${targetCity}": ${filteredBillboards.length} matches`);
+    (`📍 Strict city filter for "${targetCity}": ${filteredBillboards.length} matches`);
     
     // If no matches in strict city, try partial matching
     if (filteredBillboards.length === 0 && userCity) {
-      console.log('🔄 Trying partial city matching');
+      ('🔄 Trying partial city matching');
       filteredBillboards = allBillboards.filter(b => 
         b.city && b.city.toLowerCase().includes(userCity)
       );
@@ -268,7 +268,7 @@ export async function matchBillboards(userData: UserCampaignData): Promise<Billb
   
   // If still no matches, use all billboards
   if (filteredBillboards.length === 0) {
-    console.log('⚠️ No city matches found, showing all billboards');
+    ('⚠️ No city matches found, showing all billboards');
     filteredBillboards = allBillboards;
   }
   
@@ -283,11 +283,11 @@ export async function matchBillboards(userData: UserCampaignData): Promise<Billb
       b.monthlyCost >= minBudget && b.monthlyCost <= maxBudget
     );
     
-    console.log(`💰 Budget filter: $${userData.budget} (${minBudget}-${maxBudget}): ${budgetFiltered.length} matches`);
+    (`💰 Budget filter: $${userData.budget} (${minBudget}-${maxBudget}): ${budgetFiltered.length} matches`);
     
     // If too few matches, relax budget constraints
     if (budgetFiltered.length < 5) {
-      console.log('🔄 Relaxing budget constraints');
+      ('🔄 Relaxing budget constraints');
       const relaxedMinBudget = userData.budget * 0.5;  // 50% less
       const relaxedMaxBudget = userData.budget * 2.0;  // 100% more
       
@@ -392,13 +392,13 @@ export async function matchBillboards(userData: UserCampaignData): Promise<Billb
     })
     .slice(0, 12); // GET 12 RESULTS INSTEAD OF 9
   
-  console.log(`✅ Found ${finalResults.length} matching billboards (requested 12)`);
+  (`✅ Found ${finalResults.length} matching billboards (requested 12)`);
   
   // Log detailed results
   if (finalResults.length > 0) {
-    console.log('🏆 Top matches:');
+    ('🏆 Top matches:');
     finalResults.forEach((b, i) => {
-      console.log(`  ${i + 1}. ${b.matches}% - ${b.city} - $${b.monthlyCost} - ${b.dailyTraffic.toLocaleString()} cars/day - ${b.location.substring(0, 40)}...`);
+      (`  ${i + 1}. ${b.matches}% - ${b.city} - $${b.monthlyCost} - ${b.dailyTraffic.toLocaleString()} cars/day - ${b.location.substring(0, 40)}...`);
     });
   }
   

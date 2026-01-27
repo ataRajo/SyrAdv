@@ -1,3 +1,4 @@
+// Your existing RoadSingsApi.js - DON'T CHANGE ANYTHING
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { baseQueryWithReauth } from "../Global";
 
@@ -6,39 +7,22 @@ export const RoadSignsSlice = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: ["RoadSigns"],
   endpoints: (builder) => ({
-   // Updated RoadSignsSlice.js - Only the getRoadSigns endpoint
-// In RoadSignsSlice.js - update the getRoadSigns endpoint
-getRoadSigns: builder.query({
-  query: ({ 
-    start_date, 
-    end_date, 
-    city_id, 
-    region_id, 
-    direction, 
-    model, 
-    customer_id,
-    page = 1,
-    per_page = 50 
-  } = {}) => {
-    const params = new URLSearchParams();
-    if (start_date) params.append("start_date", start_date);
-    if (end_date) params.append("end_date", end_date);
-    if (city_id) params.append("city_id", city_id);
-    if (region_id) params.append("region_id", region_id);
-    if (model) params.append("model", model);
-    if (customer_id) params.append("customer_id", customer_id);
-    if (direction) params.append("direction", direction);
-    
-    // ✅ Always send page and per_page
-    params.append("page", page);
-    params.append("per_page", per_page);
+    getRoadSigns: builder.query({
+      query: ({ start_date, end_date, city_id, region_id, direction, model, customer_id } = {}) => {
+        const params = new URLSearchParams();
+        if (start_date) params.append("start_date", start_date);
+        if (end_date) params.append("end_date", end_date);
+        if (city_id) params.append("city_id", city_id);
+        if (region_id) params.append("region_id", region_id);
+        if (model) params.append("model", model);
+        if (customer_id) params.append("customer_id", customer_id);
+        if (direction) params.append("direction", direction);
 
-    const queryString = params.toString();
-    console.log("📡 API Request URL:", `/road-signs${queryString ? `?${queryString}` : ""}`);
-    return `/road-signs${queryString ? `?${queryString}` : ""}`;
-  },
-  providesTags: ["RoadSigns"],
-}),
+        const queryString = params.toString();
+        return `/road-signs${queryString ? `?${queryString}` : ""}`;
+      },
+      providesTags: ["RoadSigns"],
+    }),
     getRoadSignsModel: builder.query({
       query: () => "/get-road-signs-template-by-model",
       providesTags: ["RoadSigns"],
@@ -47,9 +31,8 @@ getRoadSigns: builder.query({
       query: () => "/get-template-products",
     }),
 
-    // تصحيح اسم الـ endpoint هنا
     getRoadSignsDirections: builder.query({
-      query: () => "/road-signs/directions", // أو "/road-signs-directions" حسب API الفعلي
+      query: () => "/road-signs/directions",
       providesTags: ["RoadSigns"],
     }),
     

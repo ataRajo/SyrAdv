@@ -5,15 +5,14 @@ import { useGetActiveRegionsByCityMutation, useGetCitiesQuery } from '../RtkQuer
 import { useGetCustomersQuery } from '../RtkQuery/Slice/Customers/CustomersApi';
 
 const useReports = () => {
-  // حساب التواريخ الافتراضية (من اليوم + 7 أيام للأمام)
   const getDefaultDates = () => {
     const today = new Date();
     const nextWeek = new Date();
-    nextWeek.setDate(today.getDate() + 7); // +7 أيام للأمام
+    nextWeek.setDate(today.getDate() + 6); // +6 أيام للأمام
     
     return {
-      fromDate: today.toISOString().split('T')[0], // اليوم كتاريخ بداية
-      toDate: nextWeek.toISOString().split('T')[0] // اليوم + 7 أيام كتاريخ نهاية
+    fromDate: today.toISOString().split('T')[0], // اليوم
+    toDate: nextWeek.toISOString().split('T')[0] // اليوم + 6 أيام
     };
   };
 
@@ -88,7 +87,6 @@ const useReports = () => {
   useEffect(() => {
     if (customersData) {
       console.log("Customers API Response:", customersData);
-      console.log("Extracted customers array:", getCustomersArray());
     }
     if (customersError) {
       console.error("Customers API Error:", customersError);
@@ -110,16 +108,10 @@ const useReports = () => {
   });
 
   useEffect(() => {
-    console.log('📅 Dates being sent to API:');
-    console.log('fromDate:', fromDate);
-    console.log('toDate:', toDate);
-    console.log('Today:', new Date().toISOString().split('T')[0]);
-    
     // احسب تاريخ اليوم + 7 أيام للتحقق
     const today = new Date();
     const nextWeek = new Date();
     nextWeek.setDate(today.getDate() + 7);
-    console.log('Today + 7 days:', nextWeek.toISOString().split('T')[0]);
   }, [fromDate, toDate]);
 
 

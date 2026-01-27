@@ -1,5 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { 
+  MapContainer, 
+  TileLayer, 
+  Marker, 
+  Popup, 
+  useMap,
+  LayersControl 
+} from "react-leaflet";
 import { 
   useGetRoadSignsQuery,
   useGetRoadSignByIdQuery 
@@ -9,7 +16,20 @@ import L from "leaflet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NavigationIcon, FilterIcon, LocateIcon, Loader2, Calendar, MapPin, Type, Ruler, Search, X } from "lucide-react";
+import { 
+  NavigationIcon, 
+  FilterIcon, 
+  LocateIcon, 
+  Loader2, 
+  Calendar, 
+  MapPin, 
+  Type, 
+  Ruler, 
+  Search, 
+  X,
+  Satellite,
+  Map
+} from "lucide-react";
 import { showToast } from "../../utils/Notifictions/showToast";
 
 // Fix for default markers
@@ -20,157 +40,148 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png",
 });
 
-// Component to handle user location
+
 function UserLocation() {
   const map = useMap();
   const [userPosition, setUserPosition] = useState(null);
+  const [accuracy, setAccuracy] = useState(null);
+  const [isLocating, setIsLocating] = useState(false);
   const locationFoundRef = useRef(false);
-  const locationAttemptRef = useRef(false);
-
-  const checkLocationReasonableness = (latlng) => {
-    const inaccurateLocations = [
-      { lat: 48.8566, lng: 2.3522, name: "Paris" },
-      { lat: 40.7128, lng: -74.0060, name: "New York" },
-      { lat: 51.5074, lng: -0.1278, name: "London" },
-      { lat: 0, lng: 0, name: "Null Island" },
-      { lat: 37.7749, lng: -122.4194, name: "San Francisco" },
-    ];
-    
-    const isInaccurate = inaccurateLocations.some(inaccurate => 
-      Math.abs(latlng.lat - inaccurate.lat) < 0.5 &&
-      Math.abs(latlng.lng - inaccurate.lng) < 0.5
-    );
-    
-    const isValidCoordinate = 
-      latlng.lat >= -90 && latlng.lat <= 90 && 
-      latlng.lng >= -180 && latlng.lng <= 180;
-    
-    return !isInaccurate && isValidCoordinate;
-  };
 
   const getIPBasedLocation = async () => {
-    const services = [
-      'https://ipapi.co/json/',
-      'https://ipwho.is/',
-      'https://json.geoiplookup.io/',
-    ];
-
-    for (const service of services) {
-      try {
-        const response = await fetch(service, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
+    try {
+      // استخدام خدمة موثوقة لتحديد الموقع
+      const response = await fetch('https://ipapi.co/json/');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.latitude && data.longitude) {
+          const ipPosition = { 
+            lat: parseFloat(data.latitude), 
+            lng: parseFloat(data.longitude) 
+          };
           
-          let lat, lng;
-          
-          if (service.includes('ipapi.co')) {
-            lat = data.latitude;
-            lng = data.longitude;
-          } else if (service.includes('ipwho') || service.includes('json.geoiplookup')) {
-            lat = data.latitude;
-            lng = data.longitude;
-          } else if (service.includes('db-ip')) {
-            lat = data.latitude;
-            lng = data.longitude;
-          }
-          
-          if (lat && lng) {
-            const ipPosition = { lat: parseFloat(lat), lng: parseFloat(lng) };
-            
-            if (checkLocationReasonableness(ipPosition)) {
-              setUserPosition(ipPosition);
-              map.flyTo(ipPosition, 12);
-              if (!locationFoundRef.current) {
-                showToast("success", "تم تحديد موقعك بنجاح");
-                locationFoundRef.current = true;
-              }
-              return true;
-            }
-          }
+          setUserPosition(ipPosition);
+          map.flyTo(ipPosition, 10);
+          setAccuracy(5000); // تقريبي
+          showToast("info", "تم تحديد موقعك تقريبياً");
+          return true;
         }
-      } catch (error) {
-        console.warn(`IP location service failed: ${service}`, error);
-        continue;
       }
+    } catch (error) {
+      console.warn("IP location failed:", error);
     }
     
-    const defaultPosition = { lat: 24.7136, lng: 46.6753 };
+    // الموقع الافتراضي لسوريا
+    const defaultPosition = { lat: 33.5138, lng: 36.2765 }; // دمشق
     setUserPosition(defaultPosition);
-    map.flyTo(defaultPosition, 10);
-    if (!locationFoundRef.current) {
-      showToast("info", "استخدم زر تحديد الموقع للحصول على موقعك الدقيق");
-    }
+    map.flyTo(defaultPosition, 8);
     return false;
   };
 
   const locateUser = () => {
-    if (locationFoundRef.current && locationAttemptRef.current) return;
-
-    locationAttemptRef.current = true;
+    if (isLocating) return;
+    
+    setIsLocating(true);
     showToast("info", "جاري تحديد موقعك...");
 
+    // محاولة الحصول على الموقع بدقة عالية
     map.locate({
-      setView: true,
-      maxZoom: 14,
+      setView: false,
+      maxZoom: 15,
       enableHighAccuracy: true,
-      timeout: 15000,
+      timeout: 10000,
+      maximumAge: 0,
       watch: false
     });
 
     const handleLocationFound = (e) => {
-      console.log("GPS location found:", e.latlng);
+      console.log("موقع المستخدم:", e.latlng, "الدقة:", e.accuracy);
       
-      const isReasonableLocation = checkLocationReasonableness(e.latlng);
+      setUserPosition(e.latlng);
+      setAccuracy(e.accuracy);
       
-      if (isReasonableLocation) {
-        setUserPosition(e.latlng);
-        map.flyTo(e.latlng, 14);
-        if (!locationFoundRef.current) {
-          showToast("success", "تم تحديد موقعك بنجاح");
-          locationFoundRef.current = true;
-        }
-      } else {
-        console.log("Unreasonable GPS location detected, trying IP-based...");
-        getIPBasedLocation();
+      // تحديد مستوى التكبير بناءً على الدقة
+      let zoomLevel = 15;
+      if (e.accuracy > 100) zoomLevel = 14;
+      if (e.accuracy > 500) zoomLevel = 13;
+      if (e.accuracy > 1000) zoomLevel = 12;
+      if (e.accuracy > 5000) zoomLevel = 10;
+      
+      map.flyTo(e.latlng, zoomLevel, {
+        duration: 1.5,
+        animate: true
+      });
+      
+      // إضافة دائرة توضح دقة الموقع
+      if (e.accuracy < 10000) {
+        L.circle(e.latlng, {
+          radius: e.accuracy,
+          color: '#3b82f6',
+          fillColor: '#60a5fa',
+          fillOpacity: 0.15,
+          weight: 1
+        }).addTo(map).bindPopup(`دقة الموقع: ${Math.round(e.accuracy)} متر`).openPopup();
       }
+      
+      const accuracyText = e.accuracy < 50 ? "دقيقة جداً" :
+                          e.accuracy < 200 ? "دقيقة" :
+                          e.accuracy < 1000 ? "جيدة" : "تقريبية";
+      
+      showToast("success", `تم تحديد موقعك (${accuracyText})`);
+      locationFoundRef.current = true;
+      setIsLocating(false);
     };
 
     const handleLocationError = (e) => {
-      console.log("GPS location error:", e.message);
-      getIPBasedLocation();
+      console.log("خطأ في تحديد الموقع:", e.message);
+      
+      let errorMessage = "تعذر تحديد موقعك";
+      switch(e.code) {
+        case 1:
+          errorMessage = "الرجاء السماح بالوصول إلى الموقع";
+          break;
+        case 2:
+          errorMessage = "جهازك لا يدعم خدمة الموقع";
+          break;
+        case 3:
+          errorMessage = "انتهى وقت الانتظار";
+          break;
+      }
+      
+      showToast("warning", errorMessage);
+      
+      // العودة إلى الموقع الافتراضي
+      setTimeout(() => {
+        getIPBasedLocation();
+        setIsLocating(false);
+      }, 1000);
     };
 
     map.on('locationfound', handleLocationFound);
     map.on('locationerror', handleLocationError);
 
-    const fallbackTimeout = setTimeout(() => {
+    // وقت الانتظار
+    setTimeout(() => {
       if (!locationFoundRef.current) {
-        console.log("GPS timeout, trying IP location...");
         getIPBasedLocation();
       }
-    }, 8000);
+      setIsLocating(false);
+    }, 11000);
 
     return () => {
-      clearTimeout(fallbackTimeout);
       map.off('locationfound', handleLocationFound);
       map.off('locationerror', handleLocationError);
     };
   };
 
   useEffect(() => {
-    if (!locationFoundRef.current && !locationAttemptRef.current) {
+    if (!locationFoundRef.current) {
       locateUser();
     }
   }, [map]);
 
   const handleManualLocate = () => {
     locationFoundRef.current = false;
-    locationAttemptRef.current = false;
-    showToast("info", "جاري إعادة تحديد موقعك...");
     locateUser();
   };
 
@@ -179,46 +190,76 @@ function UserLocation() {
       {userPosition && (
         <Marker position={userPosition} icon={L.icon({
           iconUrl: "data:image/svg+xml;base64," + btoa(`
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#2563eb" width="24" height="24">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3b82f6">
+              <circle cx="12" cy="12" r="10" fill="#3b82f6" opacity="0.8"/>
+              <circle cx="12" cy="12" r="5" fill="white"/>
+              <path d="M12 2a10 10 0 0 0-10 10 10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2zm0 14a4 4 0 1 1 0-8 4 4 0 0 1 0 8z" fill="none" stroke="white" stroke-width="1"/>
             </svg>
           `),
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
         })}>
           <Popup>
-            <div className="text-center">
-              <p className="font-semibold">موقعك الحالي</p>
-              <p className="text-sm text-gray-600">
-                {userPosition.lat.toFixed(6)}, {userPosition.lng.toFixed(6)}
+            <div className="text-center min-w-[180px]">
+              <p className="font-bold text-blue-700">موقعك الحالي</p>
+              <p className="text-sm text-gray-600 mt-1">
+                {userPosition.lat.toFixed(5)}, {userPosition.lng.toFixed(5)}
               </p>
+              {accuracy && (
+                <p className="text-xs mt-1">
+                  <span className="font-semibold">الدقة:</span> 
+                  <span className="text-blue-600 ml-1">
+                    {accuracy < 1000 ? `${Math.round(accuracy)} م` : `${(accuracy/1000).toFixed(1)} كم`}
+                  </span>
+                </p>
+              )}
               <Button 
                 size="sm" 
                 variant="outline" 
-                className="mt-2"
+                className="mt-2 w-full"
                 onClick={handleManualLocate}
+                disabled={isLocating}
               >
-                تحديث الموقع
+                {isLocating ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin ml-2" />
+                    جاري التحديث...
+                  </>
+                ) : 'تحديث الموقع'}
               </Button>
             </div>
           </Popup>
         </Marker>
       )}
       
+      {/* زر تحديد الموقع */}
       <div className="leaflet-top leaflet-right">
-        <div className="leaflet-control leaflet-bar">
+        <div className="leaflet-control leaflet-bar" style={{ marginTop: '70px' }}>
           <button
-            className="p-2 bg-white hover:bg-gray-100 text-gray-700 rounded shadow-md border"
+            className="p-3 bg-white hover:bg-blue-50 text-blue-600 rounded-full shadow-lg border border-blue-300"
             onClick={handleManualLocate}
-            title="تحديد موقعي"
+            title="حدد موقعي"
+            disabled={isLocating}
+            style={{
+              width: '44px',
+              height: '44px',
+              animation: !locationFoundRef.current ? 'pulse 1.5s infinite' : 'none'
+            }}
           >
-            <LocateIcon className="w-4 h-4" />
+            {isLocating ? (
+              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+            ) : (
+              <LocateIcon className="w-5 h-5 mx-auto" />
+            )}
           </button>
         </div>
       </div>
     </>
   );
 }
+
+
+
 
 // Component to handle map zoom for search results
 function MapZoomToLocation({ location }) {
@@ -424,33 +465,44 @@ const RoadSignDetails = ({ roadSignId }) => {
   );
 };
 
-
-// 1. دالة للتحقق إذا كان الوجه محجوزاً
+// 1. دالة مبسطة للتحقق إذا كان الوجه محجوزاً
 const isFaceBooked = (roadSign) => {
+  // الاستخدام الأمثل: استخدام is_booked من الاستجابة مباشرة
+  if (roadSign.is_booked !== undefined) {
+    return roadSign.is_booked === true;
+  }
+  
+  // Fallback: التحقق من الحجوزات السابقة
   if (!roadSign.bookings || !Array.isArray(roadSign.bookings) || roadSign.bookings.length === 0) {
     return false;
   }
   
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  today.setHours(0, 0, 0, 0);
   
+  // البحث عن حجز نشط اليوم
   for (const booking of roadSign.bookings) {
     if (!booking.start_date || !booking.end_date) continue;
     
     try {
-      // Parse dates and normalize to start of day
+      // التحقق من حالة الموافقة
+      const isApproved = booking.approvement_status === 2;
+      
+      if (!isApproved) continue;
+      
       const startDate = new Date(booking.start_date);
       const endDate = new Date(booking.end_date);
       
+      // إعادة ضبط الساعات للمقارنة الصحيحة
       startDate.setHours(0, 0, 0, 0);
-      endDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
       
-      // Check if today is within booking period
+      // التحقق إذا كان اليوم ضمن فترة الحجز
       if (today >= startDate && today <= endDate) {
         return true;
       }
     } catch (error) {
-      console.error(`Error parsing dates for booking:`, error);
+      console.error(`Error parsing dates for booking ${booking.id}:`, error);
       continue;
     }
   }
@@ -460,11 +512,13 @@ const isFaceBooked = (roadSign) => {
 
 // 2. دالة للتحقق من الحالة الخاصة (وجه محجوز ووجه متاح)
 const checkSpecialDualFaceCase = (roadSign, allRoadSigns) => {
-  // فقط للوحات ذات وجهين (لها direction_code)
+  // التحقق من وجود direction_code للوحات ذات الوجهين
   if (roadSign.direction_code !== null && roadSign.direction_code !== undefined) {
     const roadSignCode = roadSign.roadsign_code;
     
-    // ابحث عن الوجه الآخر بنفس الكود
+    if (!roadSignCode) return false;
+    
+    // البحث عن الوجه الآخر بنفس الكود
     const otherFace = allRoadSigns.find(sign => 
       sign.roadsign_code === roadSignCode && 
       sign.direction_code !== roadSign.direction_code &&
@@ -487,6 +541,8 @@ const getDualFaceInfo = (roadSign, allRoadSigns) => {
   if (roadSign.direction_code === null || roadSign.direction_code === undefined) return null;
   
   const roadSignCode = roadSign.roadsign_code;
+  if (!roadSignCode) return null;
+  
   const otherFace = allRoadSigns.find(sign => 
     sign.roadsign_code === roadSignCode && 
     sign.direction_code !== roadSign.direction_code
@@ -508,7 +564,9 @@ const getDualFaceInfo = (roadSign, allRoadSigns) => {
   };
 };
 
-const RoadSignsMapView = ({ viewType }) => {
+
+
+const RoadSignsMapView = ({ viewType = "map" }) => {
   const { data: roadSignsResponse, isLoading, error } = useGetRoadSignsQuery();
   
   // Search functionality state
@@ -523,6 +581,14 @@ const RoadSignsMapView = ({ viewType }) => {
   const [selectedRegion, setSelectedRegion] = useState("");
   const [showFilters, setShowFilters] = useState(true);
   const [selectedRoadSignId, setSelectedRoadSignId] = useState(null);
+  
+  // State for satellite view control
+  const [mapType, setMapType] = useState(viewType);
+
+  // Update map type when viewType prop changes
+  useEffect(() => {
+    setMapType(viewType);
+  }, [viewType]);
 
   // Function to search ANY location using OpenStreetMap Nominatim API
   const searchLocation = async (query) => {
@@ -815,6 +881,11 @@ const RoadSignsMapView = ({ viewType }) => {
     setSelectedRoadSignId(roadSignId);
   };
 
+  // Toggle between map and satellite view
+  const toggleMapType = () => {
+    setMapType(prev => prev === "map" ? "satellite" : "map");
+  };
+
   if (isLoading) {
     return (
       <div className="w-full h-96 flex items-center justify-center">
@@ -988,10 +1059,80 @@ const RoadSignsMapView = ({ viewType }) => {
               className="w-full h-full"
               scrollWheelZoom={true}
             >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+              {/* Base Layers */}
+              <LayersControl position="topright">
+                {/* Standard Map Layer */}
+                <LayersControl.BaseLayer 
+                  checked={mapType === "map"} 
+                  name="الخريطة العادية"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    maxZoom={19}
+                    detectRetina={true}
+                  />
+                </LayersControl.BaseLayer>
+                
+                {/* Satellite Layer */}
+                <LayersControl.BaseLayer 
+                  checked={mapType === "satellite"} 
+                  name="القمر الاصطناعي"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    maxZoom={19}
+                    detectRetina={true}
+                  />
+                </LayersControl.BaseLayer>
+                
+                {/* Hybrid Satellite Layer (with labels) */}
+                <LayersControl.BaseLayer 
+                  checked={false} 
+                  name="القمر الاصطناعي مع التسميات"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    maxZoom={19}
+                    detectRetina={true}
+                  />
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    maxZoom={19}
+                    opacity={0.5}
+                    detectRetina={true}
+                  />
+                </LayersControl.BaseLayer>
+                
+                {/* Topographic Map */}
+                <LayersControl.BaseLayer 
+                  checked={false} 
+                  name="الخريطة الطبوغرافية"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+                    maxZoom={19}
+                    detectRetina={true}
+                  />
+                </LayersControl.BaseLayer>
+                
+                {/* Dark Mode Map */}
+                <LayersControl.BaseLayer 
+                  checked={false} 
+                  name="الوضع المظلم"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    maxZoom={19}
+                    detectRetina={true}
+                  />
+                </LayersControl.BaseLayer>
+              </LayersControl>
 
               {/* User Location Component */}
               <UserLocation />
@@ -1000,119 +1141,202 @@ const RoadSignsMapView = ({ viewType }) => {
               {selectedLocation && <MapZoomToLocation location={selectedLocation} />}
 
               {/* Road Sign Markers */}
-              {roadSignsWithCoordinates.map((roadSign) => {
-                const coords = getCoordinates(roadSign);
-                if (!coords) return null;
+           {roadSignsWithCoordinates.map((roadSign) => {
+  const coords = getCoordinates(roadSign);
+  if (!coords) return null;
 
-                // Check if this road sign has special dual face case
-                const isSpecialDualFace = checkSpecialDualFaceCase(roadSign, roadSigns);
-                
-                // Get dual face info if available
-                const dualFaceInfo = getDualFaceInfo(roadSign, roadSigns);
-                
-                let markerColor = "#6b7280"; 
-                let markerIcon = "🚦"; 
-                let isBooked = isFaceBooked(roadSign);
-                
-                if (isSpecialDualFace) {
-                  // Special case: one face booked, one available
-                  markerColor = "#f59e0b"; // Amber
-                  markerIcon = "⚡"; // Special icon
-                } else if (isBooked) {
-                  markerColor = "#ef4444"; 
-                 markerIcon = "📍";
-                } else {
-                  markerColor = "#10b981"; 
-                  markerIcon = "📍"; // green pin
+  // استخدام is_booked مباشرة من الاستجابة
+  const isBooked = isFaceBooked(roadSign);
+  
+  // الحصول على معلومات الوجهين
+  const dualFaceInfo = getDualFaceInfo(roadSign, roadSigns);
+  const isSpecialDualFace = checkSpecialDualFaceCase(roadSign, roadSigns);
+  
+  // تحديد لون ورمز الماركر بناءً على الحالة
+  let markerColor, markerIcon, markerText;
+  
+  if (isBooked) {
+    // محجوز - أحمر
+    markerColor = "#ef4444";
+    markerIcon = "🔴";
+    markerText = "محجوز";
+  } else if (isSpecialDualFace) {
+    // حالة خاصة: وجه محجوز ووجه متاح - برتقالي
+    markerColor = "#f59e0b";
+    markerIcon = "⚡";
+    markerText = "وجهين";
+  } else {
+    // متاح - أخضر
+    markerColor = "#10b981";
+    markerIcon = "🟢";
+    markerText = "متاح";
+  }
+
+  return (
+
+    <Marker
+      key={roadSign.id}
+      position={coords}
+      icon={L.divIcon({
+        html: `
+          <div style="
+            background-color: ${markerColor};
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            border: 3px solid white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+            position: relative;
+            font-weight: bold;
+            text-align: center;
+            line-height: 1;
+            padding-top: 2px;
+          ">
+            <div style="font-size: 18px; margin-bottom: 2px;">${markerIcon}</div>
+            <div style="font-size: 9px; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">${markerText}</div>
+            ${dualFaceInfo ? `
+              <div style="
+                position: absolute;
+                top: -5px;
+                right: -5px;
+                background: ${dualFaceInfo.otherFace.isBooked ? '#ef4444' : '#10b981'};
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                border: 2px solid white;
+                font-size: 9px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-weight: bold;
+              ">
+                ${dualFaceInfo.otherFace.direction || ''}
+              </div>
+            ` : ''}
+          </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 40],
+        popupAnchor: [0, -40],
+        className: 'road-sign-marker'
+      })}
+      eventHandlers={{
+        click: () => handleMarkerClick(roadSign.id),
+      }}
+    >
+      <Popup
+        onClose={() => setSelectedRoadSignId(null)}
+        className="custom-popup"
+        minWidth={300}
+        maxWidth={400}
+      >
+        <RoadSignDetails roadSignId={roadSign.id} />
+        
+        {/* Booking Status Section */}
+        <div className="mt-4">
+          <div className={`p-3 rounded-lg text-center font-bold ${isBooked ? 'bg-red-50 border-2 border-red-200' : 'bg-green-50 border-2 border-green-200'}`}>
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-2xl">{isBooked ? '🔴' : '🟢'}</span>
+              <span className={`text-lg ${isBooked ? 'text-red-700' : 'text-green-700'}`}>
+                {isBooked ? 'محجوز حالياً' : 'متاح للحجز'}
+              </span>
+            </div>
+            
+            {isBooked && roadSign.bookings && roadSign.bookings.length > 0 && (
+              <div className="mt-2 text-sm text-gray-700">
+                <div className="font-medium mb-1">تفاصيل الحجز:</div>
+                {roadSign.bookings
+                  .filter(booking => booking.approvement_status === 2)
+                  .slice(0, 1) // عرض آخر حجز فقط
+                  .map(booking => (
+                    <div key={booking.id} className="bg-white p-2 rounded border">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">من:</span>
+                        <span className="font-semibold">{booking.start_date}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">إلى:</span>
+                        <span className="font-semibold">{booking.end_date}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">العميل:</span>
+                        <span className="font-semibold">{booking.customer?.full_name || 'غير معروف'}</span>
+                      </div>
+                    </div>
+                  ))
                 }
-
-                return (
-                  <Marker
-                    key={roadSign.id}
-                    position={coords}
-                    icon={L.divIcon({
-                      html: `
-                        <div style="
-                          background-color: ${markerColor};
-                          width: 32px;
-                          height: 32px;
-                          border-radius: 50%;
-                          display: flex;
-                          align-items: center;
-                          justify-content: center;
-                          color: white;
-                          font-size: 16px;
-                          border: 2px solid white;
-                          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                          cursor: pointer;
-                          position: relative;
-                        ">
-                          ${markerIcon}
-                          ${dualFaceInfo ? `
-                            <div style="
-                              position: absolute;
-                              top: -5px;
-                              right: -5px;
-                              background: ${dualFaceInfo.otherFace.isBooked ? '#ef4444' : '#10b981'};
-                              width: 12px;
-                              height: 12px;
-                              border-radius: 50%;
-                              border: 1px solid white;
-                            "></div>
-                          ` : ''}
-                        </div>
-                      `,
-                      iconSize: [32, 32],
-                      iconAnchor: [16, 16],
-                      className: 'road-sign-marker'
-                    })}
-                    eventHandlers={{
-                      click: () => handleMarkerClick(roadSign.id),
-                    }}
-                  >
-                    <Popup
-                      onClose={() => setSelectedRoadSignId(null)}
-                      className="custom-popup"
-                    >
-                      <RoadSignDetails roadSignId={roadSign.id} />
-                      
-                      {/* Dual Face Information */}
-                      {dualFaceInfo && (
-                        <div className="mt-4 p-3 bg-gray-50 rounded-lg border">
-                          <h4 className="font-medium text-sm mb-2 text-center">
-                            معلومات الوجهين
-                          </h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className={`text-center p-2 rounded ${dualFaceInfo.currentFace.isBooked ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                              <div className="text-xs font-semibold">الوجه الحالي</div>
-                              <div className="text-xs">الاتجاه: {dualFaceInfo.currentFace.direction}</div>
-                              <div className={`text-xs font-bold ${dualFaceInfo.currentFace.isBooked ? 'text-red-600' : 'text-green-600'}`}>
-                                {dualFaceInfo.currentFace.isBooked ? 'محجوز' : 'متاح'}
-                              </div>
-                            </div>
-                            <div className={`text-center p-2 rounded ${dualFaceInfo.otherFace.isBooked ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                              <div className="text-xs font-semibold">الوجه الآخر</div>
-                              <div className="text-xs">الاتجاه: {dualFaceInfo.otherFace.direction}</div>
-                              <div className={`text-xs font-bold ${dualFaceInfo.otherFace.isBooked ? 'text-red-600' : 'text-green-600'}`}>
-                                {dualFaceInfo.otherFace.isBooked ? 'محجوز' : 'متاح'}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {isSpecialDualFace && (
-                            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-center">
-                              <span className="text-xs font-semibold text-amber-700">
-                                ⚡ حالة خاصة: وجه محجوز ووجه متاح
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </Popup>
-                  </Marker>
-                );
-              })}
+              </div>
+            )}
+          </div>
+          
+          {/* Dual Face Information */}
+          {dualFaceInfo && (
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+              <h4 className="font-bold text-sm mb-3 text-center text-blue-800">
+                ⚡ معلومات الوجهين
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`text-center p-3 rounded-lg ${dualFaceInfo.currentFace.isBooked ? 'bg-red-100 border border-red-300' : 'bg-green-100 border border-green-300'}`}>
+                  <div className="font-semibold text-sm mb-1">الوجه الحالي</div>
+                  <div className="text-xs text-gray-600 mb-1">اتجاه: {dualFaceInfo.currentFace.direction || '---'}</div>
+                  <div className={`text-sm font-bold py-1 rounded ${dualFaceInfo.currentFace.isBooked ? 'text-red-700' : 'text-green-700'}`}>
+                    {dualFaceInfo.currentFace.isBooked ? '🔒 محجوز' : '🔓 متاح'}
+                  </div>
+                </div>
+                <div className={`text-center p-3 rounded-lg ${dualFaceInfo.otherFace.isBooked ? 'bg-red-100 border border-red-300' : 'bg-green-100 border border-green-300'}`}>
+                  <div className="font-semibold text-sm mb-1">الوجه الآخر</div>
+                  <div className="text-xs text-gray-600 mb-1">اتجاه: {dualFaceInfo.otherFace.direction || '---'}</div>
+                  <div className={`text-sm font-bold py-1 rounded ${dualFaceInfo.otherFace.isBooked ? 'text-red-700' : 'text-green-700'}`}>
+                    {dualFaceInfo.otherFace.isBooked ? '🔒 محجوز' : '🔓 متاح'}
+                  </div>
+                </div>
+              </div>
+              
+              {isSpecialDualFace && (
+                <div className="mt-3 p-2 bg-amber-100 border border-amber-300 rounded text-center">
+                  <span className="text-xs font-bold text-amber-800">
+                    ⚡ حالة خاصة: وجه محجوز ووجه متاح
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Popup>
+    </Marker>
+  );
+})}
             </MapContainer>
+
+            {/* Map Type Toggle Button */}
+            <div className="absolute top-20 right-4 z-[1000]">
+              <Button
+                variant="outline"
+                className="bg-white hover:bg-gray-100 shadow-lg border"
+                onClick={toggleMapType}
+                size="sm"
+              >
+                {mapType === "map" ? (
+                  <>
+                    <Satellite className="w-4 h-4 ml-2" />
+                    عرض القمر الاصطناعي
+                  </>
+                ) : (
+                  <>
+                    <Map className="w-4 h-4 ml-2" />
+                    عرض الخريطة العادية
+                  </>
+                )}
+              </Button>
+            </div>
 
             {/* Map Legend */}
             <div className="absolute bottom-4 left-4 bg-gray-700 p-3 rounded-lg shadow-lg z-[1000] border">
@@ -1134,6 +1358,12 @@ const RoadSignsMapView = ({ viewType }) => {
                   <div className="w-4 h-4 rounded-full bg-blue-500"></div>
                   <span className="text-xs">موقعك الحالي</span>
                 </div>
+                {mapType === "satellite" && (
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-600">
+                    <Satellite className="w-4 h-4 text-yellow-400" />
+                    <span className="text-xs text-yellow-300">وضع القمر الاصطناعي</span>
+                  </div>
+                )}
               </div>
             </div>
 

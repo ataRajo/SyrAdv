@@ -27,9 +27,10 @@ import BrokerInfo from "./Components/Brokers/BrokerInfo";
 import RoadSignStats from "./Components/RoadSigns/RoadSignStats/RoadSignStats";
 
 import axios from "axios";
-import ExtendBooking from "./Components/Booking/BookingForm/Cart/ExtendBooking";
+import ExtendBooking from "./Components/Booking/ExtendBooking/ExtendBooking";
 import LandingPage from "./Pages/LandingPage/LandingPage";
 import PrintPrice from "./Components/PrintPrice/PrintPrice"
+import ErrorBoundary from "./ErrorBoundary";
 
 
 function App() {
@@ -42,6 +43,8 @@ function App() {
 
       
       <BrowserRouter>
+      <ErrorBoundary>
+
         <Routes>
 
           <Route path="/Login" element={<Login />} />
@@ -109,7 +112,10 @@ function App() {
 
           </Route>
         </Routes>
+      </ErrorBoundary>
+
       </BrowserRouter>
+
     </div>
   );
 }

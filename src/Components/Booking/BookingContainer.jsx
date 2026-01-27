@@ -36,14 +36,14 @@ const approvementStatusMap = {
   "1": "انتظار",
   "2": "موافقة",
   "3": "مرفوض",
-  "4": "متوقف مؤقت"
+  //"4": "متوقف مؤقت"
 };
 
 const bookingStatusMap = {
   1: "نشط",
   2: "مكتمل",
   3: "ملغي",
-  4: "متوقف مؤقت"
+  //4: "متوقف مؤقت"
 };
 
 const EnhancedBookingColumns = [...BookingColumns];
@@ -616,7 +616,6 @@ const filteredData = useMemo(() => {
         </div>
       )}
 
-      {/* ✅ Dynamic Table */}
       <DynamicTable
         data={filteredData || []}
         columns={EnhancedBookingColumns}

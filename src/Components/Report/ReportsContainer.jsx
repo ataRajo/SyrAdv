@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
@@ -8,7 +8,6 @@ import { productTypeOptions } from "../../Static/StaticData";
 import { Label } from "@/components/ui/label";
 import useReports from "../../hooks/useReports";
 import { Button } from "@/components/ui/button";
-import logo from "../../assets/images/adv_syrian.png"
 
 const ReportsContainer = () => {
   const {
@@ -28,30 +27,52 @@ const ReportsContainer = () => {
     isCustomersLoading,
     customersError,
     handleCustomerChange,
+    cities,
+    regions,
   } = useReports();
 
   // State for expanded directions
   const [expandedDirections, setExpandedDirections] = useState({});
 
-  // Function to group road signs by place, model, and direction
+  // Debug: Log data structure
+  useEffect(() => {
+    if (data?.customers?.[0]?.roadSigns?.[0]) {
+      console.log("🔍 Sample road sign structure:", data.customers[0].roadSigns[0]);
+      console.log("📋 Regions data from sign:", data.customers[0].roadSigns[0].region);
+    }
+  }, [data]);
+
+  // Function to get region name from road sign object
+  const getRegionName = (sign) => {
+    // First check if region object exists in the sign
+    if (sign?.region?.name) {
+      return sign.region.name;
+    }
+    // Fallback to region ID if name not available
+    return sign?.region_id ? `المنطقة ${sign.region_id}` : 'غير محدد';
+  };
+
+  // Function to group road signs by city, region, place, model, and direction
   const groupRoadSigns = (roadSigns) => {
     if (!roadSigns || !Array.isArray(roadSigns)) return [];
     
     const groupedMap = {};
     
     roadSigns.forEach(sign => {
-      // Get the values for grouping
+      // Get the values for grouping - including region name
+      const regionName = getRegionName(sign);
       const place = sign?.place || 'غير محدد';
       const model = sign?.template?.model || 'غير محدد';
       const direction = sign?.directions || sign?.direction || 'غير محدد';
       
-      // Create a unique key based on place, model, and direction
-      const key = `${place}|${model}|${direction}`;
+      // Create a unique key based on region, place, model, and direction
+      const key = `${regionName}|${place}|${model}|${direction}`;
       
       if (!groupedMap[key]) {
         groupedMap[key] = {
           ...sign,
           key: key,
+          region: regionName, // Store region name
           place: place,
           model: model,
           direction: direction,
@@ -66,7 +87,9 @@ const ReportsContainer = () => {
           },
           total_advertising_space: sign.total_advertising_space || 0,
           grouped_count: 1,
-          template: sign.template
+          template: sign.template,
+          region_id: sign.region_id,
+          region_object: sign.region // Keep original region object
         };
       } else {
         // Add to existing group
@@ -154,7 +177,8 @@ const ReportsContainer = () => {
       ...customer,
       roadSigns: customer.roadSigns?.map(sign => ({
         ...sign,
-        direction: sign.originalDirection || sign.direction // Use original for PDF
+        direction: sign.originalDirection || sign.direction,
+        region: sign.region || getRegionName(sign) // Ensure region is included for PDF
       })) || []
     }));
     
@@ -340,10 +364,11 @@ const ReportsContainer = () => {
             <thead>
               <tr>
                 <th>م</th>
+                <th>المنطقة</th>
                 <th>التموضع</th>
                 <th>النموذج</th>
                 <th>القياس</th>
-                <th>المساحة</th>
+                <th>المساحة (م²)</th>
                 <th>عدد الأوجه</th>
                 <th>الإجمالي (م²)</th>
                 <th>الاتجاه</th>
@@ -357,13 +382,15 @@ const ReportsContainer = () => {
         const templateSize = sign.template?.size || "غير محدد";
         const templateArea = sign.template?.advertising_space || 0;
         const totalMeters = sign.total_advertising_space || 0;
+        const regionName = sign.region || getRegionName(sign);
         
         htmlContent += `
           <tr>
             <td>${signIndex + 1}</td>
+            <td>${regionName}</td>
             <td>${sign.place || "غير محدد"}</td>
             <td>${sign.model || "غير محدد"}</td>
-<td>${templateSize ? templateSize.replace(/x/gi, ' × ') : "غير محدد"}</td>
+            <td>${templateSize ? templateSize.replace(/x/gi, ' × ') : "غير محدد"}</td>
             <td>${templateArea}</td>
             <td>${sign.pivot?.booking_faces || 1}${isGrouped ? ` <span class="group-note">(مجموعة: ${sign.grouped_count})</span>` : ''}</td>
             <td>${totalMeters}</td>
@@ -391,6 +418,7 @@ const ReportsContainer = () => {
               <tr>
                 <th>م</th>
                 <th>النموذج</th>
+                <th>القياس</th>
                 <th>العدد</th>
               </tr>
             </thead>
@@ -402,6 +430,7 @@ const ReportsContainer = () => {
           <tr>
             <td>${i + 1}</td>
             <td>${item.templateName}</td>
+            <td>${item.stats.size}</td>
             <td>${item.stats.count}</td>
           </tr>
         `;
@@ -411,7 +440,7 @@ const ReportsContainer = () => {
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="2"><strong>المجموع الكلي</strong></td>
+                <td colspan="3"><strong>المجموع الكلي</strong></td>
                 <td><strong>${totalCount}</strong></td>
               </tr>
             </tfoot>
@@ -446,8 +475,30 @@ const ReportsContainer = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Enhanced columns with الاتجاه handling
-  const enhancedColumns = ReportBookingsCustomersColumns.map(col => {
+  // Update ReportBookingsCustomersColumns to remove المدينة and keep المنطقة
+  const updatedColumns = ReportBookingsCustomersColumns.map(col => {
+    // Remove المدينة column if it exists
+    if (col.header === "المدينة") {
+      return null; // Will be filtered out
+    }
+    
+    // Update المنطقة column to be more prominent
+    if (col.header === "المنطقة") {
+      return {
+        ...col,
+        cellClassName: "font-semibold text-green-700 dark:text-green-400 min-w-[150px]",
+        format: (value, row) => {
+          const regionName = row.region || getRegionName(row) || 'غير محدد';
+          return (
+            <span className="px-3 py-1.5 bg-green-50 dark:bg-green-900/30 rounded-md border border-green-200 dark:border-green-700">
+              {regionName}
+            </span>
+          );
+        }
+      };
+    }
+    
+    // Handle الاتجاه column with expand/collapse
     if (col.header === "الاتجاه") {
       return {
         ...col,
@@ -493,14 +544,20 @@ const ReportsContainer = () => {
       };
     }
     
-    // Enhance other columns
+    // Enhance التموضع column
     if (col.header === "التموضع") {
       return {
         ...col,
-        cellClassName: "font-semibold text-primary min-w-[120px]"
+        cellClassName: "font-semibold text-primary min-w-[120px]",
+        format: (value) => (
+          <span className="px-2 py-1 bg-primary/10 rounded-md">
+            {value || "غير محدد"}
+          </span>
+        )
       };
     }
     
+    // Enhance النموذج column
     if (col.header === "النموذج") {
       return {
         ...col,
@@ -512,7 +569,7 @@ const ReportsContainer = () => {
       ...col,
       cellClassName: col.cellClassName || "text-center"
     };
-  });
+  }).filter(col => col !== null); // Remove null columns (المدينة)
 
   if (isBookingsDateLoading || isCustomersLoading) {
     return (
@@ -524,151 +581,150 @@ const ReportsContainer = () => {
   }
 
   return (
-  <div className="p-4 sm:p-6 max-w-full mx-auto space-y-6 bg-background rounded-lg shadow-sm dark:shadow-gray-800">
-  <h2 className="text-2xl font-bold text-foreground mb-4">التقارير</h2>
+    <div className="p-4 sm:p-6 max-w-full mx-auto space-y-6 bg-background rounded-lg shadow-sm dark:shadow-gray-800">
+      <h2 className="text-2xl font-bold text-foreground mb-4">التقارير</h2>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-    {/* Customer Filter */}
-    <div>
-      <Label
-        htmlFor="customer"
-        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-      >
-        الزبون
-      </Label>
-      <select
-        id="customer"
-        value={selectedCustomerId}
-        onChange={handleCustomerChange}
-        disabled={isCustomersLoading || customersError}
-        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
-                 bg-white dark:bg-gray-800 
-                 text-gray-900 dark:text-gray-100
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                 disabled:bg-gray-100 dark:disabled:bg-gray-700 
-                 disabled:text-gray-500 dark:disabled:text-gray-400
-                 disabled:cursor-not-allowed
-                 transition-colors duration-200"
-      >
-        <option value="" className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
-          جميع الزبائن
-        </option>
-        
-        {customersError ? (
-          <option value="" disabled className="text-red-500 bg-white dark:bg-gray-800">
-            خطأ في تحميل الزبائن
-          </option>
-        ) : isCustomersLoading ? (
-          <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
-            جاري تحميل الزبائن...
-          </option>
-        ) : customersData && customersData.length > 0 ? (
-          customersData.map((customer) => (
-            <option
-              key={customer.id}
-              value={customer.id}
-              className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 
-                       hover:bg-blue-50 dark:hover:bg-gray-700"
-            >
-              {customer.company_name || customer.full_name || customer.email || `زبون #${customer.id}`}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        {/* Customer Filter */}
+        <div>
+          <Label
+            htmlFor="customer"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            الزبون
+          </Label>
+          <select
+            id="customer"
+            value={selectedCustomerId}
+            onChange={handleCustomerChange}
+            disabled={isCustomersLoading || customersError}
+            className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
+                     bg-white dark:bg-gray-800 
+                     text-gray-900 dark:text-gray-100
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                     disabled:bg-gray-100 dark:disabled:bg-gray-700 
+                     disabled:text-gray-500 dark:disabled:text-gray-400
+                     disabled:cursor-not-allowed
+                     transition-colors duration-200"
+          >
+            <option value="" className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
+              جميع الزبائن
             </option>
-          ))
-        ) : (
-          <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
-            لا يوجد زبائن
-          </option>
-        )}
-      </select>
-      
-      {customersError && (
-        <div className="mt-2 flex items-center text-red-500 dark:text-red-400 text-sm">
-          <AlertCircle className="w-4 h-4 mr-1" />
-          <span>خطأ في تحميل قائمة الزبائن</span>
+            
+            {customersError ? (
+              <option value="" disabled className="text-red-500 bg-white dark:bg-gray-800">
+                خطأ في تحميل الزبائن
+              </option>
+            ) : isCustomersLoading ? (
+              <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
+                جاري تحميل الزبائن...
+              </option>
+            ) : customersData && customersData.length > 0 ? (
+              customersData.map((customer) => (
+                <option
+                  key={customer.id}
+                  value={customer.id}
+                  className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 
+                           hover:bg-blue-50 dark:hover:bg-gray-700"
+                >
+                  {customer.company_name || customer.full_name || customer.email || `زبون #${customer.id}`}
+                </option>
+              ))
+            ) : (
+              <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
+                لا يوجد زبائن
+              </option>
+            )}
+          </select>
+          
+          {customersError && (
+            <div className="mt-2 flex items-center text-red-500 dark:text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4 mr-1" />
+              <span>خطأ في تحميل قائمة الزبائن</span>
+            </div>
+          )}
         </div>
-      )}
-    </div>
 
-    {/* Product Filter */}
-    <div>
-      <Label
-        htmlFor="product"
-        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-      >
-        المنتج
-      </Label>
-      <select
-        id="product"
-        value={productId}
-        onChange={(e) => setProductId(e.target.value)}
-        disabled={isBookingsDateLoading}
-        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
-                 bg-white dark:bg-gray-800 
-                 text-gray-900 dark:text-gray-100
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                 disabled:bg-gray-100 dark:disabled:bg-gray-700 
-                 disabled:text-gray-500 dark:disabled:text-gray-400
-                 disabled:cursor-not-allowed
-                 transition-colors duration-200"
-      >
-        <option value="" className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
-          اختر المنتج
-        </option>
-        {isBookingsDateLoading ? (
-          <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
-            يرجى الانتظار...
-          </option>
-        ) : (
-          productTypeOptions?.map((product) => (
-            <option
-              key={product.value}
-              value={product.value}
-              className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 
-                       hover:bg-blue-50 dark:hover:bg-gray-700"
-            >
-              {product.label}
+        {/* Product Filter */}
+        <div>
+          <Label
+            htmlFor="product"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            المنتج
+          </Label>
+          <select
+            id="product"
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            disabled={isBookingsDateLoading}
+            className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
+                     bg-white dark:bg-gray-800 
+                     text-gray-900 dark:text-gray-100
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                     disabled:bg-gray-100 dark:disabled:bg-gray-700 
+                     disabled:text-gray-500 dark:disabled:text-gray-400
+                     disabled:cursor-not-allowed
+                     transition-colors duration-200"
+          >
+            <option value="" className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
+              اختر المنتج
             </option>
-          ))
-        )}
-      </select>
-    </div>
+            {isBookingsDateLoading ? (
+              <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
+                يرجى الانتظار...
+              </option>
+            ) : (
+              productTypeOptions?.map((product) => (
+                <option
+                  key={product.value}
+                  value={product.value}
+                  className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 
+                           hover:bg-blue-50 dark:hover:bg-gray-700"
+                >
+                  {product.label}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
 
-    {/* From Date */}
-    <div>
-      <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        من
-      </Label>
-      <input
-        type="date"
-        value={fromDate || ''}
-        onChange={(e) => setFromDate(e.target.value)}
-        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
-                 bg-white dark:bg-gray-800 
-                 text-gray-900 dark:text-gray-100
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                 transition-colors duration-200
-                 [&::-webkit-calendar-picker-indicator]:invert-[0.6] dark:[&::-webkit-calendar-picker-indicator]:invert-[0.9]"
-      />
-    </div>
+        {/* From Date */}
+        <div>
+          <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            من
+          </Label>
+          <input
+            type="date"
+            value={fromDate || ''}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
+                     bg-white dark:bg-gray-800 
+                     text-gray-900 dark:text-gray-100
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                     transition-colors duration-200
+                     [&::-webkit-calendar-picker-indicator]:invert-[0.6] dark:[&::-webkit-calendar-picker-indicator]:invert-[0.9]"
+          />
+        </div>
 
-    {/* To Date */}
-    <div>
-      <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        إلى
-      </Label>
-      <input
-        type="date"
-        value={toDate || ''}
-        onChange={(e) => setToDate(e.target.value)}
-        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
-                 bg-white dark:bg-gray-800 
-                 text-gray-900 dark:text-gray-100
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                 transition-colors duration-200
-                 [&::-webkit-calendar-picker-indicator]:invert-[0.6] dark:[&::-webkit-calendar-picker-indicator]:invert-[0.9]"
-      />
-    </div>
-  </div>
-
+        {/* To Date */}
+        <div>
+          <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            إلى
+          </Label>
+          <input
+            type="date"
+            value={toDate || ''}
+            onChange={(e) => setToDate(e.target.value)}
+            className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
+                     bg-white dark:bg-gray-800 
+                     text-gray-900 dark:text-gray-100
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                     transition-colors duration-200
+                     [&::-webkit-calendar-picker-indicator]:invert-[0.6] dark:[&::-webkit-calendar-picker-indicator]:invert-[0.9]"
+          />
+        </div>
+      </div>
 
       <div className="flex gap-3 mb-6">
         {/* PDF Button */}
@@ -727,7 +783,7 @@ const ReportsContainer = () => {
                       تقرير الزبون: {selectedCustomer?.company_name || selectedCustomer?.full_name}
                     </h3>
                     <p className="text-sm text-blue-600 dark:text-blue-400">
-                      (المعلومات مجمعة حسب التموضع والنموذج والاتجاه)
+                      (المعلومات مجمعة حسب المنطقة والتموضع والنموذج والاتجاه)
                     </p>
                   </div>
                 </div>
@@ -772,7 +828,7 @@ const ReportsContainer = () => {
                 
                 <DynamicTable
                   data={customer?.roadSigns || []}
-                  columns={enhancedColumns}
+                  columns={updatedColumns}
                   isLoading={isBookingsDateFetching}
                   className="bg-transparent border-none shadow-none"
                   tableClassName="border border-border dark:border-gray-700 rounded-lg overflow-hidden"

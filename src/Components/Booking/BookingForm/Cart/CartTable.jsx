@@ -364,8 +364,8 @@ const groupKey = `${model}|${direction}|${region}|${city}`;
                 </div>
                 
                 {/* Action Buttons */}
-                <div className="flex flex-col gap-3">
-                  <Button
+                {/*
+                 <Button
                     type="button"
                     onClick={() => handleCalculateGroupPrice(group.cartIds)}
                     disabled={isLoadingCalculateReservation}
@@ -383,6 +383,12 @@ const groupKey = `${model}|${direction}|${region}|${city}`;
                       </>
                     )}
                   </Button>
+                */}
+
+
+
+                <div className="flex flex-col gap-3">
+                 
                   
                   <Button
                     type="button"

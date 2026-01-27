@@ -1,4 +1,3 @@
-// src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getMessaging } from "firebase/messaging";
 
@@ -12,27 +11,18 @@ const firebaseConfig = {
   measurementId: "G-3S5PDZEJV3"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize messaging only in browser
-const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+// Lazily initialize messaging only in the browser
+let messaging = null;
 
-// Add foreground message handler for testing
-if (messaging && typeof window !== 'undefined') {
-  import('firebase/messaging').then(({ onMessage }) => {
-    onMessage(messaging, (payload) => {
-      console.log('📩 Foreground message received:', payload);
-      
-      // Show notification in foreground
-      if (Notification.permission === 'granted') {
-        new Notification(payload.notification?.title || 'إشعار جديد', {
-          body: payload.notification?.body,
-          icon: '/vite.svg'
-        });
-      }
-    });
-  });
+export async function initializeMessaging() {
+  if (typeof window === "undefined") return null;
+  if (!messaging) {
+    messaging = getMessaging(app);
+  }
+  return messaging;
 }
 
+// Export current messaging reference (may be null on server)
 export { messaging };

@@ -34,7 +34,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
 
   useEffect(() => {
     const superAdminInfo = JSON.parse(localStorage.getItem("SuperAdminInfo")) || {};
-    console.log("🔐 Model Component - Current Token:", superAdminInfo?.token);
   }, []);
 
   const handleLocationSelect = (locationData) => {
@@ -122,7 +121,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
   };
 
   const onSubmitTransform = (values) => {
-    console.log("🔍 FORM VALUES FOR TRANSFORM:", values);
 
     const formData = new FormData();
 
@@ -141,18 +139,14 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
     // Check form values first
     if (values?.latitudeX !== undefined && values?.latitudeX !== null && values?.latitudeX !== '') {
       lat = parseFloat(values.latitudeX);
-      console.log("📍 Using latitudeX from form:", lat);
     } else if (selectedLocation?.lat) {
       lat = selectedLocation.lat;
-      console.log("📍 Using latitudeX from selectedLocation:", lat);
     }
 
     if (values?.longitudeY !== undefined && values?.longitudeY !== null && values?.longitudeY !== '') {
       lng = parseFloat(values.longitudeY);
-      console.log("📍 Using longitudeY from form:", lng);
     } else if (selectedLocation?.lng) {
       lng = selectedLocation.lng;
-      console.log("📍 Using longitudeY from selectedLocation:", lng);
     }
 
     console.log("🎯 Final coordinates:", { lat, lng });
@@ -165,11 +159,9 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
     if (values?.image) {
       if (faceNumber === 1) {
         formData.append('image', values?.image);
-        console.log("🖼️ Single face: image appended");
       } else if (faceNumber === 2) {
         formData.append('image', values?.image);
         formData.append('image2', values?.image);
-        console.log("🖼️ Two faces: image and image2 appended");
       }
     }
 
@@ -189,7 +181,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
       city_id: value,
       region_id: ""
     }));
-    console.log("City changed to:", value);
   };
 
   const handleRegionChange = (value) => {
@@ -197,7 +188,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
       ...prev,
       region_id: value
     }));
-    console.log("Region changed to:", value);
   };
 
   const handleTemplateChange = (value) => {
@@ -209,7 +199,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
       ...prev,
       template_id: value
     }));
-    console.log("Template changed to:", value, "Face number:", faces);
   };
 
   return (
@@ -244,7 +233,6 @@ export const DialogAddRoadSign = ({ show, handleClose }) => {
         }
 
         if (fieldName === "place" && selectedLocation) {
-          console.log("Place updated, clearing selected location");
           setSelectedLocation(null);
         }
       }}

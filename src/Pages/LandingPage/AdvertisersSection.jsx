@@ -12,7 +12,7 @@ const topAdvertisers = [
   { 
     name: "جيسي", 
     image: "/images/jessy.png",
-    description: "جيسي للملابس - لوحة إعلانية استراتيجية",
+    description: "جيسي  - لوحة إعلانية استراتيجية",
     location: "دمشق - المزة"
   },
   { 

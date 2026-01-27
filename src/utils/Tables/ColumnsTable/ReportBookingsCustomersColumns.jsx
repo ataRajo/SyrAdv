@@ -1,3 +1,4 @@
+// ReportBookingsCustomersColumns.js
 const ReportBookingsCustomersColumns = [
   {
     header: "تاريخ البدء",
@@ -15,9 +16,15 @@ const ReportBookingsCustomersColumns = [
     cellClassName: "text-center",
   },
   {
+    header: "المدينة",
+    accessor: "city",
+    cellClassName: "text-center font-semibold text-blue-600 dark:text-blue-400",
+  },
+ 
+  {
     header: "التموضع",
     accessor: "place",
-    cellClassName: "text-center",
+    cellClassName: "text-center font-semibold text-primary",
   },
   {
     header: "عدد الأوجه",
@@ -26,6 +33,11 @@ const ReportBookingsCustomersColumns = [
   },
   {
     header: "القياس",
+    accessor: "template.size",
+    cellClassName: "text-center",
+  },
+  {
+    header: "المساحة (م²)",
     accessor: "template.advertising_space",
     cellClassName: "text-center",
   }, 
@@ -34,11 +46,11 @@ const ReportBookingsCustomersColumns = [
     accessor: "total_advertising_space",
     cellClassName: "text-center",
   }, 
-    {
+  {
     header: "الاتجاه",
-    accessor: "direction", // This should work now
-    cellClassName: "text-center",
+    accessor: "direction",
+    cellClassName: "text-center min-w-[200px]",
   },
 ];
 
-export { ReportBookingsCustomersColumns }; 
+export { ReportBookingsCustomersColumns };

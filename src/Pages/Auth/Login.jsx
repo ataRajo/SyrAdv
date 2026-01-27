@@ -162,11 +162,6 @@ export function Login({ className, ...props }) {
           device_type: 'web'
         };
 
-        console.log("Sending login data:", { 
-          username: values.username, 
-          hasFcmToken: !!loginData.fcm_token,
-          tokenPreview: loginData.fcm_token?.substring(0, 20) + "..."
-        });
 
         const res = await triggerLogin(loginData).unwrap();
 

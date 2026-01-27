@@ -414,9 +414,6 @@ case "map":
       setSubmitting(true);
 
       // Debug: Log the original values
-      console.log("📝 Original form values:", values);
-      console.log("📍 LatitudeX:", values.latitudeX, "Type:", typeof values.latitudeX);
-      console.log("📍 LongitudeY:", values.longitudeY, "Type:", typeof values.longitudeY);
 
       const transformed = onSubmitTransform(values);
       const payload = transformed instanceof FormData ? transformed : { ...transformed };
@@ -430,11 +427,9 @@ case "map":
         
         // Ensure latitude and longitude are always included
         if (!payload.has('latitudeX')) {
-          console.log("⚠️ latitudeX not in FormData, adding default 0");
           payload.append('latitudeX', 0);
         }
         if (!payload.has('longitudeY')) {
-          console.log("⚠️ longitudeY not in FormData, adding default 0");
           payload.append('longitudeY', 0);
         }
       } else {
@@ -442,11 +437,9 @@ case "map":
         
         // Ensure latitude and longitude are always included in JSON
         if (payload.latitudeX === undefined || payload.latitudeX === null || payload.latitudeX === '') {
-          console.log("⚠️ latitudeX not in payload, adding default 0");
           payload.latitudeX = 0;
         }
         if (payload.longitudeY === undefined || payload.longitudeY === null || payload.longitudeY === '') {
-          console.log("⚠️ longitudeY not in payload, adding default 0");
           payload.longitudeY = 0;
         }
         
@@ -489,7 +482,6 @@ case "map":
         });
       }
 
-      console.log("✅ API response:", callResult);
       showToast("success", "تمت المهمة بنجاح");
       resetForm(); // ✅ Reset form only on successful submission
       handleClose();

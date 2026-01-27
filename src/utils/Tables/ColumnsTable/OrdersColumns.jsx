@@ -1,3 +1,6 @@
+import { Badge } from "@/components/ui/badge";
+import { Eye, DownloadCloud } from "lucide-react";
+
 export const OrdersColumns = [
   {
     header: "اسم الشركة",
@@ -114,3 +117,48 @@ export const OrdersColumns = [
     priority: 7,
   },
 ];
+
+// Add this function at the end
+export const createEnhancedOrdersColumns = (viewedOrderIds, handleViewDetails, handleDownloadIndividualPDF) => {
+  // Start with a copy of OrdersColumns
+  const baseColumns = [...OrdersColumns];
+
+  // Add the actions column
+  const actionsColumn = {
+    header: "مشاهدة الاجرائات",
+    accessor: "actions",
+    prefixIcon: "mdi:cog",
+    format: (_, row) => (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewDetails(row);
+          }}
+          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors relative group"
+          title="عرض التفاصيل"
+        >
+          <Eye className="w-4 h-4" />
+          {!viewedOrderIds.has(row.id) && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+          )}
+        </button>
+        
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDownloadIndividualPDF(row);
+          }}
+          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+          title="تحميل PDF فردي"
+        >
+          <DownloadCloud className="w-4 h-4" />
+        </button>
+      </div>
+    ),
+    className: "min-w-[120px]",
+    priority: 8,
+  };
+
+  return [...baseColumns, actionsColumn];
+};

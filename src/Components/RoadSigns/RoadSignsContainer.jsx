@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useGetRoadSignsModelQuery } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import LoadingGet from "../../utils/Loading/LoadingGet/LoadingGet";
 import SummariesCard from "../Summaries/SummariesCard";
@@ -6,7 +6,6 @@ import HeaderComponent from "../../utils/HeaderComponent";
 import { DialogAddRoadSign } from "../../utils/Dialogs/EditAddDialog/Add/DialogAddRoadSign";
 import { Permissions } from "../../Static/StaticData";
 import RoadSignsMapView from "./RoadSignsMapView";
-import TableRoadSigns from "./TableRoadSigns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MapIcon, SatelliteIcon, TableIcon, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,19 +16,14 @@ import {
   useAddNewCityMutation,
 } from "../../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi";
 
-import RoadSignsReport from "../../Components/Report/RoadSignsReport"; // Adjust the path as needed
+import RoadSignsReport from "../../Components/Report/RoadSignsReport";
 
 const RoadSignsContainer = () => {
   const { data, isFetching } = useGetRoadSignsModelQuery();
   const [open, setOpen] = useState(false);
   const [activeView, setActiveView] = useState("map");
-  
-  // State for تفاصيل اللوحات tab
   const [activeSection, setActiveSection] = useState("mapView");
-
-  // NEW STATE FOR REGION MODAL
   const [showRegionModal, setShowRegionModal] = useState(false);
-  // NEW STATE FOR CITY MODAL
   const [showCityModal, setShowCityModal] = useState(false);
 
   if (isFetching) {
@@ -47,7 +41,6 @@ const RoadSignsContainer = () => {
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-gray-500">اللوحات الطرقية</h1>
 
-          {/* Buttons in table view */}
           {activeView === "table" && activeSection === "mapView" && (
             <div className="flex items-center gap-3">
               <HeaderComponent
@@ -57,7 +50,6 @@ const RoadSignsContainer = () => {
                 permission={Permissions.CreateRoadSigns}
               />
 
-              {/* NEW BUTTON "إضافة منطقة" */}
               <Button
                 onClick={() => setShowRegionModal(true)}
                 className="bg-white text-gray-700 text-lg"
@@ -65,7 +57,6 @@ const RoadSignsContainer = () => {
                 + إضافة منطقة
               </Button>
 
-              {/* NEW BUTTON "إضافة مدينة" */}
               <Button
                 onClick={() => setShowCityModal(true)}
                 className="bg-white text-gray-700 text-lg"
@@ -76,7 +67,6 @@ const RoadSignsContainer = () => {
           )}
         </div>
 
-        {/* Main Tabs for switching between Map View and تفاصيل اللوحات */}
         <Tabs value={activeSection} onValueChange={setActiveSection} className="mt-4">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="mapView" className="flex items-center gap-2">
@@ -89,9 +79,7 @@ const RoadSignsContainer = () => {
             </TabsTrigger>
           </TabsList>
 
-          {/* Map View Section (Your existing tabs) */}
           <TabsContent value="mapView" className="mt-4">
-            {/* Tabs inside Map View */}
             <Tabs value={activeView} onValueChange={setActiveView}>
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="map" className="flex items-center gap-2">
@@ -132,7 +120,6 @@ const RoadSignsContainer = () => {
             </Tabs>
           </TabsContent>
 
-          {/* تفاصيل اللوحات Section - Shows the RoadSignsReport */}
           <TabsContent value="details" className="mt-4">
             <RoadSignsReport isWeeklyReport={false} />
           </TabsContent>
@@ -141,12 +128,10 @@ const RoadSignsContainer = () => {
 
       <DialogAddRoadSign show={open} handleClose={() => setOpen(false)} />
 
-      {/* NEW REGION MODAL */}
       {showRegionModal && (
         <AddRegionModal onClose={() => setShowRegionModal(false)} />
       )}
 
-      {/* NEW CITY MODAL */}
       {showCityModal && (
         <AddCityModal onClose={() => setShowCityModal(false)} />
       )}
@@ -164,7 +149,7 @@ const AddRegionModal = ({ onClose }) => {
   const [form, setForm] = useState({
     name: "",
     city_id: "",
-    is_active: "1", // Default to "1" (متوفر)
+    is_active: "1",
   });
 
   const handleSubmit = async () => {
@@ -178,22 +163,15 @@ const AddRegionModal = ({ onClose }) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      dir="rtl"
-    >
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
       <div className="bg-white p-6 rounded-lg w-[350px]">
         <h2 className="text-xl font-bold mb-4 text-gray-700">إضافة منطقة</h2>
-
-        {/* الاسم */}
         <label className="block mb-2 text-gray-700">الاسم :</label>
         <input
           className="w-full border p-2 rounded mb-3 text-gray-700"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
-
-        {/* المدينة */}
         <label className="block mb-2 text-gray-700">المدينة :</label>
         <select
           className="w-full border p-2 rounded mb-3 text-gray-700"
@@ -207,13 +185,10 @@ const AddRegionModal = ({ onClose }) => {
             </option>
           ))}
         </select>
-
-        {/* متوفر */}
         <label className="block mb-2 text-gray-700">متوفر :</label>
         <div className="w-full border p-2 rounded mb-4 text-gray-700 bg-gray-50">
           نعم
         </div>
-
         <div className="flex justify-between mt-4">
           <Button onClick={onClose} variant="secondary">
             إلغاء
@@ -232,7 +207,7 @@ const AddCityModal = ({ onClose }) => {
 
   const [form, setForm] = useState({
     name: "",
-    is_active: "1", // Default to "1" (متوفر)
+    is_active: "1",
   });
 
   const handleSubmit = async () => {
@@ -246,27 +221,19 @@ const AddCityModal = ({ onClose }) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      dir="rtl"
-    >
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
       <div className="bg-white p-6 rounded-lg w-[350px]">
         <h2 className="text-xl font-bold mb-4 text-gray-700">إضافة مدينة</h2>
-
-        {/* الاسم */}
         <label className="block mb-2 text-gray-700">الاسم :</label>
         <input
           className="w-full border p-2 rounded mb-3 text-gray-700"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
-
-        {/* متوفر */}
         <label className="block mb-2 text-gray-700">متوفر :</label>
         <div className="w-full border p-2 rounded mb-4 text-gray-700 bg-gray-50">
           نعم
         </div>
-
         <div className="flex justify-between mt-4">
           <Button onClick={onClose} variant="secondary">
             إلغاء

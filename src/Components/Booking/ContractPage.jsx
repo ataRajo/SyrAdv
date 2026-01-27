@@ -108,21 +108,16 @@ const ContractPage = () => {
     return `${periods} فترة إعلانية`;
   }, [calculateAdvertisingPeriods]);
 
-  // Debug logs
-  console.log("📊 CONTRACT CALCULATIONS:");
-  console.log("Original roadsigns count:", getBooking?.roadsigns?.length);
-  console.log("Grouped roadsigns count:", groupedRoadsigns.length);
-  console.log("Grouped roadsigns:", groupedRoadsigns);
 
   // Prepare contract details
   const contractDetails = {
-    firstParty: {
-      name: getBooking?.user?.full_name || "غير محدد",
-      company: getBooking?.user?.company?.name || "غير محدد",
-      commercialRegister: getBooking?.user?.company?.commercial_registration_number || "غير محدد",
-      address: getBooking?.user?.company?.address || "غير محدد",
-      phone: getBooking?.user?.phone_number || "غير محدد",
-      role: "مدير مبيعات",
+      firstParty: {
+    name: getBooking?.user?.full_name || "غير محدد", // ← سيتم إزالته
+    company: getBooking?.user?.company?.name || "",
+    commercialRegister: getBooking?.user?.company?.commercial_registration_number || "غير محدد",
+    address: getBooking?.user?.address || "غير محدد", 
+    phone: getBooking?.user?.phone_number || "غير محدد",
+    role: "مدير مبيعات", // ← يمكن إزالته أيضًا
     },
     secondParty: {
       name: getBooking?.customer?.full_name || "غير محدد",
@@ -142,6 +137,16 @@ const ContractPage = () => {
   const bookingType = getBooking?.type;
   const isTemporaryBooking = bookingType === 1;
   const bookingTypeText = BookingType[bookingType] || "غير محدد";
+
+  const formatDMY = (date) => {
+  if (!date) return "";
+  const d = new Date(date);
+  const s = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+  // LRM قبل وبعد السلسلة ليُثبّت الاتجاه
+  return `\u200E${s}\u200E`;
+};
+
+
 
 const generateWord = async () => {
   const element = contentRef.current;
@@ -213,7 +218,6 @@ const generateWord = async () => {
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 
-  console.log("Word document generated with embedded images!");
 };
 
   const generatePdf = () => {
@@ -304,13 +308,13 @@ const generateWord = async () => {
         <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
       </tr>
       
-      {getBooking?.printing?.price && getBooking?.total_printing_space && (
-        <tr>
-          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-            سعر الطباعة ({getBooking.printing.price}$ × {getBooking.total_printing_space} م²)
-          </th>
-          <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
-        </tr>
+    {getBooking?.printing_price && getBooking?.total_printing_space && (
+  <tr>
+    <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+      سعر الطباعة ({getBooking.printing_price}$ × {getBooking.total_printing_space} م²)
+    </th>
+    <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
+  </tr>
       )}
       
       {getBooking?.value && (
@@ -441,14 +445,13 @@ const generateWord = async () => {
       </div>
 
       <div style={styles.partiesInfo}>
-        <div style={styles.party}>
-          <strong style={styles.partyH2}>الطرف الأول:</strong>
-          {contractDetails.firstParty.company} المسجلة بالسجل التجاري رقم{" "}
-          {contractDetails.firstParty.commercialRegister} الممثلة بالسيد{" "}
-          {contractDetails.firstParty.name} بصفة {contractDetails.firstParty.role} و
-          المتخذ عنوانا - {contractDetails.firstParty.address} - هاتف :{" "}
-          {contractDetails.firstParty.phone}
-        </div>
+       <div style={styles.party}>
+  <strong style={styles.partyH2}>الطرف الأول:</strong>
+ الشركة السورية للاعلان المسجلة بالسجل التجاري رقم{" "}
+  20895
+  و المتخذة عنوانا - {contractDetails.firstParty.address} - هاتف :{" "}
+  {contractDetails.firstParty.phone}
+</div>
 
         <div style={styles.party}>
           <strong style={styles.partyH2}>الطرف الثاني:</strong> شركة{" "}
@@ -522,13 +525,21 @@ const generateWord = async () => {
       </div>
 
       {/* Dates section */}
-      <div style={{ margin: "20px 0" }}>
-        <strong>
-          - تبدأ الحملة الإعلانية بتاريخ{" "}
-          {new Date(getBooking?.start_date).toLocaleDateString("en-US")} و تنتهي بتاريخ{" "}
-          {new Date(getBooking?.end_date).toLocaleDateString("en-US")}
-        </strong>
-      </div>
+  <div style={{ margin: "20px 0" }}>
+  <strong>
+    - تبدأ الحملة الإعلانية بتاريخ{" "}
+    {new Date(getBooking?.start_date).getFullYear()}
+    {new Date(getBooking?.start_date).getMonth() + 1}-
+    {new Date(getBooking?.start_date).getDate()}-
+
+    {" "}و تنتهي بتاريخ{" "}
+    {new Date(getBooking?.end_date).getFullYear()}
+    {new Date(getBooking?.end_date).getMonth() + 1}-
+    {new Date(getBooking?.end_date).getDate()}-
+
+  </strong>
+</div>
+
 
       {/* Signatures */}
       <div style={styles.signatures}>
@@ -557,14 +568,17 @@ const generateWord = async () => {
       </div>
 
       <div style={styles.partiesInfo}>
-        <div style={styles.party}>
-          <strong style={styles.partyH2}>الطرف الأول:</strong>
-          {contractDetails.firstParty.company} المسجلة بالسجل التجاري رقم{" "}
-          {contractDetails.firstParty.commercialRegister} الممثلة بالسيد{" "}
-          {contractDetails.firstParty.name} بصفة {contractDetails.firstParty.role} و
-          المتخذ عنوانا - {contractDetails.firstParty.address} - هاتف :{" "}
-          {contractDetails.firstParty.phone}
-        </div>
+       <div style={styles.party}>
+  <strong style={styles.partyH2}>الطرف الأول:</strong>
+  الشركة السورية للاعلان المسجلة بالسجل التجاري رقم{" "}
+  20895 
+  و المتخذة عنوانا - 
+{/*
+  {contractDetails.firstParty.phone}
+- هاتف 
+*/ }
+  {contractDetails.firstParty.address} {" "}
+</div>
 
         <div style={styles.party}>
           <strong style={styles.partyH2}>الطرف الثاني:</strong> شركة{" "}
@@ -629,11 +643,19 @@ const generateWord = async () => {
 
       {/* Dates section */}
       <div style={{ margin: "20px 0" }}>
-        <strong>
-          - تبدأ الحملة الإعلانية بتاريخ{" "}
-          {new Date(getBooking?.start_date).toLocaleDateString("en-US")} و تنتهي بتاريخ{" "}
-          {new Date(getBooking?.end_date).toLocaleDateString("en-US")}
-        </strong>
+       <strong>
+  - تبدأ الحملة الإعلانية بتاريخ{" "}
+  {new Date(getBooking?.start_date).getFullYear()} 
+  -{new Date(getBooking?.start_date).getMonth() + 1}-
+  {new Date(getBooking?.start_date).getDate()}
+  
+  و  تنتهي بتاريخ   {" "} 
+
+  {new Date(getBooking?.end_date).getFullYear()}-
+  {new Date(getBooking?.end_date).getMonth() + 1}-
+  {new Date(getBooking?.end_date).getDate()}
+
+</strong>
       </div>
 
       {/* Signatures */}
@@ -642,7 +664,12 @@ const generateWord = async () => {
           <h3 style={styles.signaturePartyH3}>
             {contractDetails.firstParty.company}
           </h3>
-          <p>الفريق الأول: {contractDetails.firstParty.name}</p>
+                    <p>الشركة السورية للاعلان</p>
+
+
+
+          <p>الفريق الأول : قسم المبيعات </p>
+          
         </div>
         <div style={styles.signatureParty}>
           <h3 style={styles.signaturePartyH3}>

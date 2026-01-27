@@ -1,4 +1,4 @@
-import React, { memo, useContext, useEffect, useState } from "react";
+import React, { memo, useContext, useEffect, useState,useRef } from "react";
 import {
   Table,
   TableBody,
@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ShoppingCart, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShoppingCart, Trash2, ChevronDown, ChevronUp , FileText  } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/dialog";
 import { BookingContext } from "../../../Context/BookingContext";
 import useGetRoadSignsByFilter from "../../../hooks/useGetRoadSignsByFilter";
+import html2pdf from "html2pdf.js"; // أضف هذا السطر
+
 
 const BookingTable = () => {
   const { formik, addToCart, addedSignIds } = useContext(BookingContext);
@@ -29,7 +31,6 @@ const BookingTable = () => {
     cityId,
     regionId,
     roadSigns,
-    pagination,
     cities,
     isCitiesLoading,
     regions,
@@ -47,10 +48,6 @@ const BookingTable = () => {
     place,
     setPlace,
     handlePlaceChange,
-    page,
-    perPage,
-    handlePageChange,
-    handlePerPageChange,
   } = useGetRoadSignsByFilter();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -60,13 +57,7 @@ const BookingTable = () => {
   const [uniqueDirections, setUniqueDirections] = useState([]);
   const [uniquePlaces, setUniquePlaces] = useState([]);
 
-  // Debug log
-  React.useEffect(() => {
-    console.log("Pagination in component:", pagination);
-    console.log("Road signs count:", roadSigns?.length);
-    console.log("Current page:", page);
-    console.log("Items per page:", perPage);
-  }, [pagination, roadSigns, page, perPage]);
+  const pdfRef = useRef(null); // ← أضف هذا السطر
 
   useEffect(() => {
     setStartDate(formik.values.start_date);
@@ -109,10 +100,6 @@ const BookingTable = () => {
     const groups = {};
     
     roadSigns.forEach(sign => {
-      // Filter out booked signs (signs with no available panels)
-      const availablePanels = sign.panels_number - sign.total_panels_on_date;
-      if (availablePanels <= 0) return; // Skip booked signs
-      
       const key = `${sign.city?.name}_${sign.template?.model}_${sign.place}_${sign.region?.name}_${sign.directions || "غير_محدد"}`;
       
       if (!groups[key]) {
@@ -133,13 +120,64 @@ const BookingTable = () => {
       }
       
       groups[key].signs.push(sign);
+      
+      // حساب التوفر مع السماح بالحجز في نفس يوم انتهاء الحجز السابق
+      const bookings = sign.bookings || [];
+      let occupiedPanels = 0;
+      
+      bookings.forEach(booking => {
+        const bookingStart = new Date(booking.start_date);
+        const bookingEnd = new Date(booking.end_date);
+        const requestedStart = formik.values.start_date ? new Date(formik.values.start_date) : null;
+        
+        if (!requestedStart) {
+          // إذا لم يتم تحديد تاريخ بداية، تعتبر كل اللوحات متاحة
+          return;
+        }
+        
+        // التحقق مما إذا كان تاريخ البداية المطلوب يقع ضمن فترة حجز سابقة
+        // نسمح بالحجز إذا كان تاريخ البداية يساوي تاريخ نهاية الحجز السابق
+        const isStartDateDuringBooking = 
+          requestedStart >= bookingStart && 
+          requestedStart <= bookingEnd;
+        
+        if (isStartDateDuringBooking) {
+          // إذا كان تاريخ البداية يساوي تاريخ نهاية الحجز السابق تماماً، نعتبره متاحاً
+          if (requestedStart.getTime() === bookingEnd.getTime()) {
+            // متاح - يمكن الحجز في نفس يوم انتهاء الحجز السابق
+            return;
+          } else {
+            // غير متاح - التاريخ داخل فترة الحجز (وليس في اليوم الأخير)
+            occupiedPanels += (booking.number_of_reserved_panels || booking.booking_faces || 0);
+          }
+        }
+        
+        // أيضاً نتحقق من تواريخ النهاية
+        const requestedEnd = formik.values.end_date ? new Date(formik.values.end_date) : null;
+        if (requestedEnd) {
+          const isEndDateDuringBooking = 
+            requestedEnd >= bookingStart && 
+            requestedEnd <= bookingEnd;
+          
+          if (isEndDateDuringBooking) {
+            // إذا كان تاريخ النهاية يساوي تاريخ بداية الحجز السابق، يمكن قبوله
+            if (requestedEnd.getTime() === bookingStart.getTime()) {
+              return;
+            } else {
+              occupiedPanels += (booking.number_of_reserved_panels || booking.booking_faces || 0);
+            }
+          }
+        }
+      });
+      
+      const availablePanels = Math.max(0, sign.panels_number - occupiedPanels);
       groups[key].totalAvailable += availablePanels;
       groups[key].totalPanels += sign.panels_number;
       groups[key].similarSignsCount += 1;
     });
 
     return Object.values(groups);
-  }, [roadSigns]);
+  }, [roadSigns, formik.values.start_date, formik.values.end_date]);
 
   const toggleGroup = (groupId) => {
     const newExpanded = new Set(expandedGroups);
@@ -160,12 +198,53 @@ const BookingTable = () => {
   const handleAddToCart = () => {
     if (!selectedGroup) return;
 
+    // فلترة اللوحات غير المضافة سابقاً
     const availableSigns = selectedGroup.signs.filter(sign => 
       !addedSignIds?.has?.(sign.id)
     );
 
-    if (selectedQuantity > availableSigns.length) {
-      alert(`عذراً، لا يتوفر ${selectedQuantity} لوحات. العدد المتاح هو ${availableSigns.length}`);
+    // حساب العدد المتاح فعلياً مع مراعاة الحجوزات السابقة
+    let actuallyAvailable = 0;
+    const signsWithAvailability = [];
+    
+    availableSigns.forEach(sign => {
+      const bookings = sign.bookings || [];
+      let occupiedPanels = 0;
+      
+      if (formik.values.start_date) {
+        const requestedStart = new Date(formik.values.start_date);
+        
+        bookings.forEach(booking => {
+          const bookingStart = new Date(booking.start_date);
+          const bookingEnd = new Date(booking.end_date);
+          
+          const isStartDateDuringBooking = 
+            requestedStart >= bookingStart && 
+            requestedStart <= bookingEnd;
+          
+          if (isStartDateDuringBooking) {
+            // إذا كان تاريخ البداية يساوي تاريخ نهاية الحجز السابق تماماً، نعتبره متاحاً
+            if (requestedStart.getTime() !== bookingEnd.getTime()) {
+              // غير متاح فقط إذا لم يكن في نفس يوم النهاية
+              occupiedPanels += (booking.number_of_reserved_panels || booking.booking_faces || 0);
+            }
+          }
+        });
+      }
+      
+      const signAvailability = Math.max(0, sign.panels_number - occupiedPanels);
+      
+      if (signAvailability > 0) {
+        actuallyAvailable += signAvailability;
+        signsWithAvailability.push({
+          sign,
+          availability: signAvailability
+        });
+      }
+    });
+
+    if (selectedQuantity > actuallyAvailable) {
+      alert(`عذراً، لا يتوفر ${selectedQuantity} لوحات. العدد المتاح الفعلي هو ${actuallyAvailable}`);
       return;
     }
 
@@ -174,8 +253,20 @@ const BookingTable = () => {
       return;
     }
 
-    const signsToAdd = availableSigns.slice(0, selectedQuantity);
+    // إضافة اللوحات مع مراعاة التوافر الفعلي
+    let remainingQuantity = selectedQuantity;
+    const signsToAdd = [];
     
+    for (const item of signsWithAvailability) {
+      if (remainingQuantity <= 0) break;
+      
+      const addCount = Math.min(item.availability, remainingQuantity);
+      for (let i = 0; i < addCount; i++) {
+        signsToAdd.push(item.sign);
+      }
+      remainingQuantity -= addCount;
+    }
+
     signsToAdd.forEach((sign, index) => {
       const uniqueBooking = {
         ...sign,
@@ -232,63 +323,452 @@ const BookingTable = () => {
     return filters.join("، ");
   };
 
-  // Handle per page change
-  const handlePerPageSelectChange = (e) => {
-    const value = e.target.value;
-    handlePerPageChange(value);
-  };
 
-  // Handle page change via select
-  const handlePageSelectChange = (e) => {
-    const value = parseInt(e.target.value);
-    if (!isNaN(value) && value >= 1) {
-      handlePageChange(value);
+const generateFilteredPDF = () => {
+  if (!roadSigns || roadSigns.length === 0) {
+    alert("لا توجد بيانات لطباعتها بعد تطبيق الفلاتر الحالية");
+    return;
+  }
+
+  // إنشاء HTML بسيط
+  const createHTMLReport = () => {
+    let html = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تقرير اللوحات الطرقية</title>
+        <style>
+          @media print {
+            @page {
+              size: A4;
+              margin: 15mm;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+            }
+            .no-print {
+              display: none !important;
+            }
+          }
+          
+          body {
+            font-family: 'Arial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            direction: rtl;
+            text-align: right;
+            margin: 0;
+            padding: 20px;
+            background-color: #fff;
+            color: #333;
+            line-height: 1.6;
+          }
+          
+          .print-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #2c3e50;
+          }
+          
+          .print-header h1 {
+            color: #2c3e50;
+            margin: 0 0 10px 0;
+            font-size: 28px;
+          }
+          
+          .print-header .date {
+            color: #7f8c8d;
+            font-size: 16px;
+          }
+          
+          .filters-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border: 1px solid #dee2e6;
+          }
+          
+          .filters-section h3 {
+            color: #2c3e50;
+            margin-top: 0;
+            margin-bottom: 10px;
+          }
+          
+          .filter-item {
+            display: inline-block;
+            background-color: #e9ecef;
+            padding: 5px 12px;
+            margin: 0 5px 5px 0;
+            border-radius: 4px;
+            font-size: 14px;
+          }
+          
+          .summary {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border: 1px solid #bbdefb;
+          }
+          
+          .summary h3 {
+            color: #1565c0;
+            margin-top: 0;
+          }
+          
+          .summary-item {
+            display: inline-block;
+            margin: 0 15px 5px 0;
+            font-weight: bold;
+          }
+          
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+          }
+          
+          table th {
+            background-color: #2c3e50;
+            color: white;
+            padding: 12px 8px;
+            text-align: center;
+            border: 1px solid #34495e;
+            font-weight: bold;
+          }
+          
+          table td {
+            padding: 10px 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+            vertical-align: middle;
+          }
+          
+          table tr:nth-child(even) {
+            background-color: #f9f9f9;
+          }
+          
+          table tr:hover {
+            background-color: #f5f5f5;
+          }
+          
+          .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: flex;
+            gap: 15px;
+            border: 1px solid #ddd;
+          }
+          
+          .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            color: white;
+          }
+          
+          .btn-print {
+            background-color: #3498db;
+          }
+          
+          .btn-print:hover {
+            background-color: #2980b9;
+          }
+          
+          .btn-download {
+            background-color: #27ae60;
+          }
+          
+          .btn-download:hover {
+            background-color: #219653;
+          }
+          
+          .btn-close {
+            background-color: #e74c3c;
+          }
+          
+          .btn-close:hover {
+            background-color: #c0392b;
+          }
+          
+          .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #7f8c8d;
+            font-size: 14px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-header">
+          <h1>📋 تقرير اللوحات الطرقية</h1>
+          <div class="date">
+            تم إنشاؤه في: ${new Date().toLocaleDateString('ar-SA')} الساعة ${new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}
+          </div>
+        </div>
+        
+        <div class="filters-section">
+          <h3>🔍 الفلاتر المطبقة:</h3>
+    `;
+
+    // معلومات الفلاتر
+    const filters = [];
+    if (cityId) {
+      const cityName = cities?.find(c => c.id === parseInt(cityId))?.name || cityId;
+      filters.push(`<span class="filter-item">المدينة: ${cityName}</span>`);
     }
-  };
+    if (regionId) {
+      const regionName = regions?.find(r => r.id === parseInt(regionId))?.name || regionId;
+      filters.push(`<span class="filter-item">المنطقة: ${regionName}</span>`);
+    }
+    if (model) filters.push(`<span class="filter-item">النموذج: ${model}</span>`);
+    if (direction) filters.push(`<span class="filter-item">الاتجاه: ${direction}</span>`);
+    if (place) filters.push(`<span class="filter-item">مكان التموضع: ${place}</span>`);
+    if (formik.values.start_date) filters.push(`<span class="filter-item">تاريخ البداية: ${formik.values.start_date}</span>`);
+    if (formik.values.end_date) filters.push(`<span class="filter-item">تاريخ النهاية: ${formik.values.end_date}</span>`);
 
-  // Generate page options for select - always generate at least current page
-  const generatePageOptions = () => {
-    const totalPages = pagination?.last_page || 1;
-    const currentPage = pagination?.current_page || 1;
+    html += filters.length > 0 ? filters.join('') : '<span class="filter-item">جميع اللوحات</span>';
     
-    const pages = [];
-    
-    // If we don't know total pages, just show current and next
-    if (totalPages === 1) {
-      pages.push(1);
-    } else {
-      // Show pages from 1 to totalPages
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
+    html += `
+        </div>
+        
+        <div class="summary">
+          <h3>📊 إحصائيات التقرير:</h3>
+          <div class="summary-item">• عدد اللوحات: ${roadSigns.length} لوحة</div>
+          <div class="summary-item">• عدد المجموعات: ${groupedRoadSigns.length} مجموعة</div>
+          <div class="summary-item">• اللوحات المتاحة: ${groupedRoadSigns.reduce((sum, group) => sum + group.totalAvailable, 0)}</div>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>المدينة</th>
+              <th>النموذج</th>
+              <th>النوع</th>
+              <th>عدد الوجوه</th>
+              <th>الأمتار</th>
+              <th>القياس</th>
+              <th>كود اللوحة</th>
+              <th>المنطقة</th>
+              <th>مكان التموضع</th>
+              <th>الاتجاه</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    // إضافة البيانات
+    let counter = 1;
+    groupedRoadSigns.forEach((group) => {
+      // صف المجموعة
+      html += `
+        <tr style="background-color: #e8f4fd;">
+          <td colspan="12" style="text-align: right; padding: 15px; font-weight: bold; color: #2c3e50;">
+            🏷️ المجموعة: ${group.similarSignsCount} لوحة متماثلة | متاحة: ${group.totalAvailable} | إجمالي: ${group.totalPanels}
+          </td>
+        </tr>
+      `;
+
+      // اللوحات في المجموعة
+      group.signs.forEach((sign) => {
+        const bookingDates = getBookingDates(sign);
+        const isAdded = isSignAdded(sign.id);
+        const status = isAdded ? '🟢 مضاف' : (sign.panels_number === 0 ? '🔴 غير متاح' : '🟡 متاح');
+        
+        html += `
+          <tr>
+            <td>${counter++}</td>
+            <td>${sign.city?.name || "غير متوفر"}</td>
+            <td><strong>${sign.template?.model || "غير متوفر"}</strong></td>
+            <td>${sign.template?.type || "غير محدد"}</td>
+            <td>${sign.panels_number || 0}</td>
+            <td>${sign.template?.printing_space || 0}</td>
+            <td>${sign.template?.size || "غير متوفر"}</td>
+            <td style="font-family: monospace; font-weight: bold;">${sign.roadsign_code || "غير متوفر"}</td>
+            <td>${sign.region?.name || "غير متوفر"}</td>
+            <td>${sign.place || "غير متوفر"}</td>
+            <td>${sign.directions || "غير متوفر"}</td>
+            <td style="font-weight: bold; color: ${
+              isAdded ? '#27ae60' : (sign.panels_number === 0 ? '#e74c3c' : '#f39c12')
+            };">${status}
+              ${bookingDates ? `<br><small style="color: #7f8c8d; font-size: 11px;">محجوز حتى: ${new Date(bookingDates.end).toLocaleDateString('ar-EG')}</small>` : ''}
+            </td>
+          </tr>
+        `;
+      });
+    });
+
+    html += `
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>تم إنشاء هذا التقرير تلقائياً من نظام إدارة اللوحات الإعلانية</p>
+          <p>© ${new Date().getFullYear()} - جميع الحقوق محفوظة</p>
+        </div>
+        
+        <div class="controls no-print">
+          <button class="btn btn-print" onclick="window.print()">
+            🖨️ طباعة
+          </button>
+          <a href="#" class="btn btn-download" onclick="downloadAsPDF()" id="downloadBtn">
+            📥 تنزيل PDF
+          </a>
+          <button class="btn btn-close" onclick="window.close()">
+            ❌ إغلاق
+          </button>
+        </div>
+        
+  <script>
+  // دالة للتنزيل كـ PDF - نسخة مبسطة
+  async function downloadAsPDF() {
+    try {
+      const downloadBtn = document.getElementById('downloadBtn');
+      const originalText = downloadBtn.innerHTML;
+      downloadBtn.innerHTML = '⏳ جاري التحميل...';
+      downloadBtn.disabled = true;
+      
+      // إنشاء نسخة من الـ body وإخفاء الأزرار
+      const bodyClone = document.body.cloneNode(true);
+      const controls = bodyClone.querySelector('.controls');
+      if (controls) {
+        controls.style.display = 'none';
+        controls.classList.add('hide-for-pdf');
+      }
+      
+      // إضافة كلاس لإخفاء الأزرار في النسخة المستنسخة
+      const buttons = bodyClone.querySelectorAll('.btn, .controls, .no-print');
+      buttons.forEach(btn => {
+        btn.style.display = 'none';
+        btn.classList.add('hide-for-pdf');
+      });
+      
+      // إنشاء عنصر مؤقت
+      const tempDiv = document.createElement('div');
+      tempDiv.style.position = 'fixed';
+      tempDiv.style.left = '-9999px';
+      tempDiv.style.top = '0';
+      tempDiv.appendChild(bodyClone);
+      document.body.appendChild(tempDiv);
+      
+      const options = {
+        margin: [10, 10, 10, 10],
+        filename: 'تقرير_اللوحات_' + new Date().toISOString().slice(0,10) + '.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          dpi: 192,
+          letterRendering: true,
+          backgroundColor: '#ffffff',
+          ignoreElements: function(element) {
+            // تجاهل أي عنصر به كلاس hide-for-pdf
+            return element.classList && element.classList.contains('hide-for-pdf');
+          }
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+          compress: true
+        }
+      };
+      
+      // إنشاء PDF
+      await html2pdf().set(options).from(bodyClone).save();
+      
+      // تنظيف العنصر المؤقت
+      document.body.removeChild(tempDiv);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('حدث خطأ أثناء إنشاء PDF. يمكنك استخدام خيار الطباعة ثم اختيار "Save as PDF" من طابعتك.');
+    } finally {
+      const downloadBtn = document.getElementById('downloadBtn');
+      if (downloadBtn) {
+        downloadBtn.innerHTML = originalText;
+        downloadBtn.disabled = false;
       }
     }
+  }
+  
+  // تحميل مكتبة html2pdf
+  if (typeof html2pdf === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    document.head.appendChild(script);
+  }
+</script>
+      </body>
+      </html>
+    `;
     
-    return pages;
+    return html;
   };
 
-  // Calculate total pages based on data
-  const calculateTotalPages = () => {
-    if (pagination?.last_page) {
-      return pagination.last_page;
-    }
-    
-    // If no pagination data, calculate based on items per page
-    const totalItems = pagination?.total || roadSigns?.length || 0;
-    if (totalItems > 0 && perPage > 0) {
-      return Math.ceil(totalItems / perPage);
-    }
-    
-    return 1;
-  };
+  // فتح في نافذة جديدة مع إمكانية التنزيل
+  const htmlContent = createHTMLReport();
+  const printWindow = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes');
+  
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  
+  // تركيز النافذة
+  printWindow.focus();
+};
 
-  const totalPages = calculateTotalPages();
-  const currentPage = pagination?.current_page || page || 1;
+  const getBookingDates = (sign) => {
+    if (!sign.bookings || sign.bookings.length === 0) return null;
+    
+    const lastBooking = sign.bookings[sign.bookings.length - 1];
+    return {
+      start: lastBooking.start_date,
+      end: lastBooking.end_date
+    };
+  };
 
   return (
     <div className="mt-8">
       <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
         اللوحات الطرقية
       </h2>
+   <Button
+        type="button"
+        variant="outline"
+        onClick={generateFilteredPDF}
+        disabled={!roadSigns || roadSigns.length === 0}
+        className="flex items-center gap-2"
+      >
+        <FileText className="h-4 w-4" />
+        طباعة PDF ({roadSigns?.length || 0})
+      </Button>
+
+
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1">
@@ -355,9 +835,9 @@ const BookingTable = () => {
           >
             <option value="">اختر القياس</option>
             {isGetRoadSignsModel && <option>جاري تحميل القياس ...</option>}
-            {getRoadSignsModel?.map((modelItem) => (
-              <option key={modelItem.model} value={modelItem.model}>
-                {`${modelItem.model} (${modelItem.count} نماذج متوفرة من هذا القياس)`}
+            {getRoadSignsModel?.map((model) => (
+              <option key={model.model} value={model.model}>
+                {`${model.model} (${model.count} نماذج متوفرة من هذا القياس)`}
               </option>
             ))}
           </select>
@@ -413,85 +893,6 @@ const BookingTable = () => {
         </div>
       </div>
 
-      {/* Per Page and Pagination Controls - ALWAYS SHOW THIS SECTION */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="per-page" className="text-sm text-gray-600 dark:text-gray-400">
-            عرض:
-          </Label>
-          <select
-            id="per-page"
-            value={perPage}
-            onChange={handlePerPageSelectChange}
-            className="p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          >
-            <option value="10">10</option>
-            <option value="25">25</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="200">200</option>
-          </select>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            لكل صفحة
-          </span>
-        </div>
-        
-        {/* Show result count if we have data */}
-        {(roadSigns && roadSigns.length > 0) && (
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            عرض <span className="font-semibold">
-              {pagination?.from || 1}-{pagination?.to || roadSigns.length}
-            </span> من <span className="font-semibold">
-              {pagination?.total || roadSigns.length}
-            </span> نتيجة
-          </div>
-        )}
-        
-        {/* ALWAYS SHOW PAGE NAVIGATION */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="flex items-center gap-1">
-            <Label htmlFor="page-select" className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              الصفحة:
-            </Label>
-            <select
-              id="page-select"
-              value={currentPage}
-              onChange={handlePageSelectChange}
-              className="p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-20"
-            >
-              {generatePageOptions().map((pageNum) => (
-                <option key={pageNum} value={pageNum}>
-                  {pageNum}
-                </option>
-              ))}
-            </select>
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              من {totalPages}
-            </span>
-          </div>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage >= totalPages}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
       {(direction || place) && (
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex items-center justify-between">
@@ -516,7 +917,7 @@ const BookingTable = () => {
         </div>
       )}
 
-      <div className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-4">
+      <div ref={pdfRef} className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-100 dark:bg-gray-800">
@@ -564,7 +965,19 @@ const BookingTable = () => {
                   >
                     <TableCell className="font-semibold">
                       <div className="flex items-center justify-between">
-                        <span>{group.similarSignsCount} لوحة متماثلة</span>
+                        <div className="flex flex-col">
+                          <span>{group.similarSignsCount} لوحة متماثلة</span>
+                          {group.totalAvailable > 0 && (
+                            <span className="text-sm text-green-600 dark:text-green-400">
+                              متاح: {group.totalAvailable} لوحة
+                            </span>
+                          )}
+                          {group.totalAvailable === 0 && (
+                            <span className="text-sm text-red-600 dark:text-red-400">
+                              غير متاح
+                            </span>
+                          )}
+                        </div>
                         {expandedGroups.has(group.id) ? (
                           <ChevronUp className="h-4 w-4" />
                         ) : (
@@ -627,14 +1040,17 @@ const BookingTable = () => {
                           e.stopPropagation();
                           handleShowDialog(group);
                         }}
+                        disabled={group.totalAvailable === 0}
                         className={`flex items-center gap-2 ${
                           isGroupAdded(group.id)
                             ? "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300"
+                            : group.totalAvailable === 0
+                            ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                             : "bg-white dark:bg-gray-700"
                         }`}
                       >
                         <ShoppingCart className="h-4 w-4" />
-                        <span>إضافة</span>
+                        <span>{group.totalAvailable === 0 ? "غير متاح" : "إضافة"}</span>
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -643,6 +1059,8 @@ const BookingTable = () => {
                     <>
                       {group.signs.map((sign, index) => {
                         const isAdded = isSignAdded(sign.id);
+                        const bookingDates = getBookingDates(sign);
+                        
                         return (
                           <TableRow
                             key={sign.id}
@@ -651,7 +1069,14 @@ const BookingTable = () => {
                             }`}
                           >
                             <TableCell className="text-center text-sm text-gray-500">
-                              #{index + 1}
+                              <div className="flex flex-col items-center">
+                                <span>#{index + 1}</span>
+                                {bookingDates && (
+                                  <span className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                    محجوز حتى: {new Date(bookingDates.end).toLocaleDateString('ar-EG')}
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="truncate max-w-[100px] sm:max-w-[120px] text-sm">
                               {sign.city?.name || "غير متوفر"}
@@ -690,9 +1115,11 @@ const BookingTable = () => {
                               <span className={`px-2 py-1 rounded ${
                                 isAdded
                                   ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                                  : sign.panels_number === 0
+                                  ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
                                   : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
                               }`}>
-                                {isAdded ? "مضاف" : "غير مضاف"}
+                                {isAdded ? "مضاف" : sign.panels_number === 0 ? "غير متاح" : "غير مضاف"}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -706,58 +1133,6 @@ const BookingTable = () => {
           </TableBody>
         </Table>
       </div>
-
-      {/* Show pagination at bottom too */}
-      {roadSigns && roadSigns.length > 0 && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            الصفحة {currentPage} من {totalPages}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            
-            <div className="flex items-center gap-1">
-              <Label htmlFor="page-select-bottom" className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                الصفحة:
-              </Label>
-              <select
-                id="page-select-bottom"
-                value={currentPage}
-                onChange={handlePageSelectChange}
-                className="p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-20"
-              >
-                {generatePageOptions().map((pageNum) => (
-                  <option key={pageNum} value={pageNum}>
-                    {pageNum}
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                من {totalPages}
-              </span>
-            </div>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent dir="rtl" className="sm:max-w-[500px] dark:bg-gray-800">
@@ -802,17 +1177,22 @@ const BookingTable = () => {
                 id="quantity"
                 type="number"
                 min="1"
-                max={selectedGroup?.totalAvailable}
+                max={selectedGroup?.totalAvailable || 0}
                 value={selectedQuantity}
                 onChange={(e) => setSelectedQuantity(parseInt(e.target.value) || 1)}
                 className="w-full text-right"
               />
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                العدد المتاح: <strong>{selectedGroup?.totalAvailable}</strong> لوحة
+                العدد المتاح: <strong>{selectedGroup?.totalAvailable || 0}</strong> لوحة
               </p>
-              {selectedQuantity > selectedGroup?.totalAvailable && (
+              {selectedQuantity > (selectedGroup?.totalAvailable || 0) && (
                 <p className="text-sm text-red-600 dark:text-red-400 mt-1">
                   ⚠️ العدد المطلوب يتجاوز العدد المتاح
+                </p>
+              )}
+              {selectedGroup?.totalAvailable === 0 && (
+                <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                  ⚠️ لا توجد لوحات متاحة في هذه الفترة
                 </p>
               )}
             </div>
@@ -821,7 +1201,7 @@ const BookingTable = () => {
             <Button
               type="button"
               onClick={handleAddToCart}
-              disabled={selectedQuantity > selectedGroup?.totalAvailable || selectedQuantity < 1}
+              disabled={selectedQuantity > (selectedGroup?.totalAvailable || 0) || selectedQuantity < 1 || selectedGroup?.totalAvailable === 0}
             >
               إضافة إلى السلة ({selectedQuantity} لوحة)
             </Button>

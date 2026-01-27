@@ -1,6 +1,4 @@
-// public/firebase-messaging-sw.js
-
-// Add this at the VERY TOP
+// Service Worker for Firebase Messaging (compat)
 console.log('🔥 Service Worker Loading...');
 
 self.addEventListener('install', function(event) {
@@ -26,41 +24,44 @@ const firebaseConfig = {
   measurementId: "G-3S5PDZEJV3"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// ✅ ADD THIS - Handle ALL messages
 messaging.onBackgroundMessage(function(payload) {
   console.log('📩 [SW] Received message:', payload);
-  
-  // 🚨 CRITICAL: Use payload.data if payload.notification is empty
+
   const notificationTitle = payload.notification?.title || payload.data?.title || 'إشعار جديد';
   const notificationBody = payload.notification?.body || payload.data?.body || 'لديك إشعار جديد';
-  
-  console.log('Creating notification:', notificationTitle, notificationBody);
-  
+
+  // Build customers list dynamically
+  const customers = Object.keys(payload.data || {})
+    .filter(key => key.startsWith('customer_'))
+    .map(key => payload.data[key]);
+
+  const customersList = customers.length
+    ? '\nالعملاء:\n- ' + customers.join('\n- ')
+    : '';
+
+  // If you prefer raw JSON of the whole data object, use:
+  // const dataString = payload.data ? `\n${JSON.stringify(payload.data, null, 2)}` : '';
+
   const notificationOptions = {
-    body: notificationBody,
-    icon: '/vite.svg', // MUST exist in public folder
-    badge: '/vite.svg',
+    body: notificationBody + customersList, // or notificationBody + dataString
+    icon: '/adv_syrian.png',
+     badge: '/adv_syrian.png',
     tag: 'notification-' + Date.now(),
-    requireInteraction: true, // Makes notification stay until clicked
+    requireInteraction: true,
     data: payload.data || {}
   };
 
-  // Show notification
-  return self.registration.showNotification(notificationTitle, notificationOptions)
-    .then(() => console.log('✅ Notification shown successfully'))
-    .catch(err => console.error('❌ Failed to show notification:', err));
+  self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// Handle notification click
+// Handle notification click and pass data to the page
 self.addEventListener('notificationclick', function(event) {
-  console.log('Notification clicked:', event.notification.title);
+  console.log("Clicked payload:", event.notification.data);
   event.notification.close();
-  
-  event.waitUntil(
-    clients.openWindow('/')
-  );
+
+  const url = '/?payload=' + encodeURIComponent(JSON.stringify(event.notification.data || {}));
+  event.waitUntil(clients.openWindow(url));
 });

@@ -450,27 +450,42 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
     URL.revokeObjectURL(link.href);
   };
 
-  const printCustomerSummaryReport = () => {
-    if (!customer) return;
-    
-    const customerData = customer;
-    const currentDate = new Date().toLocaleDateString('ar-EG', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long'
-    });
+const printCustomerSummaryReport = () => {
+  if (!customer) return;
+  
+  const customerData = customer;
+  const currentDate = new Date().toLocaleDateString('ar-EG', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  });
 
-    const formatCurrency = (val) => {
-      if (val == null || isNaN(Number(val))) return "0.00 $";
-      return Number(val).toFixed(2) + " $";
-    };
+  const formatCurrency = (val) => {
+    if (val == null || isNaN(Number(val))) return "0.00 $";
+    return Number(val).toFixed(2) + " $";
+  };
 
-    // Calculate totals
-    const totalPayments = customerData?.payments?.length || 0;
-    const totalPaidAmount = customerData?.payments?.reduce((sum, p) => sum + (parseFloat(p.paid) || 0), 0) || 0;
+  // Calculate totals
+  const totalPayments = customerData?.payments?.length || 0;
+  const totalPaidAmount = customerData?.payments?.reduce((sum, p) => sum + (parseFloat(p.paid) || 0), 0) || 0;
+  
+  // Calculate total bookings amount
+  const totalBookingAmount = customerData?.bookings?.reduce((sum, booking) => 
+    sum + (parseFloat(booking.total_price) || 0), 0) || 0;
+  
+  // Get the remaining balance (this should come from your API)
+  const remainingBalance = customerData?.remaining || 0;
 
-    const htmlContent = `
+  // Calculate total advertising space
+  const totalAdvertisingSpace = customerData?.bookings?.reduce((sum, booking) => 
+    sum + (parseFloat(booking.total_advertising_space) || 0), 0) || 0;
+  
+  // Calculate total printing space
+  const totalPrintingSpace = customerData?.bookings?.reduce((sum, booking) => 
+    sum + (parseFloat(booking.total_printing_space) || 0), 0) || 0;
+
+  const htmlContent = `
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -566,6 +581,58 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
       text-align: left;
     }
     
+    .financial-summary {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      padding: 25px;
+      border-radius: 12px;
+      border: 2px solid #0ea5e9;
+      margin: 30px 0;
+    }
+    
+    .financial-summary h3 {
+      font-size: 24px;
+      color: #0369a1;
+      margin-bottom: 20px;
+      text-align: center;
+      border-bottom: 2px solid #0ea5e9;
+      padding-bottom: 10px;
+    }
+    
+    .financial-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    
+    .financial-item {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      border: 1px solid #e5e7eb;
+    }
+    
+    .financial-value {
+      font-size: 28px;
+      font-weight: bold;
+      color: #1e40af;
+      margin: 10px 0;
+    }
+    
+    .financial-label {
+      font-size: 16px;
+      color: #4b5563;
+      font-weight: 600;
+    }
+    
+    .remaining-amount {
+      font-size: 28px;
+      font-weight: bold;
+      color: ${remainingBalance > 0 ? '#dc2626' : '#16a34a'};
+      margin: 10px 0;
+    }
+    
     .section-title {
       font-size: 26px;
       color: #1e40af;
@@ -609,33 +676,6 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
     
     table tr:nth-child(even) {
       background-color: #f8fafc;
-    }
-    
-    .status-badge {
-      padding: 8px 20px;
-      border-radius: 25px;
-      font-weight: bold;
-      font-size: 14px;
-      display: inline-block;
-      min-width: 100px;
-    }
-    
-    .status-waiting {
-      background-color: #fef3c7;
-      color: #92400e;
-      border: 2px solid #fbbf24;
-    }
-    
-    .status-accepted {
-      background-color: #d1fae5;
-      color: #065f46;
-      border: 2px solid #10b981;
-    }
-    
-    .status-rejected {
-      background-color: #fee2e2;
-      color: #991b1b;
-      border: 2px solid #ef4444;
     }
     
     .amount-cell {
@@ -785,6 +825,27 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
       </div>
     </div>
     
+    <!-- Financial Summary Section -->
+    <div class="financial-summary">
+      <h3>📊 الملخص المالي</h3>
+      <div class="financial-grid">
+        <div class="financial-item">
+          <div class="financial-label">إجمالي الحجوزات</div>
+          <div class="financial-value">${formatCurrency(totalBookingAmount)}</div>
+        </div>
+        <div class="financial-item">
+          <div class="financial-label">إجمالي المدفوعات</div>
+          <div class="financial-value">${formatCurrency(totalPaidAmount)}</div>
+        </div>
+        <div class="financial-item">
+          <div class="financial-label">المبلغ المتبقي</div>
+          <div class="remaining-amount">${formatCurrency(remainingBalance)}</div>
+          <div style="font-size: 12px; color: ${remainingBalance > 0 ? '#dc2626' : '#16a34a'};">
+            ${remainingBalance > 0 ? 'مدين' : 'دائن'}
+          </div>
+        </div>
+      </div>
+    
     <!-- المدفوعات -->
     <div class="payments-section">
       <h2 class="section-title">تفاصيل المدفوعات</h2>
@@ -843,6 +904,17 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
       <h2 class="section-title">تفاصيل الحجوزات</h2>
       
       ${customerData?.bookings && customerData.bookings.length > 0 ? `
+        <div class="summary-row">
+          <div class="summary-item">
+            <div class="summary-value">${customerData.bookings.length}</div>
+            <div class="summary-label">عدد الحجوزات</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value">${formatCurrency(totalBookingAmount)}</div>
+            <div class="summary-label">إجمالي الحجوزات</div>
+          </div>
+        </div>
+        
         <table>
           <thead>
             <tr>
@@ -872,6 +944,13 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
               `;
             }).join('')}
           </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="4"><strong>الإجمالي:</strong></td>
+              <td class="amount-cell"><strong>${totalBookingAmount.toFixed(2)} $</strong></td>
+              <td><strong>${customerData.bookings.length} حجز</strong></td>
+            </tr>
+          </tfoot>
         </table>
       ` : `
         <div class="no-data">
@@ -901,11 +980,11 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
 </body>
 </html>`;
 
-    const printWindow = window.open('', '_blank');
-    printWindow.document.open();
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-  };
+  const printWindow = window.open('', '_blank');
+  printWindow.document.open();
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+};
 
   const handleDownloadPDF = () => {
     if (!customer) {
@@ -1143,6 +1222,15 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                  
+                 {/* إجمالي المستحق */}
+<div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+    {((customer?.total_paid || 0) + (customer?.remaining || 0)).toFixed(2)} $
+  </div>
+  <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+    إجمالي المستحق
+  </div>
+</div>
                   <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
                     <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {customer?.total_paid?.toFixed(2) || "0.00"} $
@@ -1179,6 +1267,9 @@ ${customerData?.bookings && customerData.bookings.length > 0 ? `
         <span className="font-bold text-blue-600 dark:text-blue-400">{customer?.payments?.length || 0}</span>
       </div>
       
+
+
+
       {/* Payment Details Table */}
       {customer?.payments && customer.payments.length > 0 ? (
         <div className="overflow-x-auto">

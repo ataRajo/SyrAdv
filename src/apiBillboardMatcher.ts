@@ -42,7 +42,7 @@ const getModel = (productType: string): string => {
 
 // MAIN API FUNCTION - UPDATED TO USE YOUR BACKEND
 export async function matchBillboardsFromAPI(userData: APICampaignData): Promise<Billboard[]> {
-  console.log('📡 Calling Road Signs API...');
+  ('📡 Calling Road Signs API...');
   
   try {
     // Build parameters (same as your RoadSignsSlice)
@@ -72,8 +72,8 @@ export async function matchBillboardsFromAPI(userData: APICampaignData): Promise
     
     const apiUrl = `/api/road-signs${queryString ? `?${queryString}` : ""}`;
     
-    console.log('🌐 API URL:', apiUrl);
-    console.log('🔑 Token (first 10 chars):', API_TOKEN.substring(0, 10) + '...');
+    ('🌐 API URL:', apiUrl);
+    ('🔑 Token (first 10 chars):', API_TOKEN.substring(0, 10) + '...');
     
     // MAKE THE REQUEST WITH TOKEN
     const response = await fetch(apiUrl, {
@@ -86,7 +86,7 @@ export async function matchBillboardsFromAPI(userData: APICampaignData): Promise
       credentials: 'include', // If using cookies/sessions
     });
     
-    console.log('📥 Response status:', response.status);
+    ('📥 Response status:', response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -95,7 +95,7 @@ export async function matchBillboardsFromAPI(userData: APICampaignData): Promise
     }
     
     const data = await response.json();
-    console.log('✅ Got response:', data);
+    ('✅ Got response:', data);
     
     // Transform response based on your API structure
     let items = [];
@@ -111,11 +111,11 @@ export async function matchBillboardsFromAPI(userData: APICampaignData): Promise
       items = data.road_signs;
     }
     
-    console.log(`📊 Found ${items.length} items in response`);
+    (`📊 Found ${items.length} items in response`);
     
     // If no data, create sample (for testing)
     if (items.length === 0) {
-      console.log('⚠️ No data from API, creating sample data');
+      ('⚠️ No data from API, creating sample data');
       items = Array.from({ length: 6 }, (_, i) => ({
         id: i + 1,
         name: `لوحة ${userData.city} ${i + 1}`,
@@ -147,7 +147,7 @@ export async function matchBillboardsFromAPI(userData: APICampaignData): Promise
       };
     });
     
-    console.log(`✅ Returned ${billboards.length} billboards`);
+    (`✅ Returned ${billboards.length} billboards`);
     return billboards.slice(0, 9); // Limit to 9 items
     
   } catch (error) {
@@ -176,7 +176,7 @@ function calculateMatchScore(item: any, userData: APICampaignData): number {
 
 // Fallback sample data
 function getSampleBillboards(userData: APICampaignData): Billboard[] {
-  console.log('🔄 Using sample data');
+  ('🔄 Using sample data');
   return Array.from({ length: 6 }, (_, i) => ({
     id: `sample${i + 1}`,
     name: `لوحة ${userData.city} ${i + 1}`,

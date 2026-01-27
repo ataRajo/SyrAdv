@@ -43,8 +43,12 @@ const InvoicePdf = ({
     
     // Add date
     doc.setFontSize(10);
-    doc.text(
-      `تاريخ التقرير: ${new Date().toLocaleDateString("ar-EG")}`,
+   doc.text(
+      `Report Date: ${new Date().toLocaleDateString("en-US", {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`,
       pageWidth / 2,
       margin + 18,
       { align: "center" }
@@ -158,7 +162,7 @@ const InvoicePdf = ({
         headStyles: {
           font: "Amiri-Regular",
           halign: "center",
-          fontSize: 10,
+          fontSize: 8,
           fillColor: [41, 128, 185],
           textColor: [255, 255, 255],
           fontStyle: "normal",
