@@ -77,27 +77,53 @@ const formik = useFormik({
   validationSchema,
   onSubmit: async (values, { resetForm }) => { 
     try {
-      const bookingPayload = {
-        customer_id: parseInt(values.customer_id),
-        type: parseInt(values.type),
-        start_date: values.start_date,
-        end_date: values.end_date,
-        roadsigns: selectedSigns.flatMap((sign) =>
-          sign.dateRanges.map((range) => ({
-            road_sign_id: sign.road_sign_id,
-            booking_faces: range.booking_faces,
-            number_of_reserved_panels: range.booking_faces,
-            start_date: range.startDate,
-            end_date: range.endDate,
-            units: range.units || 1,
-          }))
-        ),
-        product_type: parseInt(values.product_type),
-        printing_id: parseInt(values.printing_id),
-        notes,
-        discount_type: discountValue ? parseInt(discountType) : null,
-        value: discountValue ? parseInt(discountValue) : null,
-      };
+       const advertisingPrice = calculationResult?.amount?.total_advertising_price || 0;
+    const printingPrice = calculationResult?.amount?.total_printing_price || 0;
+    let finalPrice = advertisingPrice + printingPrice;
+    
+    if (discountValue) {
+      const discountNum = parseFloat(discountValue);
+      let discountedAdvertisingPrice;
+      
+      if (discountType === "1") {
+        // Fixed amount discount
+        discountedAdvertisingPrice = Math.max(0, advertisingPrice - discountNum);
+      } else {
+        // Percentage discount
+        discountedAdvertisingPrice = advertisingPrice * (1 - discountNum / 100);
+      }
+      
+      finalPrice = discountedAdvertisingPrice + printingPrice;
+    }
+    
+    const bookingPayload = {
+      customer_id: parseInt(values.customer_id),
+      type: parseInt(values.type),
+      start_date: values.start_date,
+      end_date: values.end_date,
+      roadsigns: selectedSigns.flatMap((sign) =>
+        sign.dateRanges.map((range) => ({
+          road_sign_id: sign.road_sign_id,
+          booking_faces: range.booking_faces,
+          number_of_reserved_panels: range.booking_faces,
+          start_date: range.startDate,
+          end_date: range.endDate,
+          units: range.units || 1,
+        }))
+      ),
+      product_type: parseInt(values.product_type),
+      printing_id: parseInt(values.printing_id),
+      notes,
+      discount_type: discountValue ? parseInt(discountType) : null,
+      value: discountValue ? parseFloat(discountValue) : null,
+      total_price: finalPrice, // Add final price here
+      advertising_price: advertisingPrice,
+      printing_price: printingPrice,
+      discounted_advertising_price: discountValue ? 
+        (discountType === "1" ? Math.max(0, advertisingPrice - parseFloat(discountValue)) : 
+         advertisingPrice * (1 - parseFloat(discountValue) / 100)) : 
+        advertisingPrice,
+    };
 
       if (isEditMode) {
         bookingPayload.id = id;
@@ -310,6 +336,30 @@ const removeFromCart = (cartId) => {
   setDiscountValue("");
 };
 
+const getFinalPrice = () => {
+  if (!calculationResult) return 0;
+  
+  const advertisingPrice = calculationResult.amount?.total_advertising_price || 0;
+  const printingPrice = calculationResult.amount?.total_printing_price || 0;
+  
+  if (!discountValue) {
+    return advertisingPrice + printingPrice;
+  }
+  
+  const discountNum = parseFloat(discountValue);
+  let discountedAdvertisingPrice;
+  
+  if (discountType === "1") {
+    // Fixed amount discount
+    discountedAdvertisingPrice = Math.max(0, advertisingPrice - discountNum);
+  } else {
+    // Percentage discount
+    discountedAdvertisingPrice = advertisingPrice * (1 - discountNum / 100);
+  }
+  
+  // Add printing price back
+  return discountedAdvertisingPrice + printingPrice;
+};
 
  const calculateTotal = async () => {
   try {
@@ -434,20 +484,58 @@ const calculateBookingPrice = async (cartId) => {
     }
   };
 
-  const calculateDiscountedPrice = useMemo(
-    () => () => {
-      if (!calculationResult || !discountValue)
-        return calculationResult?.price_per_period;
+const calculateDiscountedPrice = useMemo(
+  () => (advertisingOnly = false) => {
+    if (!calculationResult) {
+      return advertisingOnly 
+        ? calculationResult?.amount?.total_advertising_price 
+        : calculationResult?.price_per_period;
+    }
+
+    if (advertisingOnly) {
+      // Discount only on advertising price
+      const advertisingPrice = calculationResult.amount?.total_advertising_price || 0;
+      
+      if (!discountValue) return advertisingPrice;
+      
+      const discountNum = parseFloat(discountValue);
+      
       if (discountType === "1") {
-        return calculationResult.price_per_period - parseFloat(discountValue);
+        // Fixed amount discount
+        return Math.max(0, advertisingPrice - discountNum);
+      } else {
+        // Percentage discount
+        return advertisingPrice * (1 - discountNum / 100);
       }
-      return (
-        calculationResult.price_per_period *
-        (1 - parseFloat(discountValue) / 100)
-      );
-    },
-    [calculationResult, discountValue, discountType]
-  );
+    } else {
+      // Calculate total price with discount applied to advertising only
+      const advertisingPrice = calculationResult.amount?.total_advertising_price || 0;
+      const printingPrice = calculationResult.amount?.total_printing_price || 0;
+      
+      if (!discountValue) {
+        return advertisingPrice + printingPrice;
+      }
+      
+      const discountNum = parseFloat(discountValue);
+      let discountedAdvertisingPrice;
+      
+      if (discountType === "1") {
+        // Fixed amount discount
+        discountedAdvertisingPrice = Math.max(0, advertisingPrice - discountNum);
+      } else {
+        // Percentage discount
+        discountedAdvertisingPrice = advertisingPrice * (1 - discountNum / 100);
+      }
+      
+      // Add printing price back
+      return discountedAdvertisingPrice + printingPrice;
+    }
+  },
+  [calculationResult, discountValue, discountType]
+);
+
+
+
 
   // Group selected signs by booking (road_sign_id)
 // Group selected signs by cartId (each booking is separate)

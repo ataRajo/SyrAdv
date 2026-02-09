@@ -33,6 +33,11 @@ A comprehensive system for managing advertising road signs, bookings, contracts,
   - Contract lifecycle management
   - Dual contract type support (temporary/permanent)
 
+## orders 
+also seperate 1 huge component into several components to make it maintainable and apply seperation of concerns (export service , hitsory , etc ....)
+
+
+
 #### **DynamicDialog.jsx**
 - **Critical Role**: Handles ALL create and add operations
 - **Features**:
@@ -88,7 +93,7 @@ A comprehensive system for managing advertising road signs, bookings, contracts,
 ### 🔌 API Layer
 
 #### **RTK Query Folder Structure**
-
+### it conatain all the api`s 
 
 
 
@@ -137,12 +142,16 @@ A comprehensive system for managing advertising road signs, bookings, contracts,
 ## 🔄 Key Data Flows
 
 ### 1. **Report Generation Flow** (RoadSignsReport.jsx)
+### we seperate this huge component into 4-5  seperate components
+filter , export services , etc .... 
+this component rendered into 2 seperate pages (the التقرير  و تفاصيل اللوحات ,الأسبوعي)
 
 
 ### 2. **Booking Management Flow**
 
 
 ### 3. **Authentication Flow**
+username and password
 
 ## 4 . ** ExtendBooking **
 BookingInfoCard.jsx → Display booking information only
@@ -165,8 +174,7 @@ MoveSignDialog.jsx → Manage sign moving dialog only
 ## 📁 Important File Relationships
 
 ### **RoadSignsReport.jsx Dependencies**:
-display all the roadsigns that booked and unbooked
-and put a props for distinction between the weekly report and roadsigns details
+seperated component and display it in 2 pages 
 
 ### **DynamicTable.jsx Usage**:
 - Used by: ContractPage, RoadSignsReport, and all listing pages
@@ -195,11 +203,12 @@ The system implements multi-level filtering:
 - Weekly reports with customer grouping
 - Detailed reports with status indicators
 - Professional Arabic-styled layouts
-
+- used Html for the pdf for more beauty and clear
 ### **Word Export**:
 - Formatted document generation
 - Comprehensive data tables
 - Branded headers and footers
+- used Html for the word for more beauty and clear
 
 ## ⚠️ Important Notes
 

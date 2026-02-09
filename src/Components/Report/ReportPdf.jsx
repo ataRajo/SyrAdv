@@ -37,7 +37,6 @@ export const ReportPdf = ({
   customers,
   from_date,
   to_date,
-  globalModelCounts,
   product,
   selectedCustomer,
   isFilteredByCustomer,
@@ -106,25 +105,6 @@ export const ReportPdf = ({
       );
       infoY += 4; // Tighter spacing
     }
-    /*
-    doc.text(
-      `المنتج: ${product || "غير محدد"}`,
-      pageWidth - margin,
-      infoY,
-      { align: "right" }
-    );
-*/
-    
-    infoY += 4; // Tighter spacing
-
-    /*
-    doc.text(
-      `الفترة: ${formatDate(from_date)} - ${formatDate(to_date)}`,
-      pageWidth - margin,
-      infoY,
-      { align: "right" }
-    );
-    */
 
     let currentY = infoY + 8; // Reduced spacing
 
@@ -172,75 +152,76 @@ export const ReportPdf = ({
             ],
           ];
 
-         const roadSignsData = customer.roadSigns.map((sign, idx) => [
-  (idx + 1).toString(),
-  getRegionName(sign),
-  sign.place || "غير معروف",
-  sign.template?.model || "غير معروف",
-  getTemplateSize(sign),
-  getPrintingMeters(sign), // أمتار الطباعة
-  sign.direction || "-", // REMOVED TRUNCATION
-  sign.pivot?.start_date ? formatDate(sign.pivot.start_date) : "-",
-  sign.pivot?.end_date ? formatDate(sign.pivot.end_date) : "-",
-  (sign.pivot?.booking_faces || "0").toString(), // CONVERT TO STRING
-]);
+          const roadSignsData = customer.roadSigns.map((sign, idx) => [
+            (idx + 1).toString(),
+            getRegionName(sign),
+            sign.place || "غير معروف",
+            sign.template?.model || "غير معروف",
+            getTemplateSize(sign),
+            getPrintingMeters(sign), // أمتار الطباعة
+            sign.direction || "-", // REMOVED TRUNCATION
+            sign.pivot?.start_date ? formatDate(sign.pivot.start_date) : "-",
+            sign.pivot?.end_date ? formatDate(sign.pivot.end_date) : "-",
+            (sign.pivot?.booking_faces || "0").toString(), // CONVERT TO STRING
+          ]);
+
           autoTable(doc, {
             head: roadSignsHeaders,
             body: roadSignsData,
             startY: currentY,
             margin: { top: margin, left: margin, right: margin, bottom: margin },
-          styles: {
-  font: "Amiri-Regular",
-  halign: "center",
-  valign: "middle", // ADD THIS LINE
-  fontSize: 7,
-  textColor: [0, 0, 0],
-  fontStyle: "normal",
-  cellPadding: 1.5,
-  lineWidth: 0.1,
-},
-         headStyles: {
-  font: "Amiri-Regular",
-  halign: "center",
-  valign: "middle", // ADD THIS LINE
-  fontSize: 8,
-  fillColor: [59, 130, 246],
-  textColor: [255, 255, 255],
-  fontStyle: "bold",
-  cellPadding: 2,
-  lineWidth: 0.1,
-},
+            styles: {
+              font: "Amiri-Regular",
+              halign: "center",
+              valign: "middle",
+              fontSize: 7,
+              textColor: [0, 0, 0],
+              fontStyle: "normal",
+              cellPadding: 1.5,
+              lineWidth: 0.1,
+            },
+            headStyles: {
+              font: "Amiri-Regular",
+              halign: "center",
+              valign: "middle",
+              fontSize: 8,
+              fillColor: [59, 130, 246],
+              textColor: [255, 255, 255],
+              fontStyle: "bold",
+              cellPadding: 2,
+              lineWidth: 0.1,
+            },
             alternateRowStyles: {
               fillColor: [248, 250, 252], // Light gray for alternate rows
             },
-       columnStyles: {
-  0: { cellWidth: 8, halign: "center", valign: "middle" }, // م
-  1: { cellWidth: 22, halign: "right", valign: "middle" }, // المنطقة
-  2: { cellWidth: 25, halign: "right", valign: "middle" }, // التموضع
-  3: { cellWidth: 18, halign: "center", valign: "middle" }, // النموذج
-  4: { cellWidth: 15, halign: "center", valign: "middle" }, // القياس
-  5: { cellWidth: 12, halign: "center", valign: "middle" }, // الطباعة (م²) - ADD valign
-  6: { cellWidth: 45, halign: "right", valign: "middle" }, // الاتجاه - WIDER
-  7: { cellWidth: 15, halign: "center", valign: "middle" }, // من
-  8: { cellWidth: 15, halign: "center", valign: "middle" }, // إلى
-  9: { cellWidth: 12, halign: "center", valign: "middle" }, // الأوجه - ADD valign and make wider
-},
+            columnStyles: {
+              0: { cellWidth: 8, halign: "center", valign: "middle" }, // م
+              1: { cellWidth: 22, halign: "right", valign: "middle" }, // المنطقة
+              2: { cellWidth: 25, halign: "right", valign: "middle" }, // التموضع
+              3: { cellWidth: 18, halign: "center", valign: "middle" }, // النموذج
+              4: { cellWidth: 15, halign: "center", valign: "middle" }, // القياس
+              5: { cellWidth: 12, halign: "center", valign: "middle" }, // الطباعة (م²)
+              6: { cellWidth: 45, halign: "right", valign: "middle" }, // الاتجاه - WIDER
+              7: { cellWidth: 15, halign: "center", valign: "middle" }, // من
+              8: { cellWidth: 15, halign: "center", valign: "middle" }, // إلى
+              9: { cellWidth: 12, halign: "center", valign: "middle" }, // الأوجه
+            },
             tableWidth: 'wrap',
-            theme: 'grid', // Grid theme for better visibility
-           didParseCell: (data) => {
-  data.cell.styles.font = "Amiri-Regular";
-  data.cell.styles.fontStyle = "normal";
-  data.cell.styles.lineWidth = 0.1;
-  data.cell.styles.lineColor = [200, 200, 200];
-  
-  // ADD vertical alignment for all cells
-  data.cell.styles.valign = "middle";
-  
-  // Ensure numbers are properly aligned
-  if (data.column.index === 5 || data.column.index === 9) { // الطباعة and الأوجه columns
-    data.cell.styles.halign = "center";
-  }
-},
+            theme: 'grid',
+            didParseCell: (data) => {
+              data.cell.styles.font = "Amiri-Regular";
+              data.cell.styles.fontStyle = "normal";
+              data.cell.styles.lineWidth = 0.1;
+              data.cell.styles.lineColor = [200, 200, 200];
+              
+              // ADD vertical alignment for all cells
+              data.cell.styles.valign = "middle";
+              
+              // Ensure numbers are properly aligned
+              if (data.column.index === 5 || data.column.index === 9) { // الطباعة and الأوجه columns
+                data.cell.styles.halign = "center";
+              }
+            },
             didDrawCell: (data) => {
               if (data.section === "head") {
                 data.cell.styles.font = "Amiri-Regular";
@@ -297,125 +278,6 @@ export const ReportPdf = ({
       doc.setFontSize(12);
       doc.text("لا توجد بيانات للعرض", pageWidth / 2, currentY, { align: "center" });
       currentY += 20;
-    }
-
-    // Add model summary section if not filtered by customer
-    if (!isFilteredByCustomer && globalModelCounts && globalModelCounts.length > 0) {
-      doc.addPage();
-      try {
-        doc.addImage(logo, 'PNG', margin, margin, 30, 26);
-      } catch (error) {
-        console.error("Error adding logo to summary page:", error);
-      }
-      currentY = margin + 15;
-      
-      doc.setFontSize(14);
-      doc.text("ملخص النماذج", pageWidth / 2, currentY, { align: "center" });
-      currentY += 6;
-
-      // Add date range to summary page
-      doc.setFontSize(9);
-      /*
-      doc.text(
-        `الفترة: ${formatDate(from_date)} - ${formatDate(to_date)}`,
-        pageWidth - margin,
-        currentY,
-        { align: "right" }
-      );
-      */
-      currentY += 8;
-
-      // Optimized model summary table
-      const modelSummaryHeaders = [
-        ["م", "النموذج", "القياس", "الطباعة (م²)", "المجموع", "المحجوز", "المتاح"],
-      ];
-
-      const modelSummaryData = globalModelCounts.map((model, idx) => [
-        (idx + 1).toString(),
-        model?.model || "غير معروف",
-        model?.size || "غير محدد",
-        model?.printing_space ? model.printing_space : 
-          model?.advertising_space ? model.advertising_space : "0",
-        model?.total_panels || "0",
-        model?.reserved_panels || "0",
-        model?.available_panels || "0",
-      ]);
-
-      autoTable(doc, {
-        head: modelSummaryHeaders,
-        body: modelSummaryData,
-        startY: currentY,
-        margin: { top: margin, left: margin, right: margin, bottom: margin },
-        styles: {
-          font: "Amiri-Regular",
-          halign: "center",
-          fontSize: 8,
-          textColor: [0, 0, 0],
-          fontStyle: "normal",
-          cellPadding: 2,
-          lineWidth: 0.1,
-        },
-        headStyles: {
-          font: "Amiri-Regular",
-          halign: "center",
-          fontSize: 8,
-          fillColor: [16, 185, 129], // Green color
-          textColor: [255, 255, 255],
-          fontStyle: "bold",
-          cellPadding: 2,
-          lineWidth: 0.1,
-        },
-        alternateRowStyles: {
-          fillColor: [240, 253, 244], // Light green for alternate rows
-        },
-        columnStyles: {
-          0: { cellWidth: 8, halign: "center" }, // م
-          1: { cellWidth: 30, halign: "right" }, // النموذج
-          2: { cellWidth: 20, halign: "center" }, // القياس
-          3: { cellWidth: 15, halign: "center" }, // الطباعة (م²)
-          4: { cellWidth: 15, halign: "center" }, // المجموع
-          5: { cellWidth: 15, halign: "center" }, // المحجوز
-          6: { cellWidth: 15, halign: "center" }, // المتاح
-        },
-        tableWidth: 'wrap',
-        theme: 'grid',
-        didParseCell: (data) => {
-          data.cell.styles.font = "Amiri-Regular";
-          data.cell.styles.fontStyle = "normal";
-          data.cell.styles.lineWidth = 0.1;
-          data.cell.styles.lineColor = [200, 200, 200];
-        },
-        willDrawCell: (data) => {
-          // Alternate row colors
-          if (data.section === 'body' && data.row.index % 2 === 0) {
-            doc.setFillColor(240, 253, 244);
-            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-          }
-        },
-      });
-      
-      // Add total summary for models
-      currentY = doc.lastAutoTable.finalY + 8;
-      
-      const totalReserved = globalModelCounts.reduce((sum, model) => 
-        sum + (parseInt(model?.reserved_panels) || 0), 0
-      );
-      const totalAvailable = globalModelCounts.reduce((sum, model) => 
-        sum + (parseInt(model?.available_panels) || 0), 0
-      );
-      const totalPanels = globalModelCounts.reduce((sum, model) => 
-        sum + (parseInt(model?.total_panels) || 0), 0
-      );
-      
-      doc.setFillColor(16, 185, 129); // Green background
-      doc.setTextColor(255, 255, 255); // White text
-      doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
-      doc.text(
-        `الإجمالي: ${totalPanels} لوحة | ${totalReserved} محجوزة | ${totalAvailable} متاحة`,
-        pageWidth - margin,
-        currentY + 5,
-        { align: "right" }
-      );
     }
 
     // Add footer with company name on all pages

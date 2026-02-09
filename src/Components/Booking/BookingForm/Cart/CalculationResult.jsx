@@ -56,8 +56,9 @@ const CalculationResult = () => {
         </div>
       </div>
 
-   {/* Calculation Results */}
+ {/* Calculation Results */}
 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+  {/* Keep original total price WITHOUT discount */}
   <div className="flex flex-col">
     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
       السعر الإجمالي:
@@ -67,17 +68,27 @@ const CalculationResult = () => {
     </span>
   </div>
   
-  {/* Add Advertising Price */}
+  {/* Advertising Price - Show discounted version if discount exists */}
   <div className="flex flex-col">
     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
       سعر الإعلان:
     </span>
-    <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-      {calculationResult?.amount?.total_advertising_price?.toFixed(2)} $
+    <span className={`mt-1 font-medium ${
+      discountValue ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'
+    }`}>
+      {discountValue 
+        ? `${calculateDiscountedPrice(true)?.toFixed(2)} $`  // Discounted advertising price
+        : `${calculationResult?.amount?.total_advertising_price?.toFixed(2)} $`  // Original
+      }
     </span>
+    {discountValue && (
+      <span className="text-xs text-gray-500 dark:text-gray-400 line-through mt-1">
+        كان: {calculationResult?.amount?.total_advertising_price?.toFixed(2)} $
+      </span>
+    )}
   </div>
   
-  {/* Add Printing Price */}
+  {/* Printing Price stays same */}
   <div className="flex flex-col">
     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
       سعر الطباعة:
@@ -86,27 +97,26 @@ const CalculationResult = () => {
       {calculationResult?.amount?.total_printing_price?.toFixed(2)} $
     </span>
   </div>
-  
-  {discountValue && (
-    <div className="flex flex-col">
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-        السعر بعد الحسم:
-      </span>
-      <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-        {calculateDiscountedPrice()?.toFixed(2)} $
-      </span>
-    </div>
-  )}
-  
-  <div className="flex flex-col">
-    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-      عدد الدورات ( الأشهر ) :
-    </span>
-    <span className="mt-1 text-gray-900 dark:text-gray-100 font-medium">
-      {calculationResult?.units || "غير متوفر"} 
-    </span>
-  </div>
 </div>
+
+{/* Final Price with discount (if any) */}
+<div className="flex flex-col">
+  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    السعر النهائي:
+  </span>
+  <span className={`mt-1 text-xl font-bold ${
+    discountValue ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'
+  }`}>
+    {calculateDiscountedPrice()?.toFixed(2)} $
+  </span>
+  {discountValue && (
+    <span className="text-xs text-gray-500 dark:text-gray-400 line-through mt-1">
+      كان: {calculationResult?.price_per_period?.toFixed(2)} $
+    </span>
+  )}
+</div>
+
+
       {calculationResult && (
         <div className="mt-4">
           <Button

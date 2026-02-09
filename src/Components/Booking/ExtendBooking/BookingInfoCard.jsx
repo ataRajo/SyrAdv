@@ -14,7 +14,7 @@ const BookingInfoCard = ({
   onToggleRoadSign,
   onSelectAll,
   onDeselectAll,
-  onOpenMoveDialog
+  onOpenMoveDialog // Add this prop
 }) => {
   const allSelected = selectedRoadSigns.length === booking.roadsigns?.length;
   const noneSelected = selectedRoadSigns.length === 0;
@@ -124,7 +124,7 @@ const BookingInfoCard = ({
                   isSelected={isSelected}
                   pendingMove={pendingMove}
                   onToggle={() => onToggleRoadSign(sign.id)}
-                  onOpenMoveDialog={() => onOpenMoveDialog(sign.id)}
+                  onOpenMoveDialog={() => onOpenMoveDialog(sign.id)} // Pass the function
                 />
               );
             })}
@@ -178,13 +178,30 @@ const RoadSignCard = ({ sign, index, isSelected, pendingMove, onToggle, onOpenMo
               />
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mb-2">
                 <p className="font-bold text-lg text-gray-900 dark:text-gray-100">
                   {sign.place}
                 </p>
                 <Badge variant="outline" className="text-xs">
                   لوحة #{index + 1}
                 </Badge>
+                
+                {/* Move Button - Only shows when sign is selected */}
+                {isSelected && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2 ml-2 hover:bg-blue-50 border-blue-300 text-blue-600 hover:text-blue-700 hover:border-blue-400"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenMoveDialog();
+                    }}
+                    title="نقل اللوحة إلى موقع جديد"
+                  >
+                    <Navigation className="w-4 h-4 text-blue-500 mr-1" />
+                    نقل
+                  </Button>
+                )}
                 
                 {pendingMove && (
                   <div className="flex items-center gap-1 text-sm text-purple-700">
@@ -194,18 +211,6 @@ const RoadSignCard = ({ sign, index, isSelected, pendingMove, onToggle, onOpenMo
                     </span>
                   </div>
                 )}
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 ml-2 hover:bg-blue-50"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenMoveDialog();
-                  }}
-                >
-                  <Navigation className="w-4 h-4 text-blue-500" />
-                </Button>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 {sign.directions}

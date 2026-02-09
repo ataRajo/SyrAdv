@@ -1,5 +1,4 @@
-// BookingContainer.jsx - UPDATED WITH TEMPORARY BOOKINGS ICON & DETAILS
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect ,useCallback } from "react";
 import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import { BookingColumns } from "../../utils/Tables/ColumnsTable/BookingColumns";
 import { Icon } from "@iconify/react";
@@ -168,7 +167,7 @@ const BookingContainer = () => {
   }, [temporaryBookingsCount, pendingApprovalsCount, pausedBookingsCount]);
 
   // Format date
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     if (!dateString) return "غير محدد";
     const date = new Date(dateString);
     return date.toLocaleDateString('ar-EG', {
@@ -176,16 +175,16 @@ const BookingContainer = () => {
       month: 'long',
       day: 'numeric'
     });
-  };
+  }, []);
 
   // Calculate remaining days
-  const calculateRemainingDays = (endDate) => {
+  const calculateRemainingDays = useCallback((endDate) => {
     if (!endDate) return 0;
     const end = new Date(endDate);
     const today = new Date();
     const diffTime = end - today;
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
+  }, []);
 
   // Handle view booking details
   const handleViewBookingDetails = (bookingId) => {
@@ -193,11 +192,13 @@ const BookingContainer = () => {
     setOpenTemporaryDialog(false);
   };
 
-  // Handle edit temporary booking
-  const handleEditBooking = (bookingId) => {
+  /*
+  const handleEditBooking =  (bookingId) => {
     navigate(`/dashboard/booking/edit/${bookingId}`);
     setOpenTemporaryDialog(false);
   };
+
+  */
 
   const handleConfirmBooking = async (bookingId) => {
     if (isConfirming) return;
@@ -248,26 +249,23 @@ const BookingContainer = () => {
   }, [selectedBookingForPause]);
 
   // Handle pause booking click
-  const handlePauseBooking = (booking) => {
+  const handlePauseBooking = useCallback((booking) => {
     setSelectedBookingForPause(booking);
     setPauseValidationError("");
     setOpenCancelBooking(true);
-  };
-
+  }, []);
   // Handle status change click
-  const handleStatusChange = (booking) => {
-    console.log("Opening status change dialog for booking:", booking);
+  const handleStatusChange = useCallback((booking) => {
     setSelectedBookingForStatus(booking);
     setNewStatus(booking.approvement_status?.toString() || "");
     setRejectReason("");
     setOpenStatusDialog(true);
-  };
+  }, []);
 
   // ✅ Handle extend booking
-  const handleExtendBooking = (booking) => {
-    console.log("Extend booking clicked:", booking);
+  const handleExtendBooking = useCallback((booking) => {
     navigate(`/dashboard/booking/extend/${booking.id}`);
-  };
+  }, []);
 
   // Handle status update
   const handleUpdateStatus = async () => {
@@ -352,7 +350,6 @@ const BookingContainer = () => {
         duration: pauseDuration
       };
       
-      console.log("Pausing booking:", pauseData);
       toast.success(`تم إيقاف الحجز ${pauseData.bookingId} مؤقتاً`);
       
       // Reset and close
@@ -397,7 +394,6 @@ const filteredData = useMemo(() => {
   } else if (archiveFilter === "archived") {
     filtered = filtered.filter(booking => booking.is_archived === 1);
   }
-  // "all" option shows both archived and active
   
   // 2. Apply status filter (if selected)
   if (statusFilter) {

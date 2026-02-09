@@ -18,6 +18,7 @@ export const ReportSlice = createApi({
         customer_id,
         page = 1,
         per_page = 50
+        
       } = {}) => {
         const params = new URLSearchParams();
         if (city_id) params.append("city_id", city_id);
@@ -46,6 +47,7 @@ export const ReportSlice = createApi({
         to_date, 
         customer_id,
         page = 1,
+        product_type, 
         per_page = 50
       } = {}) => {
         const params = new URLSearchParams();
@@ -56,6 +58,8 @@ export const ReportSlice = createApi({
         if (from_date) params.append("from_date", from_date);
         if (to_date) params.append("to_date", to_date);
         if (customer_id) params.append("customer_id", customer_id);
+        if (product_type) params.append("product_type", product_type);
+        
         params.append("page", page);
         params.append("per_page", per_page);
 

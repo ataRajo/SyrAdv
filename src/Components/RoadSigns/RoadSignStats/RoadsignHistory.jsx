@@ -38,9 +38,7 @@ const RoadsignHistory = ({ roadSignId }) => {
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 المدة
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                السعر
-              </th>
+              
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 الحالة
               </th>
@@ -61,9 +59,17 @@ const RoadsignHistory = ({ roadSignId }) => {
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                   {booking.duration_of_days || calculateDays(booking.start_date, booking.end_date)} يوم
                 </td>
+                {/*
+
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                السعر
+              </th>
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                   {booking.total_price} ₿
                 </td>
+                */}
+
+                
                 <td className="px-4 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                     getStatusStyle(booking.status)

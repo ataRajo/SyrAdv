@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@iconify/react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "../../Context/AuthProvider";
-import Logo from "../../assets/images/adv_syrian.png";
+import Logo from "../../assets/images/adv_syrian.png"
+import { BASE_URL } from "../../Api/baseUrl";
 
 const STATUS_FILTER_OPTIONS = [
   { label: "الكل", value: "all" },
@@ -31,6 +32,11 @@ const STATUS_FILTER_OPTIONS = [
   { label: PAYMENT_STATUS.ACCEPTED.label, value: PAYMENT_STATUS.ACCEPTED.value.toString() },
   { label: PAYMENT_STATUS.REJECTED.label, value: PAYMENT_STATUS.REJECTED.value.toString() },
 ];
+
+const raw = localStorage.getItem("SuperAdminInfo");
+      const info = raw ? JSON.parse(raw) : null;
+      const token = info?.user?.token || info?.token || null;
+      
 
 const CUSTOMER_FILTER_OPTIONS = [
   { label: "جميع العملاء", value: "all" },
@@ -98,7 +104,6 @@ const PaymentsContainer = () => {
       // تجميع دفعات هذا العميل لحساب الإحصائيات
       const customerPayments = payments?.filter(p => p.customer_id === customer.id) || [];
       
-      // حساب إجمالي المبلغ المدفوع
       const totalPaid = customerPayments.reduce((sum, payment) => {
         return sum + (parseFloat(payment.paid) || 0);
       }, 0);
@@ -144,7 +149,6 @@ const PaymentsContainer = () => {
     return result.sort((a, b) => b.remaining - a.remaining);
   }, [customers, payments]);
 
-  // حساب الإحصائيات
   const statistics = useMemo(() => {
     const allCustomers = customersWithRemainingBalance;
     const customersWithRemaining = allCustomers.filter(c => c.hasRemaining);
@@ -161,6 +165,8 @@ const PaymentsContainer = () => {
     };
   }, [customersWithRemainingBalance]);
 
+
+  
   const {
     openAdd,
     setOpenAdd,
@@ -208,6 +214,174 @@ const PaymentsContainer = () => {
     return calculateBookingNotifications(filteredNotReceivedPayments);
   }, [calculateBookingNotifications, filteredNotReceivedPayments]);
 
+ 
+
+  
+const handleReceipt = async (paymentId) => {
+  if (!paymentId) {
+    alert("رقم الدفعة مطلوب لعرض الوصل");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${BASE_URL}/payments/${paymentId}/pdf`, {
+      method: "POST",
+      headers: {
+        "Accept": "*/*", //  أنواع 
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: paymentId })
+    });
+
+    if (!response.ok) {
+      let errorDetail = "";
+
+      try {
+        const data = await response.clone().json();
+        errorDetail = data.message || data.error || "";
+      } catch {
+        try {
+          errorDetail = await response.clone().text();
+        } catch {
+          errorDetail = response.statusText;
+        }
+      }
+
+      if (response.status === 404) {
+        throw new Error(`الوصل غير موجود (رقم ${paymentId})`);
+      }
+      if (response.status === 400) {
+        throw new Error(`طلب غير صالح: ${errorDetail || "رقم الدفعة غير صحيح"}`);
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("غير مصرح لك بعرض هذا الوصل");
+      }
+      if (response.status === 405) {
+        throw new Error("طريقة الطلب غير مدعومة");
+      }
+
+      throw new Error(`فشل في تحميل الوصل: ${response.status} ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get("content-type");
+    console.log("Content-Type received:", contentType);
+
+    // تحقق من نوع الملف
+    const isWord = contentType && (
+      contentType.includes("application/msword") ||
+      contentType.includes("application/vnd.openxmlformats-officedocument.wordprocessingml.document") ||
+      contentType.includes("application/octet-stream") // نوع عام للملفات
+    );
+    
+    const isPdf = contentType && contentType.includes("application/pdf");
+
+    if (isWord) {
+      // معالجة ملف Word
+      const wordBlob = await response.blob();
+      
+      if (wordBlob.size === 0) {
+        throw new Error("ملف Word فارغ");
+      }
+
+      const wordUrl = URL.createObjectURL(wordBlob);
+      const fileName = `سند_قبض_${paymentId}_${new Date().toISOString().split("T")[0]}.doc`;
+      
+      // تحميل ملف Word مباشرة
+      downloadFile(wordUrl, fileName);
+      
+    } else if (isPdf) {
+      // معالجة ملف PDF (الكود القديم)
+      const pdfBlob = await response.blob();
+
+      if (pdfBlob.size === 0) {
+        throw new Error("ملف PDF فارغ");
+      }
+
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = pdfUrl;
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow.print();
+
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            URL.revokeObjectURL(pdfUrl);
+          }, 1000);
+        } catch {
+          document.body.removeChild(iframe);
+
+          const win = window.open(pdfUrl, "_blank");
+          if (win) {
+            win.onload = () => win.print();
+          } else {
+            downloadFile(pdfUrl, `سند_قبض_${paymentId}.pdf`);
+          }
+        }
+      };
+      
+    } else {
+      // إذا كان الرد ليس Word ولا PDF
+      try {
+        const result = await response.clone().json();
+
+        if (result.pdf_url || result.word_url || result.file_url) {
+          window.open(result.pdf_url || result.word_url || result.file_url, "_blank");
+          return;
+        }
+
+        throw new Error(result.message || "الاستجابة ليست ملف Word أو PDF");
+      } catch {
+        throw new Error("الاستجابة من الخادم غير متوقعة");
+      }
+    }
+  } catch (error) {
+    let msg = "خطأ في عرض الوصل";
+
+    if (error.message.includes("الوصل غير موجود")) msg = error.message;
+    else if (error.message.includes("طلب غير صالح")) msg = error.message;
+    else if (error.message.includes("غير مصرح")) msg = "ليس لديك صلاحية لعرض هذا الوصل";
+    else if (error.message.includes("طريقة الطلب")) msg = "طريقة الطلب غير مدعومة. يرجى التواصل مع الدعم الفني";
+    else if (error.message.includes("فشل في تحميل")) msg = error.message;
+    else if (error.message.includes("فارغ")) msg = "ملف الوصل فارغ";
+    else if (error.message.includes("الاستجابة ليست ملف") || error.message.includes("غير متوقعة"))
+      msg = "الاستجابة من الخادم غير صحيحة";
+    else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError"))
+      msg = "تعذر الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت";
+
+    alert(`${msg}\nرقم الدفعة: ${paymentId}`);
+  }
+};
+
+
+
+const downloadFile = (fileUrl, fileName) => {
+  try {
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // تنظيف بعد ثانية
+    setTimeout(() => {
+      URL.revokeObjectURL(fileUrl);
+    }, 1000);
+    
+    console.log(`تم تحميل الملف: ${fileName}`);
+  } catch {
+    alert("فشل في تحميل ملف الوصل");
+  }
+};
+
+
+
   const [showFilteredNotifications, setShowFilteredNotifications] = useState(false);
   const [storedNotifications, setStoredNotifications] = useState(() => {
     try {
@@ -226,6 +400,8 @@ const PaymentsContainer = () => {
       setShowFilteredNotifications(false);
     }
   }, [customerFilter]);
+
+
 
   const displayNotifications = useMemo(() => {
     if (showFilteredNotifications) {
@@ -304,7 +480,6 @@ const handleExportWord = async () => {
     const fileName = `دفعات_${customerName}_${new Date().toISOString().split('T')[0]}.doc`;
     
     
-    // حساب المبلغ المدفوع فقط
     const totalAmount = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.paid) || 0), 0);
     
     const formatArabicDate = (dateString) => {
@@ -369,6 +544,11 @@ const handleExportWord = async () => {
             color: #000000;
             background-color: #fff;
           }
+          
+          @page {
+    size: A4;
+    margin: 15mm;
+  }
           
           .header {
             display: flex;
@@ -841,6 +1021,9 @@ const handleExportWord = async () => {
               onShow={onShow}
               permissions={permissions}
               onDelete={handleDelete}
+              onReceipt={(payment) => handleReceipt(payment.id)}
+ 
+
             />
 
             <DialogAddPayments
@@ -900,6 +1083,8 @@ const handleExportWord = async () => {
                 onDelete={handleDelete}
                 onConfirmOrder={onConfirmPayment}
                 permissions={permissions}
+                onReceipt={(payment) => handleReceipt(payment.id)}
+ 
               />
             </div>
           </TabsContent>
@@ -915,6 +1100,8 @@ const handleExportWord = async () => {
                 onShow={onShow}
                 permissions={permissions}
                 onDelete={handleDelete}
+                onReceipt={(payment) => handleReceipt(payment.id)}
+ 
               />
             </div>
           </TabsContent>

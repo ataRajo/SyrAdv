@@ -36,7 +36,6 @@ const useGetRoadSignsByFilter = () => {
   const { data: getRoadSignsModel, isLoading: isGetRoadSignsModel } =
     useGetRoadSignsModelQuery();
 
-  // ✅ FIXED: Include ALL parameters including direction
   const queryParams = {
     start_date: startDate,
     end_date: endDate,

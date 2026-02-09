@@ -66,7 +66,6 @@ const BookingContent = () => {
   );
 };
 
-// The booking form provider provides all the required data for the booking components.
 const BookingForm = ({ bookingId }) => {
   return (
     <BookingContextApi bookingId={bookingId}>

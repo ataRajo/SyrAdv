@@ -384,7 +384,7 @@ export function Login({ className, ...props }) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                       </svg>
                     </div>
-                    <span className="text-sm">✓ الإشعارات المرورية مفعلة</span>
+                    <span className="text-sm">✓ الإشعارات مفعلة</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-2 text-yellow-300">

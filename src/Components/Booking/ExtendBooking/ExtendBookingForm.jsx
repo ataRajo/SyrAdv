@@ -46,7 +46,8 @@ const ExtendBookingForm = ({
   onCalculatePrice,
   onExtendBooking,
   calculateFinalPrice,
-  isExtending
+  isExtending,
+  originalPriceDetails // Add this prop
 }) => {
   // FIX 1: Remove the local fetch function and use the imported one
   
@@ -127,6 +128,7 @@ const ExtendBookingForm = ({
             designPriceInfo={designPriceInfo}
             calculatedAmount={calculatedAmount}
             selectedRoadSigns={selectedRoadSigns}
+            originalPriceDetails={originalPriceDetails} // Pass price details
           />
         )}
 
@@ -140,6 +142,7 @@ const ExtendBookingForm = ({
             designPriceInfo={designPriceInfo}
             calculatedAmount={calculatedAmount}
             calculateFinalPrice={calculateFinalPrice}
+            originalPriceDetails={originalPriceDetails} // Pass price details
           />
         )}
 
@@ -311,7 +314,7 @@ const DesignChangeSection = ({
               </div>
               {designPriceInfo && (
                 <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                  <p>تكلفة التصميم: {designPriceInfo.printingCost?.toLocaleString()} ل.س</p>
+                  <p>  {designPriceInfo.printingCost?.toLocaleString()} ل.س</p>
                 </div>
               )}
             </div>
@@ -326,46 +329,53 @@ const PriceCalculationSection = ({
   useNewDesign,
   designPriceInfo,
   calculatedAmount,
-  selectedRoadSigns
-}) => (
-  <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800 animate-in slide-in-from-bottom-5">
-    <h3 className="font-semibold text-green-800 dark:text-green-300 mb-3 flex items-center gap-2">
-      <DollarSign className="w-4 h-4" />
-      حساب السعر الدقيق
-    </h3>
-    <div className="space-y-2 text-sm">
-      <div className="flex justify-between">
-        <span>عدد اللوحات المحددة:</span>
-        <span className="font-medium">{selectedRoadSigns.length} لوحة</span>
-      </div>
-      
-      {useNewDesign && designPriceInfo && (
-        <>
-          <Separator className="my-2" />
-          <div className="flex justify-between">
-            <span>سعر التمديد:</span>
-            <span className="font-medium">{designPriceInfo.originalPrice?.toLocaleString()} $</span>
-          </div>
-          <div className="flex justify-between">
-            <span>تكلفة التصميم:</span>
-            <span className="text-blue-600 font-medium">+{designPriceInfo.printingCost?.toLocaleString()} $</span>
-          </div>
-          <Separator className="my-2" />
-        </>
-      )}
-      
-      <div className="flex justify-between">
-        <span>السعر الجديد:</span>
-        <span className="text-green-600 font-bold text-lg animate-pulse">
-          {useNewDesign && designPriceInfo 
-            ? designPriceInfo.totalPrice?.toLocaleString() 
-            : calculatedAmount?.toLocaleString()
-          } $
-        </span>
+  selectedRoadSigns,
+  originalPriceDetails
+}) => {
+  const advertisingPrice = originalPriceDetails?.total_advertising_price || calculatedAmount || 0;
+  const printingPrice = originalPriceDetails?.total_printing_price || 0;
+
+  return (
+    <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800 animate-in slide-in-from-bottom-5">
+      <h3 className="font-semibold text-green-800 dark:text-green-300 mb-3 flex items-center gap-2">
+        <DollarSign className="w-4 h-4" />
+        تفاصيل السعر
+      </h3>
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span>عدد اللوحات المحددة:</span>
+          <span className="font-medium">{selectedRoadSigns.length} لوحة</span>
+        </div>
+        
+        {originalPriceDetails && (
+          <>
+            <Separator className="my-2" />
+            <div className="flex justify-between">
+              <span>سعر الإعلان:</span>
+              <span className="font-medium">{advertisingPrice?.toLocaleString()} $</span>
+            </div>
+            
+            {printingPrice > 0 && (
+              <div className="flex justify-between">
+                <span>سعر الطباعة:</span>
+                <span className="font-medium">{printingPrice?.toLocaleString()} $</span>
+              </div>
+            )}
+            
+            <Separator className="my-2" />
+          </>
+        )}
+        
+        <div className="flex justify-between pt-2">
+          <span className="font-bold">المجموع:</span>
+          <span className="text-green-600 font-bold text-lg">
+            {(advertisingPrice + printingPrice)?.toLocaleString()} $
+          </span>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const DiscountSection = ({
   discount,
@@ -375,86 +385,177 @@ const DiscountSection = ({
   useNewDesign,
   designPriceInfo,
   calculatedAmount,
-  calculateFinalPrice
-}) => (
-  <div className="space-y-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
-    <div className="flex items-center justify-between">
-      <Label className="text-sm font-medium flex items-center gap-2">
-        <DollarSign className="w-4 h-4 text-orange-500" />
-        إضافة خصم
-      </Label>
+  calculateFinalPrice,
+  originalPriceDetails
+}) => {
+  // Calculate the advertising-only price from the API response
+  const getAdvertisingPrice = () => {
+    if (originalPriceDetails?.total_advertising_price) {
+      return originalPriceDetails.total_advertising_price;
+    }
+    
+    // Fallback if the detailed breakdown isn't available
+    if (useNewDesign && designPriceInfo) {
+      // For new design, subtract printing cost from total
+      const total = designPriceInfo.totalPrice || calculatedAmount || 0;
+      const printingCost = designPriceInfo.printingCost || 0;
+      return total - printingCost;
+    } else {
+      // For regular extension, assume all price is advertising
+      return calculatedAmount || 0;
+    }
+  };
+
+  // Calculate printing cost separately
+  const getPrintingCost = () => {
+    if (originalPriceDetails?.total_printing_price) {
+      return originalPriceDetails.total_printing_price;
+    }
+    
+    if (useNewDesign && designPriceInfo) {
+      return designPriceInfo.printingCost || 0;
+    }
+    
+    return 0;
+  };
+
+  // Calculate discounted advertising price
+  const calculateDiscountedAdvertisingPrice = () => {
+    const advertisingPrice = getAdvertisingPrice();
+    
+    if (discount <= 0) return advertisingPrice;
+    
+    if (discountType === "percentage") {
+      return Math.max(0, advertisingPrice * (1 - discount / 100));
+    } else {
+      return Math.max(0, advertisingPrice - discount);
+    }
+  };
+
+  // Calculate final total (discounted advertising + original printing)
+  const calculateFinalTotal = () => {
+    const discountedAdvertisingPrice = calculateDiscountedAdvertisingPrice();
+    const printingCost = getPrintingCost();
+    
+    return discountedAdvertisingPrice + printingCost;
+  };
+
+  const advertisingPrice = getAdvertisingPrice();
+  const printingCost = getPrintingCost();
+  const discountedAdvertisingPrice = calculateDiscountedAdvertisingPrice();
+  const finalTotal = calculateFinalTotal();
+
+  return (
+    <div className="space-y-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-orange-500" />
+          إضافة خصم (على سعر الإعلان فقط)
+        </Label>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={discountType === "percentage" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setDiscountType("percentage")}
+            className="px-3"
+          >
+            %
+          </Button>
+          <Button
+            type="button"
+            variant={discountType === "fixed" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setDiscountType("fixed")}
+            className="px-3"
+          >
+            $
+          </Button>
+        </div>
+      </div>
+      
       <div className="flex gap-2">
+        <Input
+          type="number"
+          placeholder={discountType === "percentage" ? "نسبة الخصم" : "مبلغ الخصم"}
+          value={discount}
+          onChange={(e) => setDiscount(Number(e.target.value))}
+          min="0"
+          max={discountType === "percentage" ? "100" : undefined}
+          className="flex-1"
+        />
         <Button
-          type="button"
-          variant={discountType === "percentage" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setDiscountType("percentage")}
-          className="px-3"
+          variant="outline"
+          onClick={() => setDiscount(0)}
+          disabled={discount === 0}
+          className="px-4"
         >
-          %
-        </Button>
-        <Button
-          type="button"
-          variant={discountType === "fixed" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setDiscountType("fixed")}
-          className="px-3"
-        >
-          $
+          إلغاء
         </Button>
       </div>
+      
+      {discount > 0 && (
+        <div className="p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-yellow-200 dark:border-yellow-700 animate-in fade-in">
+          <div className="space-y-2 text-sm">
+            {/* Price Breakdown */}
+            <div className="flex justify-between items-center">
+              <span>سعر الإعلان الأصلي:</span>
+              <span className="font-medium">
+                {advertisingPrice?.toLocaleString()} $
+              </span>
+            </div>
+            
+            {printingCost > 0 && (
+              <div className="flex justify-between items-center">
+                <span>سعر الطباعة:</span>
+                <span className="font-medium">
+                  {printingCost?.toLocaleString()} $
+                </span>
+                <span className="text-xs text-gray-500">(غير مشمول في الخصم)</span>
+              </div>
+            )}
+            
+            {/* Discount Details */}
+            <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t border-dashed">
+              <span>قيمة الخصم على الإعلان:</span>
+              <span className="text-red-600 font-medium">
+                -{discountType === "percentage" ? `${discount}%` : `${discount}$`}
+                <span className="text-gray-500 text-xs mr-1">
+                  ({Math.abs(advertisingPrice - discountedAdvertisingPrice).toLocaleString()} $)
+                </span>
+              </span>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              <span>سعر الإعلان بعد الخصم:</span>
+              <span className="font-medium">
+                {discountedAdvertisingPrice?.toLocaleString()} $
+              </span>
+            </div>
+            
+            {printingCost > 0 && (
+              <div className="flex justify-between items-center">
+                <span>سعر الطباعة:</span>
+                <span className="font-medium">
+                  {printingCost?.toLocaleString()} $
+                </span>
+              </div>
+            )}
+            
+            <Separator className="my-2" />
+            
+            {/* Final Total */}
+            <div className="flex justify-between items-center text-sm pt-2">
+              <span className="font-bold">السعر النهائي:</span>
+              <span className="text-green-600 font-bold text-lg">
+                {finalTotal?.toLocaleString()} $
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-    
-    <div className="flex gap-2">
-      <Input
-        type="number"
-        placeholder={discountType === "percentage" ? "نسبة الخصم" : "مبلغ الخصم"}
-        value={discount}
-        onChange={(e) => setDiscount(Number(e.target.value))}
-        min="0"
-        max={discountType === "percentage" ? "100" : undefined}
-        className="flex-1"
-      />
-      <Button
-        variant="outline"
-        onClick={() => setDiscount(0)}
-        disabled={discount === 0}
-        className="px-4"
-      >
-        إلغاء
-      </Button>
-    </div>
-    
-    {discount > 0 && (
-      <div className="p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg border border-yellow-200 dark:border-yellow-700 animate-in fade-in">
-        <div className="flex justify-between items-center text-sm mb-1">
-          <span>السعر قبل الخصم:</span>
-          <span className="font-medium">
-            {useNewDesign && designPriceInfo 
-              ? designPriceInfo.totalPrice?.toLocaleString() 
-              : calculatedAmount?.toLocaleString()
-            } $
-          </span>
-        </div>
-        <div className="flex justify-between items-center text-sm mb-2">
-          <span>قيمة الخصم:</span>
-          <span className="text-red-600 font-medium">
-            -{discountType === "percentage" ? `${discount}%` : `${discount}$`}
-          </span>
-        </div>
-        <Separator className="my-2" />
-        <div className="flex justify-between items-center text-sm pt-2">
-          <span className="font-bold">السعر النهائي:</span>
-          <span className="text-green-600 font-bold text-lg">
-            {useNewDesign && designPriceInfo 
-              ? calculateFinalPrice(designPriceInfo.totalPrice)?.toLocaleString() 
-              : calculateFinalPrice(calculatedAmount)?.toLocaleString()
-            } $
-          </span>
-        </div>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 export default ExtendBookingForm;

@@ -45,6 +45,34 @@ const MoveSignDialog = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSignDetails, setSelectedSignDetails] = useState(null);
 
+  // Helper functions to safely extract values from objects
+  const getAreaName = (sign) => {
+    if (!sign) return 'غير محدد';
+    const area = sign.area;
+    if (typeof area === 'object' && area !== null) {
+      return area?.name || area?.arabic_name || area?.title || 'غير محدد';
+    }
+    return area || sign.region?.name || 'غير محدد';
+  };
+
+  const getCityName = (sign) => {
+    if (!sign) return 'غير محدد';
+    const city = sign.city;
+    if (typeof city === 'object' && city !== null) {
+      return city?.name || city?.arabic_name || city?.title || 'غير محدد';
+    }
+    return city || 'غير محدد';
+  };
+
+  const getRegionName = (sign) => {
+    if (!sign) return 'غير محدد';
+    const region = sign.region;
+    if (typeof region === 'object' && region !== null) {
+      return region?.name || region?.arabic_name || region?.title || 'غير محدد';
+    }
+    return region || 'غير محدد';
+  };
+
   useEffect(() => {
     if (isOpen && currentMoveSignId && booking?.roadsigns) {
       const signDetails = booking.roadsigns.find(sign => sign.id == currentMoveSignId);
@@ -126,12 +154,22 @@ const MoveSignDialog = ({
     
     const term = searchTerm.toLowerCase();
     return availableRoadSigns.filter(sign => {
+      const areaName = getAreaName(sign);
+      const cityName = getCityName(sign);
+      const regionName = getRegionName(sign);
+      
       return (
         (sign.place && sign.place.toLowerCase().includes(term)) ||
         (sign.roadsign_code && sign.roadsign_code.toLowerCase().includes(term)) ||
         (sign.directions && sign.directions.toLowerCase().includes(term)) ||
         (sign.direction && sign.direction.toLowerCase().includes(term)) ||
         (sign.template?.model && sign.template.model.toLowerCase().includes(term)) ||
+        
+        // Search in extracted names
+        (areaName && areaName.toLowerCase().includes(term)) ||
+        (cityName && cityName.toLowerCase().includes(term)) ||
+        (regionName && regionName.toLowerCase().includes(term)) ||
+        
         (sign.id && sign.id.toString().includes(term))
       );
     });
@@ -253,6 +291,11 @@ const MoveSignDialog = ({
                 <InfoField label="كود اللوحة" value={selectedSignDetails.roadsign_code || 'غير محدد'} />
                 <InfoField label="القالب" value={selectedSignDetails.template?.model || 'غير محدد'} />
                 <InfoField label="معرف القالب" value={selectedSignDetails.template?.id || 'غير محدد'} />
+                
+                {/* المدينة والمنطقة فقط */}
+                <InfoField label="المدينة" value={getCityName(selectedSignDetails)} />
+                <InfoField label="المنطقة" value={getAreaName(selectedSignDetails)} />
+                
                 <InfoField label="الاتجاه" value={selectedSignDetails.directions || selectedSignDetails.direction || 'غير محدد'} />
                 <InfoField label="الحالة" value={
                   <span className={`font-semibold ${hasActiveBookings ? 'text-green-600' : 'text-yellow-600'}`}>
@@ -321,6 +364,8 @@ const MoveSignDialog = ({
                           <th className="p-2 text-right">#</th>
                           <th className="p-2 text-right">اللوحة</th>
                           <th className="p-2 text-right">الكود</th>
+                          <th className="p-2 text-right">المدينة</th>
+                          <th className="p-2 text-right">المنطقة</th>
                           <th className="p-2 text-right">القالب</th>
                           <th className="p-2 text-right">اختيار</th>
                         </tr>
@@ -348,6 +393,11 @@ const MoveSignDialog = ({
                                 </div>
                               </td>
                               <td className="p-2">{sign.roadsign_code || `RS-${sign.id}`}</td>
+                              
+                              {/* المدينة والمنطقة فقط */}
+                              <td className="p-2">{getCityName(sign)}</td>
+                              <td className="p-2">{getAreaName(sign)}</td>
+                              
                               <td className="p-2">
                                 <Badge variant="outline" className="text-green-700 border-green-300">
                                   {sign.template?.model || 'غير محدد'}
@@ -375,13 +425,17 @@ const MoveSignDialog = ({
                           );
                         })}
                       </tbody>
+                      
+                      {filteredAvailableSigns.length === 0 && searchTerm && (
+                        <tfoot>
+                          <tr>
+                            <td colSpan="7" className="text-center p-4 text-gray-500">
+                              لا توجد نتائج للبحث "{searchTerm}"
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
-                    
-                    {filteredAvailableSigns.length === 0 && searchTerm && (
-                      <div className="text-center p-4 text-gray-500">
-                        لا توجد نتائج للبحث "{searchTerm}"
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -400,6 +454,8 @@ const MoveSignDialog = ({
                             <>
                               <div>الاسم: {selected.place || `اللوحة #${selected.id}`}</div>
                               <div>الكود: {selected.roadsign_code || `RS-${selected.id}`}</div>
+                              <div>المدينة: {getCityName(selected)}</div>
+                              <div>المنطقة: {getAreaName(selected)}</div>
                               <div>القالب: {selected.template?.model || 'غير محدد'}</div>
                               <div>الاتجاه: {selected.directions || selected.direction || 'غير محدد'}</div>
                             </>

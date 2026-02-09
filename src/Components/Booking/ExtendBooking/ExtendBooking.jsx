@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { 
   useGetOneBookingsQuery,
@@ -16,10 +16,10 @@ import BookingInfoCard from "./BookingInfoCard";
 import ExtendBookingForm from "./ExtendBookingForm";
 import PendingMovesBanner from "./PendingMovesBanner";
 import HeaderActions from "./HeaderActions";
+import MoveSignDialog from "./MoveSignDialog"; // Import MoveSignDialog
 import axios from "axios";
 import { BASE_URL } from "../../../Api/baseUrl";
 
-// FIX 1: Export the fetchPrintingTypes function
 export const fetchPrintingTypes = async () => {
   try {
     const raw = localStorage.getItem("SuperAdminInfo");
@@ -48,12 +48,18 @@ const ExtendBooking = () => {
   const [calculateReservation] = useCalculateReservationMutation();
   const [extendBooking, { isLoading: isExtending }] = useExtendBookingMutation();
   
+  // Add these 2 states for move dialog
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [currentMoveSignId, setCurrentMoveSignId] = useState(null);
+  
+  // Existing states
   const [newEndDate, setNewEndDate] = useState("");
   const [calculatedAmount, setCalculatedAmount] = useState(null);
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState("percentage");
   const [selectedRoadSigns, setSelectedRoadSigns] = useState([]);
   const [pendingMoves, setPendingMoves] = useState([]);
+  const [originalPriceDetails, setOriginalPriceDetails] = useState(null);
   
   const [useNewDesign, setUseNewDesign] = useState(false);
   const [selectedPrintingType, setSelectedPrintingType] = useState(null);
@@ -75,7 +81,12 @@ const ExtendBooking = () => {
     }
   }, [booking]);
 
-  // FIX 1: Fetch printing types
+  // Add this function for opening move dialog
+  const handleOpenMoveDialog = (signId) => {
+    setCurrentMoveSignId(signId);
+    setMoveDialogOpen(true);
+  };
+
   useEffect(() => {
     const fetchPrintTypes = async () => {
       if (useNewDesign) {
@@ -102,7 +113,6 @@ const ExtendBooking = () => {
     fetchPrintTypes();
   }, [useNewDesign]);
 
-  // FIX 1: Calculate design price
   useEffect(() => {
     if (useNewDesign && selectedPrintingType && newEndDate && selectedRoadSigns.length > 0) {
       const calculateDesignPrice = async () => {
@@ -152,6 +162,7 @@ const ExtendBooking = () => {
           const result = await calculateReservation(calculateData).unwrap();
           
           if (result?.amount?.total_price) {
+            setOriginalPriceDetails(result.amount);
             setDesignPriceInfo({
               printingCost: result.amount.printing_cost || 0,
               originalPrice: result.amount.original_price || result.amount.total_price,
@@ -161,6 +172,7 @@ const ExtendBooking = () => {
         } catch (error) {
           console.error("Error calculating design price:", error);
           setDesignPriceInfo(null);
+          setOriginalPriceDetails(null);
         }
       };
       
@@ -185,6 +197,7 @@ const ExtendBooking = () => {
       if (designPriceInfo) {
         setDesignPriceInfo(null);
       }
+      setOriginalPriceDetails(null);
       
       if (!newSelected.includes(signId)) {
         const pendingMove = getPendingMoveForSign(signId);
@@ -210,6 +223,7 @@ const ExtendBooking = () => {
       if (designPriceInfo) {
         setDesignPriceInfo(null);
       }
+      setOriginalPriceDetails(null);
     }
   };
 
@@ -224,22 +238,26 @@ const ExtendBooking = () => {
     if (designPriceInfo) {
       setDesignPriceInfo(null);
     }
+    setOriginalPriceDetails(null);
   };
 
-  const calculateFinalPrice = (price) => {
-    if (!price) return 0;
+  const calculateFinalPrice = () => {
+    if (!originalPriceDetails) return 0;
     
-    let finalPrice = price;
+    const advertisingPrice = originalPriceDetails.total_advertising_price || 0;
+    const printingPrice = originalPriceDetails.total_printing_price || 0;
+    
+    let finalAdvertisingPrice = advertisingPrice;
     
     if (discount > 0) {
       if (discountType === "percentage") {
-        finalPrice = price - (price * discount / 100);
+        finalAdvertisingPrice = advertisingPrice * (1 - discount / 100);
       } else {
-        finalPrice = price - discount;
+        finalAdvertisingPrice = advertisingPrice - discount;
       }
     }
     
-    return Math.max(0, Math.round(finalPrice));
+    return Math.max(0, finalAdvertisingPrice + printingPrice);
   };
 
   const handleRemovePendingMove = (oldSignId) => {
@@ -248,6 +266,7 @@ const ExtendBooking = () => {
     
     setCalculatedAmount(null);
     setDesignPriceInfo(null);
+    setOriginalPriceDetails(null);
   };
 
   const handleCalculatePrice = async () => {
@@ -314,6 +333,7 @@ const ExtendBooking = () => {
       
       const amount = result?.amount?.total_price;
       setCalculatedAmount(amount);
+      setOriginalPriceDetails(result?.amount || {});
       
       if (useNewDesign && result?.amount) {
         setDesignPriceInfo({
@@ -334,7 +354,6 @@ const ExtendBooking = () => {
     }
   };
 
-  // FIX 2: Complete handleExtendBooking with modal popup
   const handleExtendBooking = async () => {
     if (!newEndDate) {
       showToast("error", "يرجى اختيار تاريخ نهاية جديد");
@@ -347,9 +366,7 @@ const ExtendBooking = () => {
     }
 
     try {
-      const finalPrice = useNewDesign && designPriceInfo 
-        ? calculateFinalPrice(designPriceInfo.totalPrice)
-        : calculateFinalPrice(calculatedAmount);
+      const finalPrice = calculateFinalPrice();
 
       const currentEndDate = new Date(booking.end_date);
       const extensionStartDate = new Date(currentEndDate);
@@ -381,11 +398,10 @@ const ExtendBooking = () => {
         printing_id: useNewDesign ? selectedPrintingType : booking.printing_id,
         is_extend: !useNewDesign,
         total_price: finalPrice,
-        discount: discount > 0 ? {
-          amount: discount,
-          type: discountType,
-          original_price: calculatedAmount
-        } : null,
+        ...(discount > 0 && { 
+          discount_type: discountType === "percentage" ? 2 : 1,
+          value: discount
+        }),
         include_design_cost: useNewDesign,
         moves: pendingMoves.length > 0 ? pendingMoves.map(move => ({
           old_roadsign_id: move.oldSignId,
@@ -430,7 +446,6 @@ const ExtendBooking = () => {
       
       let errorMessage = error.data?.message || "حدث خطأ أثناء تمديد الحجز";
       
-      // FIX 2: RESTORED THE MODAL POPUP FOR UNAVAILABLE ROADSIGNS
       if (error.data?.unavailable && Array.isArray(error.data.unavailable)) {
         const unavailableItems = error.data.unavailable;
         
@@ -460,7 +475,6 @@ const ExtendBooking = () => {
         });
         
         if (unavailableDetails.length > 0) {
-          // Create the modal HTML
           let detailedMessage = `
             <div style="text-align: right; font-family: 'Cairo', Arial, sans-serif; direction: rtl;">
               <h3 style="color: #dc2626; margin-bottom: 15px; border-bottom: 2px solid #dc2626; padding-bottom: 5px;">
@@ -515,7 +529,6 @@ const ExtendBooking = () => {
             </div>
           `;
           
-          // Create and show modal
           const modal = document.createElement('div');
           modal.style.position = 'fixed';
           modal.style.top = '0';
@@ -611,6 +624,7 @@ const ExtendBooking = () => {
     
     setCalculatedAmount(null);
     setDesignPriceInfo(null);
+    setOriginalPriceDetails(null);
   };
 
   if (isLoading) {
@@ -646,6 +660,23 @@ const ExtendBooking = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* ADD MoveSignDialog component here */}
+      <MoveSignDialog
+        isOpen={moveDialogOpen}
+        onClose={() => {
+          setMoveDialogOpen(false);
+          setCurrentMoveSignId(null);
+        }}
+        booking={booking}
+        selectedRoadSigns={selectedRoadSigns}
+        allRoadSigns={allRoadSigns}
+        isRoadSignsFetching={isRoadSignsFetching}
+        currentMoveSignId={currentMoveSignId}
+        setCurrentMoveSignId={setCurrentMoveSignId}
+        onAddMove={onAddMove}
+        pendingMoves={pendingMoves}
+      />
+
       <PendingMovesBanner 
         pendingMoves={pendingMoves}
         onClearAll={() => setPendingMoves([])}
@@ -678,6 +709,7 @@ const ExtendBooking = () => {
           onToggleRoadSign={handleToggleRoadSign}
           onSelectAll={handleSelectAll}
           onDeselectAll={handleDeselectAll}
+          onOpenMoveDialog={handleOpenMoveDialog} // Pass the function here
         />
 
         <ExtendBookingForm 
@@ -701,6 +733,7 @@ const ExtendBooking = () => {
           onExtendBooking={handleExtendBooking}
           calculateFinalPrice={calculateFinalPrice}
           isExtending={isExtending}
+          originalPriceDetails={originalPriceDetails}
         />
       </div>
     </div>

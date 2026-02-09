@@ -126,7 +126,6 @@ export default function ChatInterface() {
       ...options.headers,
     };
 
-    console.log(`📤 Request to: ${fullUrl}`);
 
     try {
       const response = await fetch(fullUrl, {
@@ -260,7 +259,6 @@ export default function ChatInterface() {
       });
 
       const data: ApiResponse = await response.json();
-      console.log('✅ Chat API response:', data);
       setApiStatus('✅ تم استلام الرد من الذكاء الاصطناعي');
       
       return data;
@@ -281,14 +279,10 @@ export default function ChatInterface() {
   // أضف هذه الدالة
   const inspectCSVFile = async () => {
     try {
-      console.log('🔍 Inspecting data.csv file...');
       
       const response = await fetch('/data.csv');
       const text = await response.text();
       
-      console.log('=== FULL FILE CONTENT ===');
-      console.log(text);
-      console.log('=== END FILE CONTENT ===');
       
       // تحليل أول 3 أسطر
       const lines = text.split('\n');

@@ -41,6 +41,7 @@ export const DynamicTable = ({
   hideDeleteIcon = false,
   showTemporaryBookingIcon = false,
   isOrdersTable = false,
+  onReceipt ,
 }) => {
   const { hasPermission } = useAuth();
   const [confirmBooking, { isLoading: isConfirming }] = useConfirmBookingMutation();
@@ -87,6 +88,7 @@ export const DynamicTable = ({
                 onExchange ||
                 onExtendBooking ||
                 onStatusChange ||
+                onReceipt || 
                 showTemporaryBookingIcon) && (
                 <TableHead className="text-center min-w-[120px] sm:min-w-[150px]">
                   الإجراءات
@@ -115,6 +117,7 @@ export const DynamicTable = ({
                     onExchange ||
                     onExtendBooking ||
                     onStatusChange ||
+                    onReceipt ||
                     showTemporaryBookingIcon) && (
                     <TableCell className="text-center">
                       <div className="flex justify-end gap-2">
@@ -210,6 +213,21 @@ export const DynamicTable = ({
                               />
                             </Button>
                           )}
+
+{onReceipt && (
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={() => onReceipt(row)}
+    className="h-7 w-7 p-0 bg-teal-50 border-teal-200 hover:bg-teal-100 dark:bg-teal-900/20 dark:border-teal-800 dark:hover:bg-teal-900/40"
+    title="عرض الوصل"
+  >
+    <Icon
+      icon="mdi:receipt-text"
+      className="text-teal-600 dark:text-teal-400"
+    />
+  </Button>
+)}
 
                         {/* Confirm Booking Button - Show only for temporary bookings (type == 1) */}
                         {showTemporaryBookingIcon && row.type === 1 && (
@@ -422,6 +440,7 @@ export const DynamicTable = ({
                       onExchange ||
                       onExtendBooking ||
                       onStatusChange ||
+                      onReceipt ||
                       showTemporaryBookingIcon
                       ? 1
                       : 0)

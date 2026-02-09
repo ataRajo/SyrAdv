@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef , useCallback } from "react";
 import { 
   MapContainer, 
   TileLayer, 
@@ -46,12 +46,15 @@ function UserLocation() {
   const [userPosition, setUserPosition] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
-  const locationFoundRef = useRef(false);
-
-  const getIPBasedLocation = async () => {
+  const [hasFoundLocation, setHasFoundLocation] = useState(false);
+  const timeoutRef = useRef(null);
+  
+  const getIPBasedLocation = useCallback(async () => {
     try {
-      // استخدام خدمة موثوقة لتحديد الموقع
-      const response = await fetch('https://ipapi.co/json/');
+      const response = await fetch('https://ipapi.co/json/', {
+        signal: AbortSignal.timeout(5000)
+      });
+      
       if (response.ok) {
         const data = await response.json();
         if (data.latitude && data.longitude) {
@@ -62,8 +65,9 @@ function UserLocation() {
           
           setUserPosition(ipPosition);
           map.flyTo(ipPosition, 10);
-          setAccuracy(5000); // تقريبي
+          setAccuracy(5000);
           showToast("info", "تم تحديد موقعك تقريبياً");
+          setHasFoundLocation(true);
           return true;
         }
       }
@@ -71,28 +75,27 @@ function UserLocation() {
       console.warn("IP location failed:", error);
     }
     
-    // الموقع الافتراضي لسوريا
-    const defaultPosition = { lat: 33.5138, lng: 36.2765 }; // دمشق
-    setUserPosition(defaultPosition);
-    map.flyTo(defaultPosition, 8);
+    // الموقع الافتراضي لحلب
+    const aleppoPosition = { lat: 36.2021, lng: 37.1343 };
+    setUserPosition(aleppoPosition);
+    map.flyTo(aleppoPosition, 12);
+    setAccuracy(10000);
+    setHasFoundLocation(true);
+    
+    showToast("info", "تم التوجه إلى حلب");
     return false;
-  };
+  }, [map]);
 
-  const locateUser = () => {
+  const locateUser = useCallback(() => {
     if (isLocating) return;
+    
+    // تنظيف أي عمليات سابقة
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
     
     setIsLocating(true);
     showToast("info", "جاري تحديد موقعك...");
-
-    // محاولة الحصول على الموقع بدقة عالية
-    map.locate({
-      setView: false,
-      maxZoom: 15,
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-      watch: false
-    });
 
     const handleLocationFound = (e) => {
       console.log("موقع المستخدم:", e.latlng, "الدقة:", e.accuracy);
@@ -114,13 +117,15 @@ function UserLocation() {
       
       // إضافة دائرة توضح دقة الموقع
       if (e.accuracy < 10000) {
-        L.circle(e.latlng, {
+        const accuracyCircle = L.circle(e.latlng, {
           radius: e.accuracy,
           color: '#3b82f6',
           fillColor: '#60a5fa',
           fillOpacity: 0.15,
           weight: 1
-        }).addTo(map).bindPopup(`دقة الموقع: ${Math.round(e.accuracy)} متر`).openPopup();
+        }).addTo(map);
+        
+        accuracyCircle.bindPopup(`دقة الموقع: ${Math.round(e.accuracy)} متر`).openPopup();
       }
       
       const accuracyText = e.accuracy < 50 ? "دقيقة جداً" :
@@ -128,8 +133,18 @@ function UserLocation() {
                           e.accuracy < 1000 ? "جيدة" : "تقريبية";
       
       showToast("success", `تم تحديد موقعك (${accuracyText})`);
-      locationFoundRef.current = true;
+      setHasFoundLocation(true);
       setIsLocating(false);
+      
+      // تنظيف event listeners
+      map.off('locationfound', handleLocationFound);
+      map.off('locationerror', handleLocationError);
+      
+      // تنظيف timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
 
     const handleLocationError = (e) => {
@@ -150,38 +165,64 @@ function UserLocation() {
       
       showToast("warning", errorMessage);
       
-      // العودة إلى الموقع الافتراضي
-      setTimeout(() => {
-        getIPBasedLocation();
-        setIsLocating(false);
-      }, 1000);
+      // استخدام الموقع التقريبي
+      getIPBasedLocation();
+      
+      // تنظيف event listeners
+      map.off('locationfound', handleLocationFound);
+      map.off('locationerror', handleLocationError);
+      
+      // تنظيف timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
 
+    // إضافة event listeners
     map.on('locationfound', handleLocationFound);
     map.on('locationerror', handleLocationError);
 
-    // وقت الانتظار
-    setTimeout(() => {
-      if (!locationFoundRef.current) {
+    // محاولة تحديد الموقع
+    map.locate({
+      setView: false,
+      maxZoom: 15,
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+      watch: false
+    });
+
+    // وقت الانتظار الاحتياطي
+    timeoutRef.current = setTimeout(() => {
+      if (!hasFoundLocation) {
         getIPBasedLocation();
       }
+      map.off('locationfound', handleLocationFound);
+      map.off('locationerror', handleLocationError);
       setIsLocating(false);
     }, 11000);
 
-    return () => {
-      map.off('locationfound', handleLocationFound);
-      map.off('locationerror', handleLocationError);
-    };
-  };
+  }, [map, isLocating, hasFoundLocation, getIPBasedLocation]);
 
   useEffect(() => {
-    if (!locationFoundRef.current) {
-      locateUser();
-    }
+    // عند التحميل الأول، التوجه مباشرة إلى حلب
+    const aleppoPosition = { lat: 36.2021, lng: 37.1343 };
+    setUserPosition(aleppoPosition);
+    map.flyTo(aleppoPosition, 12);
+    setAccuracy(10000);
+    setHasFoundLocation(true);
+    
+    // تنظيف عند unmount
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
   }, [map]);
 
   const handleManualLocate = () => {
-    locationFoundRef.current = false;
+    setHasFoundLocation(false);
     locateUser();
   };
 
@@ -243,7 +284,7 @@ function UserLocation() {
             style={{
               width: '44px',
               height: '44px',
-              animation: !locationFoundRef.current ? 'pulse 1.5s infinite' : 'none'
+              animation: !hasFoundLocation ? 'pulse 1.5s infinite' : 'none'
             }}
           >
             {isLocating ? (
@@ -257,9 +298,6 @@ function UserLocation() {
     </>
   );
 }
-
-
-
 
 // Component to handle map zoom for search results
 function MapZoomToLocation({ location }) {
@@ -315,7 +353,6 @@ function MapZoomToLocation({ location }) {
   return null;
 }
 
-// Component to display road sign details in popup
 const RoadSignDetails = ({ roadSignId }) => {
   const { data: roadSignDetails, isLoading, error } = useGetRoadSignByIdQuery(roadSignId);
 
@@ -402,12 +439,15 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
+
+
         {roadSignDetails.template?.size && (
           <div className="flex items-start gap-2">
             <Ruler className="w-3 h-3 text-green-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
+                            <span className="text-xs text-gray-900 mr-1"> {roadSignDetails.template.size}</span>
+
               <span className="text-xs font-medium text-gray-700">الحجم:</span>
-              <span className="text-xs text-gray-900 mr-1"> {roadSignDetails.template.size}</span>
             </div>
           </div>
         )}
@@ -422,6 +462,16 @@ const RoadSignDetails = ({ roadSignId }) => {
                   {latestEndDate}
                 </span>
               </div>
+            </div>
+          </div>
+        )}
+
+          {roadSignDetails.directions && (
+          <div className="flex items-start gap-2">
+            <NavigationIcon className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-medium text-gray-700">الاتجاه:</span>
+              <span className="text-xs text-gray-900 mr-1"> {roadSignDetails.directions}</span>
             </div>
           </div>
         )}
@@ -445,6 +495,8 @@ const RoadSignDetails = ({ roadSignId }) => {
           </div>
         )}
 
+        
+
         {roadSignDetails.place && (
           <div className="mt-2 p-2 bg-gray-50 rounded border">
             <span className="text-xs font-medium text-gray-700 block mb-1">الموقع:</span>
@@ -454,10 +506,7 @@ const RoadSignDetails = ({ roadSignId }) => {
 
         {roadSignDetails.template?.advertising_space && (
           <div className="text-center pt-2 border-t">
-            <span className="text-xs font-medium text-gray-700 block">مساحة الإعلان</span>
-            <span className="text-sm font-semibold text-orange-600">
-              {roadSignDetails.template.advertising_space} م²
-            </span>
+           
           </div>
         )}
       </div>
@@ -1278,27 +1327,46 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
           </div>
           
           {/* Dual Face Information */}
-          {dualFaceInfo && (
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
-              <h4 className="font-bold text-sm mb-3 text-center text-blue-800">
-                ⚡ معلومات الوجهين
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div className={`text-center p-3 rounded-lg ${dualFaceInfo.currentFace.isBooked ? 'bg-red-100 border border-red-300' : 'bg-green-100 border border-green-300'}`}>
-                  <div className="font-semibold text-sm mb-1">الوجه الحالي</div>
-                  <div className="text-xs text-gray-600 mb-1">اتجاه: {dualFaceInfo.currentFace.direction || '---'}</div>
-                  <div className={`text-sm font-bold py-1 rounded ${dualFaceInfo.currentFace.isBooked ? 'text-red-700' : 'text-green-700'}`}>
-                    {dualFaceInfo.currentFace.isBooked ? '🔒 محجوز' : '🔓 متاح'}
-                  </div>
-                </div>
-                <div className={`text-center p-3 rounded-lg ${dualFaceInfo.otherFace.isBooked ? 'bg-red-100 border border-red-300' : 'bg-green-100 border border-green-300'}`}>
-                  <div className="font-semibold text-sm mb-1">الوجه الآخر</div>
-                  <div className="text-xs text-gray-600 mb-1">اتجاه: {dualFaceInfo.otherFace.direction || '---'}</div>
-                  <div className={`text-sm font-bold py-1 rounded ${dualFaceInfo.otherFace.isBooked ? 'text-red-700' : 'text-green-700'}`}>
-                    {dualFaceInfo.otherFace.isBooked ? '🔒 محجوز' : '🔓 متاح'}
-                  </div>
-                </div>
-              </div>
+ {dualFaceInfo && (
+  <div className="mt-4 p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+    <h4 className="font-bold text-sm mb-3 text-center text-blue-800">
+      ⚡ معلومات الوجهين
+    </h4>
+    <div className="grid grid-cols-2 gap-3">
+      {/* Current Face */}
+      <div className={`text-center p-3 rounded-lg ${dualFaceInfo.currentFace.isBooked ? 'bg-red-100 border border-red-300' : 'bg-green-100 border border-green-300'}`}>
+        <div className="font-semibold text-sm mb-1">الوجه الحالي</div>
+        <div className="text-xs text-gray-600 mb-1">اتجاه: {dualFaceInfo.currentFace.direction || '---'}</div>
+        
+        {/* الاتجاه for current face */}
+        {dualFaceInfo.currentFace.data?.directions && (
+          <div className="text-xs text-gray-700 mb-1">
+            <span className="font-medium">الاتجاه:</span><br/>
+            {dualFaceInfo.currentFace.data.directions}
+          </div>
+        )}
+        
+        <div className={`text-sm font-bold py-1 rounded ${dualFaceInfo.currentFace.isBooked ? 'text-red-700' : 'text-green-700'}`}>
+          {dualFaceInfo.currentFace.isBooked ? '🔒 محجوز' : '🔓 متاح'}
+        </div>
+      </div>
+      
+      <div className={`text-center p-3 rounded-lg ${dualFaceInfo.otherFace.isBooked ? 'bg-red-100 border border-red-300' : 'bg-green-100 border border-green-300'}`}>
+        <div className="font-semibold text-sm mb-1">الوجه الآخر</div>
+        <div className="text-xs text-gray-600 mb-1">اتجاه: {dualFaceInfo.otherFace.direction || '---'}</div>
+        
+        {dualFaceInfo.otherFace.data?.directions && (
+          <div className="text-xs text-gray-700 mb-1">
+            <span className="font-medium">الاتجاه:</span><br/>
+            {dualFaceInfo.otherFace.data.directions}
+          </div>
+        )}
+        
+        <div className={`text-sm font-bold py-1 rounded ${dualFaceInfo.otherFace.isBooked ? 'text-red-700' : 'text-green-700'}`}>
+          {dualFaceInfo.otherFace.isBooked ? '🔒 محجوز' : '🔓 متاح'}
+        </div>
+      </div>
+    </div>
               
               {isSpecialDualFace && (
                 <div className="mt-3 p-2 bg-amber-100 border border-amber-300 rounded text-center">
@@ -1432,5 +1500,4 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
     </div>
   );
 };
-
 export default RoadSignsMapView;

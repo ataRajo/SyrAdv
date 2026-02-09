@@ -11,7 +11,6 @@ const BookingType = {
   2: "دائم",  
 };
 
-
 const getBase64FromUrl = (url) => {
   return fetch(url)
     .then(res => res.blob())
@@ -21,9 +20,6 @@ const getBase64FromUrl = (url) => {
       reader.readAsDataURL(blob);
     }));
 };
-
-
-
 
 const ContractPage = () => {
   const contentRef = useRef(null);
@@ -38,7 +34,6 @@ const ContractPage = () => {
     const groups = {};
     
     getBooking.roadsigns.forEach(roadsign => {
-      // Create a unique key based on grouping criteria
       const key = [
         roadsign.template?.model || "غير محدد",
         roadsign.template?.type || "غير محدد",
@@ -58,11 +53,9 @@ const ContractPage = () => {
           total_faces_price: roadsign?.pivot?.total_faces_price || 0,
           count: 1,
           items: [roadsign],
-          // Get region from the first item in the group
           region_name: roadsign?.region?.name || "غير محدد"
         };
       } else {
-        // Add to existing group
         groups[key].booking_faces += roadsign?.pivot?.booking_faces || 0;
         groups[key].total_faces_price += roadsign?.pivot?.total_faces_price || 0;
         groups[key].count += 1;
@@ -70,14 +63,13 @@ const ContractPage = () => {
       }
     });
 
-    // Convert to array
     return Object.values(groups);
   }, [getBooking]);
 
   // ✅ 2. CALCULATE PRINTING TOTAL PRICE
   const printingTotalPrice = useMemo(() => {
-    if (!getBooking?.printing?.price || !getBooking?.total_printing_space) return 0;
-    return getBooking.printing.price * getBooking.total_printing_space;
+    if (!getBooking?.printing_price || !getBooking?.total_printing_space) return 0;
+    return getBooking.printing_price * getBooking.total_printing_space;
   }, [getBooking]);
 
   // ✅ 3. CALCULATE ADVERTISING PERIODS
@@ -87,14 +79,14 @@ const ContractPage = () => {
     const bookingType = getBooking.type;
     const roadsigns = getBooking.roadsigns || [];
     
-    if (bookingType === 1) { // Temporary
+    if (bookingType === 1) {
       let totalPeriods = 0;
       roadsigns.forEach(roadsign => {
         const periods = roadsign.pivot?.booking_faces || 1;
         totalPeriods += periods;
       });
       return totalPeriods;
-    } else { // Permanent
+    } else {
       return getBooking.units || 1;
     }
   }, [getBooking]);
@@ -108,16 +100,15 @@ const ContractPage = () => {
     return `${periods} فترة إعلانية`;
   }, [calculateAdvertisingPeriods]);
 
-
   // Prepare contract details
   const contractDetails = {
-      firstParty: {
-    name: getBooking?.user?.full_name || "غير محدد", // ← سيتم إزالته
-    company: getBooking?.user?.company?.name || "",
-    commercialRegister: getBooking?.user?.company?.commercial_registration_number || "غير محدد",
-    address: getBooking?.user?.address || "غير محدد", 
-    phone: getBooking?.user?.phone_number || "غير محدد",
-    role: "مدير مبيعات", // ← يمكن إزالته أيضًا
+    firstParty: {
+      name: getBooking?.user?.full_name || "غير محدد",
+      company: getBooking?.user?.company?.name || "",
+      commercialRegister: getBooking?.user?.company?.commercial_registration_number || "غير محدد",
+      address: getBooking?.user?.address || "غير محدد", 
+      phone: getBooking?.user?.phone_number || "غير محدد",
+      role: "مدير مبيعات",
     },
     secondParty: {
       name: getBooking?.customer?.full_name || "غير محدد",
@@ -139,86 +130,75 @@ const ContractPage = () => {
   const bookingTypeText = BookingType[bookingType] || "غير محدد";
 
   const formatDMY = (date) => {
-  if (!date) return "";
-  const d = new Date(date);
-  const s = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
-  // LRM قبل وبعد السلسلة ليُثبّت الاتجاه
-  return `\u200E${s}\u200E`;
-};
+    if (!date) return "";
+    const d = new Date(date);
+    const s = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+    return `\u200E${s}\u200E`;
+  };
 
+  const generateWord = async () => {
+    const element = contentRef.current;
+    if (!element) {
+      console.error("No content element found");
+      return;
+    }
 
+    const logoBase64 = await getBase64FromUrl(logo);
+    const contentClone = element.cloneNode(true);
+    const exportButtons = contentClone.querySelectorAll("button[id*='export-button']");
+    exportButtons.forEach(button => button.remove());
 
-const generateWord = async () => {
-  const element = contentRef.current;
-  if (!element) {
-    console.error("No content element found");
-    return;
-  }
+    contentClone.querySelectorAll("img").forEach(img => {
+      img.src = logoBase64;
+    });
 
-  // Convert logo to base64 so Word can display it
-  const logoBase64 = await getBase64FromUrl(logo);
+    const htmlContent = contentClone.innerHTML;
 
-  // Clone content
-  const contentClone = element.cloneNode(true);
+    const fullHtml = `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+      <meta charset="UTF-8">
+      <title>عقد إعلاني ${bookingTypeText}</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          direction: rtl;
+          text-align: right;
+          margin: 40px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12px;
+        }
+        th, td {
+          border: 1px solid #000;
+          padding: 6px;
+          text-align: center;
+        }
+        img {
+          max-width: 120px;
+          height: auto;
+        }
+      </style>
+    </head>
+    <body>
+      ${htmlContent}
+    </body>
+    </html>
+    `;
 
-  // Remove export buttons
-  const exportButtons = contentClone.querySelectorAll("button[id*='export-button']");
-  exportButtons.forEach(button => button.remove());
+    const blob = new Blob([fullHtml], { type: "application/msword" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `عقد_إعلاني_${bookingTypeText}_${new Date().toISOString().slice(0, 10)}.doc`;
 
-  // Replace all images with embedded base64
-  contentClone.querySelectorAll("img").forEach(img => {
-    img.src = logoBase64;
-  });
-
-  const htmlContent = contentClone.innerHTML;
-
-  const fullHtml = `
-  <!DOCTYPE html>
-  <html dir="rtl" lang="ar">
-  <head>
-    <meta charset="UTF-8">
-    <title>عقد إعلاني ${bookingTypeText}</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        direction: rtl;
-        text-align: right;
-        margin: 40px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-      th, td {
-        border: 1px solid #000;
-        padding: 6px;
-        text-align: center;
-      }
-      img {
-        max-width: 120px;
-        height: auto;
-      }
-    </style>
-  </head>
-  <body>
-    ${htmlContent}
-  </body>
-  </html>
-  `;
-
-  const blob = new Blob([fullHtml], { type: "application/msword" });
-
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `عقد_إعلاني_${bookingTypeText}_${new Date().toISOString().slice(0, 10)}.doc`;
-
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(link.href);
-
-};
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  };
 
   const generatePdf = () => {
     const element = contentRef.current;
@@ -246,7 +226,6 @@ const generateWord = async () => {
           );
         },
         onclone: (document) => {
-          // Hide all export buttons during PDF generation
           const exportButtons = document.querySelectorAll("button[id*='export-button']");
           exportButtons.forEach(button => {
             button.style.display = "none";
@@ -298,80 +277,89 @@ const generateWord = async () => {
     return <div className="text-center mt-5">لا توجد بيانات للعقد</div>;
   }
 
+  // ✅ تحديد متى نخفي سعر الطباعة - الشرط الجديد: إذا كان printing_price > 0 نظهر
+  const showPrintingPrice = getBooking?.printing_price > 0;
+
   // ✅ COMMON TABLE ROWS
-  const CommonTableRows = () => (
-    <>
-      <tr>
-        <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-          قيمة الفترات الاعلانية    
-        </th>
-        <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
-      </tr>
-      
-    {getBooking?.printing_price && getBooking?.total_printing_space && (
-  <tr>
-    <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-      سعر الطباعة ({getBooking.printing_price}$ × {getBooking.total_printing_space} م²)
-    </th>
-    <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
-  </tr>
-      )}
-      
-      {getBooking?.value && (
+  const CommonTableRows = () => {
+    return (
+      <>
         <tr>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-            الحسم المقدم من الشركة السورية   
+            قيمة الفترات الاعلانية    
           </th>
-          <td style={styles.adTableThTd}>
-            {getBooking.discount_type === 1 ? (
-              <span>{getBooking.value} $ </span>
-            ) : (
-              <span>{getBooking.value} %</span>
-            )}
-          </td>
+          <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
         </tr>
-      )}
-      
-      <tr>
-        <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-          القيمة الكلية للعقد
-        </th>
-        <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
-      </tr>
-    </>
-  );
+        
+        {/* ✅ نخبّي سعر الطباعة إذا كان printing_price > 0 */}
+        {showPrintingPrice && getBooking?.total_printing_space && (
+          <tr>
+            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+              سعر الطباعة ({getBooking.printing_price}$ × {getBooking.total_printing_space} م²)
+            </th>
+            <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
+          </tr>
+        )}
+        
+        {getBooking?.value && (
+          <tr>
+            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+              الحسم المقدم من الشركة السورية   
+            </th>
+            <td style={styles.adTableThTd}>
+              {getBooking.discount_type === 1 ? (
+                <span>{getBooking.value} $ </span>
+              ) : (
+                <span>{getBooking.value} %</span>
+              )}
+            </td>
+          </tr>
+        )}
+        
+        <tr>
+          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+            القيمة الكلية للعقد
+          </th>
+          <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
+        </tr>
+      </>
+    );
+  };
 
   // ✅ COMMON PRINTING INFO
-  const CommonPrintingInfo = () => (
-    <div style={{ margin: "20px 0" }}>
-      <strong>
-        - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
-      </strong>
-      {getBooking?.groupedTemplates?.map((tem, ind) => (
-        <div key={ind}>
-          <p>
-            العدد الكلي لنموذج {tem?.model} بعدد{" "}
-            <span>{tem?.total_faces} وجه إعلاني</span>
-          </p>
+  const CommonPrintingInfo = () => {
+    return (
+      <div style={{ margin: "20px 0" }}>
+        <strong>
+          - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
+        </strong>
+        {getBooking?.groupedTemplates?.map((tem, ind) => (
+          <div key={ind}>
+            <p>
+              العدد الكلي لنموذج {tem?.model} بعدد{" "}
+              <span>{tem?.total_faces} وجه إعلاني</span>
+            </p>
+          </div>
+        ))}
+
+        <p>مدة الدورة الاعلانية الواحدة هي 14 يوم </p>
+
+        <div>
+          إجمالي الأمتار الطباعية : {getBooking?.total_printing_space} م²
         </div>
-      ))}
-
-      <p>مدة الدورة الاعلانية الواحدة هي 14 يوم </p>
-
-      <div>
-        إجمالي الأمتار الطباعية : {getBooking?.total_printing_space} م²
+        
+        {/* ✅ نخبّي ملاحظة سعر الطباعة إذا كان printing_price > 0 */}
+        {showPrintingPrice && getBooking?.printing?.price && getBooking?.total_printing_space && (
+          <div style={{ marginTop: "10px", padding: "8px", backgroundColor: "#f0f8ff", border: "1px solid #d1e7ff" }}>
+            <small>
+              <strong>ملاحظة:</strong> سعر الطباعة محسوب كالتالي: 
+              {getBooking.printing_price}$ (سعر المتر) × {getBooking.total_printing_space} م² (إجمالي المساحة) = {printingTotalPrice}$
+            </small>
+          </div>
+        )}
       </div>
-      
-      {getBooking?.printing?.price && getBooking?.total_printing_space && (
-        <div style={{ marginTop: "10px", padding: "8px", backgroundColor: "#f0f8ff", border: "1px solid #d1e7ff" }}>
-          <small>
-            <strong>ملاحظة:</strong> سعر الطباعة محسوب كالتالي: 
-            {getBooking.printing.price}$ (سعر المتر) × {getBooking.total_printing_space} م² (إجمالي المساحة) = {printingTotalPrice}$
-          </small>
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
 
   // ✅ COMMON TABLE ROW FOR GROUPED ROADSIGNS - UPDATED TO INCLUDE REGION
   const GroupedRoadsignsTable = () => (
@@ -396,9 +384,6 @@ const generateWord = async () => {
             <td style={styles.adTableThTd}>{group.template_type}</td>
             <td style={styles.adTableThTd}>
               {group.region_name}
-              {/* You can also show city if needed:
-              {group.items[0]?.city?.name && ` - ${group.items[0].city.name}`}
-              */}
             </td>
             <td style={styles.adTableThTd}>{group.place}</td>
             <td style={styles.adTableThTd}>{group.directions}</td>
@@ -445,13 +430,13 @@ const generateWord = async () => {
       </div>
 
       <div style={styles.partiesInfo}>
-       <div style={styles.party}>
-  <strong style={styles.partyH2}>الطرف الأول:</strong>
- الشركة السورية للاعلان المسجلة بالسجل التجاري رقم{" "}
-  20895
-  و المتخذة عنوانا - {contractDetails.firstParty.address} - هاتف :{" "}
-  {contractDetails.firstParty.phone}
-</div>
+        <div style={styles.party}>
+          <strong style={styles.partyH2}>الطرف الأول:</strong>
+          الشركة السورية للاعلان المسجلة بالسجل التجاري رقم{" "}
+          20895
+          و المتخذة عنوانا - {contractDetails.firstParty.address} - هاتف :{" "}
+          {contractDetails.firstParty.phone}
+        </div>
 
         <div style={styles.party}>
           <strong style={styles.partyH2}>الطرف الثاني:</strong> شركة{" "}
@@ -525,21 +510,19 @@ const generateWord = async () => {
       </div>
 
       {/* Dates section */}
-  <div style={{ margin: "20px 0" }}>
-  <strong>
-    - تبدأ الحملة الإعلانية بتاريخ{" "}
-    {new Date(getBooking?.start_date).getFullYear()}
-    {new Date(getBooking?.start_date).getMonth() + 1}-
-    {new Date(getBooking?.start_date).getDate()}-
+      <div style={{ margin: "20px 0" }}>
+        <strong>
+          - تبدأ الحملة الإعلانية بتاريخ{" "}
+          {new Date(getBooking?.start_date).getFullYear()}-
+          {new Date(getBooking?.start_date).getMonth() + 1}-
+          {new Date(getBooking?.start_date).getDate()}
 
-    {" "}و تنتهي بتاريخ{" "}
-    {new Date(getBooking?.end_date).getFullYear()}
-    {new Date(getBooking?.end_date).getMonth() + 1}-
-    {new Date(getBooking?.end_date).getDate()}-
-
-  </strong>
-</div>
-
+          {" "}و تنتهي بتاريخ{" "}
+          {new Date(getBooking?.end_date).getFullYear()}-
+          {new Date(getBooking?.end_date).getMonth() + 1}-
+          {new Date(getBooking?.end_date).getDate()}
+        </strong>
+      </div>
 
       {/* Signatures */}
       <div style={styles.signatures}>
@@ -568,17 +551,13 @@ const generateWord = async () => {
       </div>
 
       <div style={styles.partiesInfo}>
-       <div style={styles.party}>
-  <strong style={styles.partyH2}>الطرف الأول:</strong>
-  الشركة السورية للاعلان المسجلة بالسجل التجاري رقم{" "}
-  20895 
-  و المتخذة عنوانا - 
-{/*
-  {contractDetails.firstParty.phone}
-- هاتف 
-*/ }
-  {contractDetails.firstParty.address} {" "}
-</div>
+        <div style={styles.party}>
+          <strong style={styles.partyH2}>الطرف الأول:</strong>
+          الشركة السورية للاعلان المسجلة بالسجل التجاري رقم{" "}
+          20895 
+          و المتخذة عنوانا - 
+          {contractDetails.firstParty.address}
+        </div>
 
         <div style={styles.party}>
           <strong style={styles.partyH2}>الطرف الثاني:</strong> شركة{" "}
@@ -643,19 +622,18 @@ const generateWord = async () => {
 
       {/* Dates section */}
       <div style={{ margin: "20px 0" }}>
-       <strong>
-  - تبدأ الحملة الإعلانية بتاريخ{" "}
-  {new Date(getBooking?.start_date).getFullYear()} 
-  -{new Date(getBooking?.start_date).getMonth() + 1}-
-  {new Date(getBooking?.start_date).getDate()}
-  
-  و  تنتهي بتاريخ   {" "} 
+        <strong>
+          - تبدأ الحملة الإعلانية بتاريخ{" "}
+          {new Date(getBooking?.start_date).getFullYear()} 
+          -{new Date(getBooking?.start_date).getMonth() + 1}-
+          {new Date(getBooking?.start_date).getDate()}
+          
+          و  تنتهي بتاريخ   {" "} 
 
-  {new Date(getBooking?.end_date).getFullYear()}-
-  {new Date(getBooking?.end_date).getMonth() + 1}-
-  {new Date(getBooking?.end_date).getDate()}
-
-</strong>
+          {new Date(getBooking?.end_date).getFullYear()}-
+          {new Date(getBooking?.end_date).getMonth() + 1}-
+          {new Date(getBooking?.end_date).getDate()}
+        </strong>
       </div>
 
       {/* Signatures */}
@@ -664,12 +642,8 @@ const generateWord = async () => {
           <h3 style={styles.signaturePartyH3}>
             {contractDetails.firstParty.company}
           </h3>
-                    <p>الشركة السورية للاعلان</p>
-
-
-
+          <p>الشركة السورية للاعلان</p>
           <p>الفريق الأول : قسم المبيعات </p>
-          
         </div>
         <div style={styles.signatureParty}>
           <h3 style={styles.signaturePartyH3}>

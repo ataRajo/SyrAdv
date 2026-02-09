@@ -76,22 +76,26 @@ const CustomerInfo = () => {
     openAddPayment
   } = useCustomers({refetch , id});
 
-  // Calculate booking totals for display
-  const totalBookingAmount = customer?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_price) || 0), 0) || 0;
 
-  const totalAdvertisingSpace = customer?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_advertising_space) || 0), 0) || 0;
+const totalBookingAmount = customer?.total || 0; // Get from backend
 
-  const totalPrintingSpace = customer?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_printing_space) || 0), 0) || 0;
+
+
+const totalPrintingSpace = customer?.bookings?.reduce((sum, booking) => {
+  if (customer.type === 1) {
+    return sum; // Don't add to total
+  }
+  return sum + (parseFloat(booking.total_printing_space) || 0);
+}, 0) || 0;
+
+
 
   const formatCurrency = (val) => {
     if (val == null || isNaN(Number(val))) return "0.00 $";
     return Number(val).toFixed(2) + " $";
   };
 
- const exportToWord = () => {
+const exportToWord = () => {
   if (!customer) return;
   
   const customerData = customer;
@@ -102,13 +106,18 @@ const CustomerInfo = () => {
     weekday: 'long'
   });
 
-  // Calculate totals
   const totalPayments = customerData?.payments?.length || 0;
-  const totalPaidAmount = customerData?.payments?.reduce((sum, p) => sum + (parseFloat(p.paid) || 0), 0) || 0;
-  const totalBookingAmount = customerData?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_price) || 0), 0) || 0;
+  const totalPaidAmount = customerData?.total_paid || 0;
+  const totalBookingAmount = customerData?.total || 0;
+  const remainingBalance = customerData?.remaining || 0;
+  
+  const actualTotalBookings = customerData?.bookings?.reduce((sum, booking) => {
+    if (customerData.type === 1) {
+      return sum;
+    }
+    return sum + (parseFloat(booking.total_price) || 0);
+  }, 0) || 0;
 
-  // Create HTML content for Word - REMOVED المبلغ المتبقي and المبلغ الكلي
   const htmlContent = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -117,99 +126,194 @@ const CustomerInfo = () => {
 <title>كشف حساب الزبون - ${customerData.full_name}</title>
 <meta name="description" content="كشف حساب مفصل للزبون">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
-    font-family: 'Arial', sans-serif;
+    font-family: 'Amiri', serif;
     direction: rtl;
-    text-align: right;
-    margin: 2cm;
-    line-height: 1.5;
+    line-height: 1.6;
+    color: #333;
+    padding: 20px;
+    background-color: #fff;
+}
+
+.print-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    border: 3px solid #1e40af;
+    border-radius: 15px;
+    padding: 30px;
+    background-color: #fff;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
 
 .header {
     text-align: center;
-    margin-bottom: 30px;
-    border-bottom: 2px solid #000;
-    padding-bottom: 20px;
+    margin-bottom: 40px;
+    padding-bottom: 25px;
+    border-bottom: 4px solid #1e40af;
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 35px;
 }
 
 .header h1 {
-    font-size: 24pt;
-    margin: 0;
-    color: #2c3e50;
+    font-size: 36px;
+    margin-bottom: 15px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
 
 .header p {
-    font-size: 12pt;
-    margin: 5px 0;
-    color: #555;
+    font-size: 18px;
+    opacity: 0.95;
+    margin-top: 10px;
 }
 
-.customer-info {
+.customer-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
     margin: 30px 0;
-    border: 1px solid #ddd;
+    background-color: #f8fafc;
+    padding: 25px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+}
+
+.customer-basic-info, .customer-contact-info {
     padding: 20px;
-    background-color: #f9f9f9;
 }
 
 .info-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 10px;
-    padding: 5px 0;
-    border-bottom: 1px dashed #eee;
+    margin-bottom: 12px;
+    padding: 10px;
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #f1f5f9;
 }
 
 .info-label {
     font-weight: bold;
-    color: #333;
-    min-width: 150px;
+    color: #4b5563;
+    font-size: 16px;
 }
 
 .info-value {
-    color: #555;
+    color: #1f2937;
+    font-weight: 600;
+    font-size: 16px;
     text-align: left;
 }
 
-.section-title {
-    font-size: 16pt;
-    color: #1e40af;
-    margin: 30px 0 15px 0;
+.financial-summary {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    padding: 25px;
+    border-radius: 12px;
+    border: 2px solid #0ea5e9;
+    margin: 30px 0;
+}
+
+.financial-summary h3 {
+    font-size: 24px;
+    color: #0369a1;
+    margin-bottom: 20px;
+    text-align: center;
+    border-bottom: 2px solid #0ea5e9;
     padding-bottom: 10px;
-    border-bottom: 2px solid #1e40af;
-    page-break-before: always;
+}
+
+.financial-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.financial-item {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.financial-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1e40af;
+    margin: 10px 0;
+}
+
+.financial-label {
+    font-size: 16px;
+    color: #4b5563;
+    font-weight: 600;
+}
+
+.remaining-amount {
+    font-size: 28px;
+    font-weight: bold;
+    color: ${remainingBalance > 0 ? '#dc2626' : '#16a34a'};
+    margin: 10px 0;
+}
+
+.section-title {
+    font-size: 26px;
+    color: #1e40af;
+    margin: 40px 0 25px 0;
+    padding-bottom: 15px;
+    border-bottom: 3px solid #e5e7eb;
+    text-align: center;
+}
+
+.payments-section, .bookings-section, .discounts-section {
+    margin-bottom: 40px;
+    padding: 25px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    border: 1px solid #e5e7eb;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
     margin: 20px 0;
-    font-size: 11pt;
-    page-break-inside: avoid;
 }
 
 table th {
-    background-color: #1e40af;
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
     color: white;
-    padding: 12px;
+    padding: 18px;
     text-align: center;
     font-weight: bold;
-    border: 1px solid #ddd;
+    font-size: 18px;
+    border: none;
 }
 
 table td {
-    padding: 10px;
+    padding: 15px;
     text-align: center;
-    border: 1px solid #ddd;
+    border: 1px solid #e5e7eb;
+    font-size: 16px;
 }
 
 table tr:nth-child(even) {
-    background-color: #f8f9fa;
+    background-color: #f8fafc;
 }
 
 .amount-cell {
     font-weight: bold;
     color: #1e40af;
-    text-align: left;
     direction: ltr;
 }
 
@@ -217,238 +321,343 @@ table tr:nth-child(even) {
     background-color: #1e40af !important;
     color: white !important;
     font-weight: bold;
-    font-size: 12pt;
+    font-size: 18px;
 }
 
-.total-row td {
-    color: white !important;
+.no-data {
+    text-align: center;
+    padding: 30px;
+    color: #6b7280;
+    font-size: 18px;
+    font-style: italic;
 }
 
 .summary-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-    margin: 20px 0;
-    padding: 15px;
-    background-color: #f1f5f9;
-    border: 1px solid #ddd;
+    gap: 20px;
+    margin: 30px 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
 }
 
 .summary-item {
     text-align: center;
-    padding: 10px;
+    padding: 15px;
 }
 
 .summary-value {
-    font-size: 14pt;
+    font-size: 24px;
     font-weight: bold;
     color: #1e40af;
-    margin: 5px 0;
+    margin: 10px 0;
 }
 
 .summary-label {
-    font-size: 10pt;
-    color: #666;
+    font-size: 14px;
+    color: #6b7280;
 }
 
 .footer {
-    margin-top: 40px;
-    padding-top: 20px;
-    border-top: 1px solid #ddd;
+    margin-top: 50px;
+    padding-top: 25px;
+    border-top: 2px solid #e5e7eb;
     text-align: center;
-    color: #666;
-    font-size: 10pt;
+    color: #6b7280;
+    font-size: 14px;
+    background-color: #f8fafc;
+    padding: 25px;
+    border-radius: 12px;
 }
 
-.page-break {
-    page-break-before: always;
+.temporary-contract-note {
+    background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
+    border: 2px solid #f59e0b;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.temporary-contract-note h4 {
+    color: #92400e;
+    font-size: 20px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.temporary-contract-note p {
+    color: #78350f;
+    line-height: 1.8;
+}
+
+.highlight {
+    background-color: #fef3c7;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
 }
 
 @media print {
     body {
-        margin: 1cm;
+        padding: 0;
+    }
+    
+    .print-container {
+        border: none;
+        padding: 0;
+        box-shadow: none;
     }
     
     .no-print {
         display: none;
     }
     
-    .page-break {
-        page-break-before: always;
+    table {
+        page-break-inside: avoid;
     }
 }
 </style>
 </head>
 <body>
-<div class="header">
-    <h1>كشف حساب الزبون</h1>
-    <p>${customerData.full_name}</p>
-    <p>تاريخ الإصدار: ${currentDate}</p>
-    <p>نظام إدارة العملاء - Syrian Advertising</p>
-</div>
-
-<div class="customer-info">
-    <div class="info-row">
-        <span class="info-label">اسم الشركة:</span>
-        <span class="info-value">${customerData.company_name || "غير محدد"}</span>
+<div class="print-container">
+    <div class="header">
+        <h1>كشف حساب الزبون</h1>
+        <p>${customerData.full_name}</p>
+        <p>تاريخ الإصدار: ${currentDate}</p>
     </div>
-    <div class="info-row">
-        <span class="info-label">رقم الهاتف:</span>
-        <span class="info-value">${customerData.phone_number || "غير محدد"}</span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">البريد الإلكتروني:</span>
-        <span class="info-value">${customerData.email || "غير محدد"}</span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">رقم السجل التجاري:</span>
-        <span class="info-value">${customerData.commercial_registration_number || "غير محدد"}</span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">العنوان:</span>
-        <span class="info-value">${customerData.address || "غير محدد"}</span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">تاريخ الإنشاء:</span>
-        <span class="info-value">${new Date(customerData.created_at).toLocaleDateString('ar-EG')}</span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">كود الزبون:</span>
-        <span class="info-value">${customerData.id || "غير محدد"}</span>
-    </div>
-</div>
-
-<h2 class="section-title">تفاصيل المدفوعات</h2>
-
-${customerData?.payments && customerData.payments.length > 0 ? `
-    <div class="summary-row">
-        <div class="summary-item">
-            <div class="summary-value">${totalPayments}</div>
-            <div class="summary-label">عدد المدفوعات</div>
+    
+    <div class="customer-header">
+        <div class="customer-basic-info">
+            <div class="info-row">
+                <span class="info-label">اسم الشركة:</span>
+                <span class="info-value">${customerData.company_name || "غير محدد"}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">رقم الهاتف:</span>
+                <span class="info-value">${customerData.phone_number || "غير محدد"}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">البريد الإلكتروني:</span>
+                <span class="info-value">${customerData.email || "غير محدد"}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">رقم السجل التجاري:</span>
+                <span class="info-value">${customerData.commercial_registration_number || "غير محدد"}</span>
+            </div>
         </div>
-        <div class="summary-item">
-            <div class="summary-value">${totalPaidAmount.toFixed(2)} $</div>
-            <div class="summary-label">مجموع المدفوع</div>
+        
+        <div class="customer-contact-info">
+            <div class="info-row">
+                <span class="info-label">العنوان:</span>
+                <span class="info-value">${customerData.address || "غير محدد"}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">تاريخ الإنشاء:</span>
+                <span class="info-value">${new Date(customerData.created_at).toLocaleDateString('ar-EG')}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">آخر تحديث:</span>
+                <span class="info-value">${new Date(customerData.updated_at).toLocaleDateString('ar-EG')}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">كود الزبون:</span>
+                <span class="info-value">${customerData.id || "غير محدد"}</span>
+            </div>
         </div>
     </div>
     
-    <table>
-        <thead>
-            <tr>
-                <th>رقم الدفعة</th>
-                <th>المبلغ المدفوع</th>
-                <th>تاريخ الدفع</th>
-                <th>الموظف</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${customerData.payments.map(payment => `
-                <tr>
-                    <td>${payment.payment_number || "غير محدد"}</td>
-                    <td class="amount-cell">${parseFloat(payment.paid || 0).toFixed(2)} $</td>
-                    <td>${payment.date || "غير محدد"}</td>
-                    <td>${payment.user?.full_name || "غير محدد"}</td>
-                </tr>
-            `).join('')}
-        </tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td colspan="2"><strong>الإجمالي:</strong></td>
-                <td class="amount-cell"><strong>${totalPaidAmount.toFixed(2)} $</strong></td>
-                <td></td>
-            </tr>
-        </tfoot>
-    </table>
-` : `
-    <div style="text-align: center; padding: 20px; color: #666; font-style: italic;">
-        لا توجد مدفوعات مسجلة لهذا الزبون
-    </div>
-`}
-
-<div class="page-break"></div>
-
-<h2 class="section-title">تفاصيل الحجوزات</h2>
-
-${customerData?.bookings && customerData.bookings.length > 0 ? `
-    <div class="summary-row">
-        <div class="summary-item">
-            <div class="summary-value">${customerData.bookings.length}</div>
-            <div class="summary-label">عدد الحجوزات</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-value">${totalBookingAmount.toFixed(2)} $</div>
-            <div class="summary-label">إجمالي الحجوزات</div>
+    <div class="financial-summary">
+        <h3>📊 الملخص المالي</h3>
+        <div class="financial-grid">
+            <div class="financial-item">
+                <div class="financial-label">إجمالي الحجوزات</div>
+                <div class="financial-value">${totalBookingAmount.toFixed(2)} $</div>
+            </div>
+            <div class="financial-item">
+                <div class="financial-label">إجمالي المدفوعات</div>
+                <div class="financial-value">${totalPaidAmount.toFixed(2)} $</div>
+            </div>
+            <div class="financial-item">
+                <div class="financial-label">المبلغ المتبقي</div>
+                <div class="remaining-amount">${remainingBalance.toFixed(2)} $</div>
+                <div style="font-size: 12px; color: ${remainingBalance > 0 ? '#dc2626' : '#16a34a'};">
+                    ${remainingBalance > 0 ? 'مدين' : 'دائن'}
+                </div>
+            </div>
         </div>
     </div>
     
-    <table>
-        <thead>
-            <tr>
-                <th>رقم الحجز</th>
-                <th>تاريخ البدء</th>
-                <th>تاريخ الانتهاء</th>
-                <th>المدة (أيام)</th>
-                <th>الإجمالي ($)</th>
-                <th>الحالة</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${customerData.bookings.map(booking => {
-                const startDate = new Date(booking.start_date);
-                const endDate = new Date(booking.end_date);
-                const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-                const total = parseFloat(booking.total_price) || 0;
-                
-                return `
+    <div class="payments-section">
+        <h2 class="section-title">تفاصيل المدفوعات</h2>
+        
+        ${
+          customerData?.payments && customerData.payments.length > 0 
+            ? `
+            <div class="summary-row">
+                <div class="summary-item">
+                    <div class="summary-value">${totalPayments}</div>
+                    <div class="summary-label">عدد المدفوعات</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${totalPaidAmount.toFixed(2)} $</div>
+                    <div class="summary-label">مجموع المدفوع</div>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
                     <tr>
-                        <td>${booking.id || "غير محدد"}</td>
-                        <td>${booking.start_date ? new Date(booking.start_date).toLocaleDateString('ar-EG') : "غير محدد"}</td>
-                        <td>${booking.end_date ? new Date(booking.end_date).toLocaleDateString('ar-EG') : "غير محدد"}</td>
-                        <td>${duration}</td>
-                        <td class="amount-cell">${total.toFixed(2)} $</td>
-                        <td>${booking.approvement_status === 2 ? 'مقبول' : 'قيد الانتظار'}</td>
+                        <th>رقم الدفعة</th>
+                        <th>المبلغ المدفوع</th>
+                        <th>تاريخ الدفع</th>
+                        <th>الموظف</th>
                     </tr>
-                `;
-            }).join('')}
-        </tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td colspan="4"><strong>الإجمالي:</strong></td>
-                <td class="amount-cell"><strong>${totalBookingAmount.toFixed(2)} $</strong></td>
-                <td><strong>${customerData.bookings.length} حجز</strong></td>
-            </tr>
-        </tfoot>
-    </table>
-` : `
-    <div style="text-align: center; padding: 20px; color: #666; font-style: italic;">
-        لا توجد حجوزات مسجلة لهذا الزبون
+                </thead>
+                <tbody>
+                    ${customerData.payments.map(payment => `
+                        <tr>
+                            <td>${payment.payment_number || payment.id}</td>
+                            <td class="amount-cell">${parseFloat(payment.paid || 0).toFixed(2)} $</td>
+                            <td>${payment.date || new Date(payment.created_at).toLocaleDateString('ar-EG')}</td>
+                            <td>${payment.user?.full_name || "غير محدد"}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2"><strong>الإجمالي:</strong></td>
+                        <td class="amount-cell"><strong>${totalPaidAmount.toFixed(2)} $</strong></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+            `
+            : `
+            <div class="no-data">
+                <p>لا توجد مدفوعات مسجلة لهذا الزبون</p>
+            </div>
+            `
+        }
     </div>
-`}
-
-<div class="footer">
-    <p>نظام إدارة العملاء - Syrian Advertising</p>
-    <p>تم الإنشاء آلياً بتاريخ ${currentDate}</p>
-    <p>رقم الزبون: ${customerData.id} | التاريخ: ${currentDate}</p>
+    
+    <div style="margin: 50px 0; height: 4px; background: linear-gradient(90deg, transparent, #1e40af, transparent); border-radius: 2px;"></div>
+    
+    <div class="bookings-section">
+        <h2 class="section-title">تفاصيل الحجوزات</h2>
+        
+        ${
+          customerData?.bookings && customerData.bookings.length > 0 
+            ? `
+            <div class="summary-row">
+                <div class="summary-item">
+                    <div class="summary-value">${customerData.bookings.filter(b => b.type !== 1).length
+}</div>
+                    <div class="summary-label">عدد الحجوزات</div>
+                </div>
+                <div class="summary-item">
+                    
+                    <div class="summary-label">${customerData.type === 1 ? '' : 'إجمالي الحجوزات'}</div>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>رقم الحجز</th>
+                        <th>تاريخ البدء</th>
+                        <th>تاريخ الانتهاء</th>
+                        <th>المدة (أيام)</th>
+                        <th>السعر ($)</th>
+                        <th>النوع</th>
+                        <th>الحالة</th>
+                    </tr>
+                </thead>
+                <tbody>
+${customerData.bookings
+  .filter(booking => booking.type !== 1)
+  .map(booking => {
+                        const startDate = new Date(booking.start_date);
+                        const endDate = new Date(booking.end_date);
+                        const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+                        
+                        return `
+                            <tr>
+                                <td>${booking.id}</td>
+                                <td>${startDate.toLocaleDateString('ar-EG')}</td>
+                                <td>${endDate.toLocaleDateString('ar-EG')}</td>
+                                <td>${duration} يوم</td>
+                                <td class="amount-cell">${(booking.total_price || 0).toFixed(2)} $</td>
+                                <td>
+                                    <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; ${
+                                      booking.type === 1 
+                                        ? 'background-color: #fef3c7; color: #92400e;' 
+                                        : 'background-color: #dbeafe; color: #1e40af;'
+                                    }">
+                                        ${booking.type === 1 ? 'مؤقت' : 'دائم'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; ${
+                                      booking.approvement_status === 2 
+                                        ? 'background-color: #d1fae5; color: #065f46;' 
+                                        : 'background-color: #fef3c7; color: #92400e;'
+                                    }">
+                                        ${booking.approvement_status === 2 ? 'مقبول' : 'قيد الانتظار'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="4"><strong>الإجمالي:</strong></td>
+                        <td class="amount-cell">
+                            <strong>${
+                              customerData.type === 1 
+                                ? actualTotalBookings.toFixed(2) 
+                                : totalBookingAmount.toFixed(2)
+                            } $</strong>
+                        </td>
+                        <td colspan="2"><strong>${customerData.bookings.filter(b => b.type !== 1).length
+} حجز</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+            `
+            : `
+            <div class="no-data">
+                <p>لا توجد حجوزات مسجلة لهذا الزبون</p>
+            </div>
+            `
+        }
+    </div>
+    
+    <div class="footer">
+        <p>نظام إدارة العملاء - Syrian Advertising</p>
+        <p>تم الإنشاء آلياً بتاريخ ${currentDate}</p>
+        <p>رقم الزبون: ${customerData.id} | التاريخ: ${currentDate}</p>
+    </div>
 </div>
 </body>
 </html>`;
 
-    // Create a Blob with the HTML content
     const blob = new Blob([htmlContent], { type: 'application/msword' });
     
-    // Create download link
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `كشف_حساب_${customerData.full_name}_${new Date().toISOString().split('T')[0]}.doc`;
     
-    // Trigger download
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    // Clean up
     URL.revokeObjectURL(link.href);
-  };
+};
 
 const printCustomerSummaryReport = () => {
   if (!customer) return;
@@ -461,29 +670,17 @@ const printCustomerSummaryReport = () => {
     weekday: 'long'
   });
 
-  const formatCurrency = (val) => {
-    if (val == null || isNaN(Number(val))) return "0.00 $";
-    return Number(val).toFixed(2) + " $";
-  };
-
-  // Calculate totals
   const totalPayments = customerData?.payments?.length || 0;
-  const totalPaidAmount = customerData?.payments?.reduce((sum, p) => sum + (parseFloat(p.paid) || 0), 0) || 0;
-  
-  // Calculate total bookings amount
-  const totalBookingAmount = customerData?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_price) || 0), 0) || 0;
-  
-  // Get the remaining balance (this should come from your API)
+  const totalPaidAmount = customerData?.total_paid || 0;
+  const totalBookingAmount = customerData?.total || 0;
   const remainingBalance = customerData?.remaining || 0;
-
-  // Calculate total advertising space
-  const totalAdvertisingSpace = customerData?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_advertising_space) || 0), 0) || 0;
   
-  // Calculate total printing space
-  const totalPrintingSpace = customerData?.bookings?.reduce((sum, booking) => 
-    sum + (parseFloat(booking.total_printing_space) || 0), 0) || 0;
+  const actualTotalBookings = customerData?.bookings?.reduce((sum, booking) => {
+    if (customerData.type === 1) {
+      return sum;
+    }
+    return sum + (parseFloat(booking.total_price) || 0);
+  }, 0) || 0;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -739,6 +936,35 @@ const printCustomerSummaryReport = () => {
       border-radius: 12px;
     }
     
+    .temporary-contract-note {
+      background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
+      border: 2px solid #f59e0b;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    
+    .temporary-contract-note h4 {
+      color: #92400e;
+      font-size: 20px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .temporary-contract-note p {
+      color: #78350f;
+      line-height: 1.8;
+    }
+    
+    .highlight {
+      background-color: #fef3c7;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    
     @media print {
       body {
         padding: 0;
@@ -825,138 +1051,147 @@ const printCustomerSummaryReport = () => {
       </div>
     </div>
     
-    <!-- Financial Summary Section -->
     <div class="financial-summary">
       <h3>📊 الملخص المالي</h3>
       <div class="financial-grid">
         <div class="financial-item">
           <div class="financial-label">إجمالي الحجوزات</div>
-          <div class="financial-value">${formatCurrency(totalBookingAmount)}</div>
+          <div class="financial-value">${totalBookingAmount.toFixed(2)} $</div>
         </div>
         <div class="financial-item">
           <div class="financial-label">إجمالي المدفوعات</div>
-          <div class="financial-value">${formatCurrency(totalPaidAmount)}</div>
+          <div class="financial-value">${totalPaidAmount.toFixed(2)} $</div>
         </div>
         <div class="financial-item">
           <div class="financial-label">المبلغ المتبقي</div>
-          <div class="remaining-amount">${formatCurrency(remainingBalance)}</div>
+          <div class="remaining-amount">${remainingBalance.toFixed(2)} $</div>
           <div style="font-size: 12px; color: ${remainingBalance > 0 ? '#dc2626' : '#16a34a'};">
             ${remainingBalance > 0 ? 'مدين' : 'دائن'}
           </div>
         </div>
       </div>
+    </div>
     
-    <!-- المدفوعات -->
     <div class="payments-section">
       <h2 class="section-title">تفاصيل المدفوعات</h2>
       
-      ${customerData?.payments && customerData.payments.length > 0 ? `
-        <div class="summary-row">
-          <div class="summary-item">
-            <div class="summary-value">${totalPayments}</div>
-            <div class="summary-label">عدد المدفوعات</div>
+      ${
+        customerData?.payments && customerData.payments.length > 0 
+          ? `
+          <div class="summary-row">
+            <div class="summary-item">
+              <div class="summary-value">${totalPayments}</div>
+              <div class="summary-label">عدد المدفوعات</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-value">${totalPaidAmount.toFixed(2)} $</div>
+              <div class="summary-label">مجموع المدفوع</div>
+            </div>
           </div>
-          <div class="summary-item">
-            <div class="summary-value">${formatCurrency(totalPaidAmount)}</div>
-            <div class="summary-label">مجموع المدفوع</div>
-          </div>
-        </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>رقم الدفعة</th>
-              <th>المبلغ المدفوع</th>
-              <th>تاريخ الدفع</th>
-              <th>الموظف</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${customerData.payments.map(payment => `
+          
+          <table>
+            <thead>
               <tr>
-                <td>${payment.payment_number || "غير محدد"}</td>
-                <td class="amount-cell">${parseFloat(payment.paid || 0).toFixed(2)} $</td>
-                <td>${payment.date || "غير محدد"}</td>
-                <td>${payment.user?.full_name || "غير محدد"}</td>
+                <th>رقم الدفعة</th>
+                <th>المبلغ المدفوع</th>
+                <th>تاريخ الدفع</th>
+                <th>الموظف</th>
               </tr>
-            `).join('')}
-          </tbody>
-          <tfoot>
-            <tr class="total-row">
-              <td colspan="2"><strong>الإجمالي:</strong></td>
-              <td class="amount-cell"><strong>${totalPaidAmount.toFixed(2)} $</strong></td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-      ` : `
-        <div class="no-data">
-          <p>لا توجد مدفوعات مسجلة لهذا الزبون</p>
-        </div>
-      `}
+            </thead>
+            <tbody>
+              ${customerData.payments.map(payment => `
+                <tr>
+                  <td>${payment.payment_number || payment.id}</td>
+                  <td class="amount-cell">${parseFloat(payment.paid || 0).toFixed(2)} $</td>
+                  <td>${payment.date || new Date(payment.created_at).toLocaleDateString('ar-EG')}</td>
+                  <td>${payment.user?.full_name || "غير محدد"}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td colspan="2"><strong>الإجمالي:</strong></td>
+                <td class="amount-cell"><strong>${totalPaidAmount.toFixed(2)} $</strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          `
+          : `
+          <div class="no-data">
+            <p>لا توجد مدفوعات مسجلة لهذا الزبون</p>
+          </div>
+          `
+      }
     </div>
     
-    <!-- فاصل بين القسمين -->
     <div style="margin: 50px 0; height: 4px; background: linear-gradient(90deg, transparent, #1e40af, transparent); border-radius: 2px;"></div>
     
-    <!-- الحجوزات -->
     <div class="bookings-section">
       <h2 class="section-title">تفاصيل الحجوزات</h2>
       
-      ${customerData?.bookings && customerData.bookings.length > 0 ? `
-        <div class="summary-row">
-          <div class="summary-item">
-            <div class="summary-value">${customerData.bookings.length}</div>
-            <div class="summary-label">عدد الحجوزات</div>
+      ${
+        customerData?.bookings && customerData.bookings.length > 0 
+          ? `
+          <div class="summary-row">
+            <div class="summary-item">
+              <div class="summary-value">${customerData.bookings.filter(b => b.type !== 1).length
+}</div>
+              <div class="summary-label">عدد الحجوزات</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-value">${totalBookingAmount.toFixed(2)} $</div>
+              <div class="summary-label">إجمالي الحجوزات</div>
+            </div>
           </div>
-          <div class="summary-item">
-            <div class="summary-value">${formatCurrency(totalBookingAmount)}</div>
-            <div class="summary-label">إجمالي الحجوزات</div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>رقم الحجز</th>
+                <th>تاريخ البدء</th>
+                <th>تاريخ الانتهاء</th>
+                <th>المدة (أيام)</th>
+                <th>السعر ($)</th>
+                <th>النوع</th>
+              </tr>
+            </thead>
+            <tbody>
+${customerData.bookings
+  .filter(booking => booking.type !== 1)
+  .map(booking => {
+                const startDate = new Date(booking.start_date);
+                const endDate = new Date(booking.end_date);
+                const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+                
+                return `
+                  <tr>
+                    <td>${booking.id}</td>
+                    <td>${startDate.toLocaleDateString('ar-EG')}</td>
+                    <td>${endDate.toLocaleDateString('ar-EG')}</td>
+                    <td>${duration} يوم</td>
+                    <td class="amount-cell">${(booking.total_price || 0).toFixed(2)} $</td>
+                    <td>
+                      <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; ${
+                        booking.type === 1 
+                          ? 'background-color: #fef3c7; color: #92400e;' 
+                          : 'background-color: #dbeafe; color: #1e40af;'
+                      }">
+                        ${booking.type === 1 ? 'مؤقت' : 'دائم'}
+                      </span>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          `
+          : `
+          <div class="no-data">
+            <p>لا توجد حجوزات مسجلة لهذا الزبون</p>
           </div>
-        </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>رقم الحجز</th>
-              <th>العنوان</th>
-              <th>تاريخ البدء</th>
-              <th>تاريخ الانتهاء</th>
-              <th>الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${customerData.bookings.map(booking => {
-              const address = booking.customer?.address || 
-                             booking.customer_address || 
-                             customerData.address || 
-                             "غير محدد";
-              const total = booking.total_price || 0;
-              
-              return `
-                <tr>
-                  <td>${booking.id || "غير محدد"}</td>
-                  <td>${address}</td>
-                  <td>${booking.start_date ? new Date(booking.start_date).toLocaleDateString('ar-EG') : "غير محدد"}</td>
-                  <td>${booking.end_date ? new Date(booking.end_date).toLocaleDateString('ar-EG') : "غير محدد"}</td>
-                  <td class="amount-cell">${total.toFixed(2)} $</td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-          <tfoot>
-            <tr class="total-row">
-              <td colspan="4"><strong>الإجمالي:</strong></td>
-              <td class="amount-cell"><strong>${totalBookingAmount.toFixed(2)} $</strong></td>
-              <td><strong>${customerData.bookings.length} حجز</strong></td>
-            </tr>
-          </tfoot>
-        </table>
-      ` : `
-        <div class="no-data">
-          <p>لا توجد حجوزات مسجلة لهذا الزبون</p>
-        </div>
-      `}
+          `
+      }
     </div>
     
     <div class="footer">
@@ -1051,7 +1286,10 @@ const printCustomerSummaryReport = () => {
               </Button>
             )}
 
-            {hasPermission(Permissions.EditCustomers) && (
+
+{/*
+
+       {hasPermission(Permissions.EditCustomers) && (
               <Button
                 onClick={() => setIsAddDiscountDialogOpen(true)}
                 variant="outline"
@@ -1062,6 +1300,11 @@ const printCustomerSummaryReport = () => {
                 <span className="text-xs sm:text-sm text-green-600 dark:text-green-400">حسم</span>
               </Button>
             )}
+
+*/}
+
+
+     
 
             <Button
               onClick={() => setShowBooking((prev) => !prev)}
@@ -1087,7 +1330,10 @@ const printCustomerSummaryReport = () => {
               <span className="text-xs sm:text-sm">{showPayments ? "إخفاء" : " عرض الدفعات"}</span>
             </Button>
 
-            <Button
+{/*
+
+
+           <Button
               onClick={() => setShowDiscounts((prev) => !prev)}
               className="gap-1 sm:gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
               size="sm"
@@ -1096,8 +1342,13 @@ const printCustomerSummaryReport = () => {
                 icon={showDiscounts ? "mdi:eye-off" : "mdi:eye"} 
                 className="text-base sm:text-lg" 
               />
-              <span className="text-xs sm:text-sm">{showDiscounts ? "إخفاء" : "عرض الخصومات"}</span>
+              <span className="text-xs sm:text-sm">{showDiscounts ? "إخفاء" : " "}</span>
             </Button>
+
+*/}
+
+
+ 
 
             {hasPermission(Permissions.DeleteCustomers) && (
               <Button
@@ -1212,46 +1463,69 @@ const printCustomerSummaryReport = () => {
                 </div>
               </CardContent>
             </Card>
-            {/* Financial Summary Section */}
 
-            <Card className="border border-green-200 dark:border-green-700 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-              <CardContent className="p-4 sm:p-6">
-                <h3 className="text-lg font-semibold mb-4 text-green-700 dark:text-green-300 flex items-center gap-2">
-                  <Icon icon="mdi:finance" className="text-xl" />
-                  الملخص المالي
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                 
-                 {/* إجمالي المستحق */}
+         {/* Financial Summary Section - Add the customer's total */}
+<Card className="border border-green-200 dark:border-green-700 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+  <CardContent className="p-4 sm:p-6">
+    <h3 className="text-lg font-semibold mb-4 text-green-700 dark:text-green-300 flex items-center gap-2">
+      <Icon icon="mdi:finance" className="text-xl" />
+      الملخص المالي
+    </h3>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    {/*
+    
+  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+          {customer?.total?.toFixed(2) || "0.00"} $
+        </div>
+       
+        
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          إجمالي المستحق
+        </div>
+      </div>
+
+    */}
+
+
+    
+      
+
+{/* In bookings summary section */}
+
+{/* In bookings summary section */}
 <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-    {((customer?.total_paid || 0) + (customer?.remaining || 0)).toFixed(2)} $
+    {formatCurrency(customer?.total || 0)}  {/* ← Use backend total */}
   </div>
   <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-    إجمالي المستحق
+    إجمالي الحجوزات
+
   </div>
 </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {customer?.total_paid?.toFixed(2) || "0.00"} $
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      إجمالي المدفوع
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-                    <div className={`text-2xl font-bold ${
-                      customer?.remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
-                    }`}>
-                      {customer?.remaining?.toFixed(2) || "0.00"} $
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      الرصيد المتبقي
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+      
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+          {customer?.total_paid?.toFixed(2) || "0.00"} $
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          إجمالي المدفوع
+        </div>
+      </div>
+      
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+        <div className={`text-2xl font-bold ${
+          customer?.remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+        }`}>
+          {customer?.remaining?.toFixed(2) || "0.00"} $
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          الرصيد المتبقي
+        </div>
+      </div>
+    </div>
+  </CardContent>
+</Card>
 
 {/* Payments Summary */}
 <Card className="border border-blue-200 dark:border-blue-700">
@@ -1359,168 +1633,162 @@ const printCustomerSummaryReport = () => {
   </CardContent>
 </Card>
 
-            {/* Bookings Summary Section */}
-            <Card className="border border-purple-200 dark:border-purple-700 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20">
-              <CardContent className="p-4 sm:p-6">
-                <h3 className="text-lg font-semibold mb-4 text-purple-700 dark:text-purple-300 flex items-center gap-2">
-                  <Icon icon="mdi:calendar-check" className="text-xl" />
-                  ملخص الحجوزات
-                </h3>
-                
-                {/* Bookings Summary Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                      {customer?.bookings?.length || 0}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      عدد الحجوزات
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {formatCurrency(totalBookingAmount)}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      إجمالي الحجوزات
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {totalAdvertisingSpace?.toFixed(2)} م²
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      المساحة الإعلانية
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                      {totalPrintingSpace?.toFixed(2)} م²
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      المساحة الطباعية
-                    </div>
-                  </div>
-                </div>
+          <Card className="border border-purple-200 dark:border-purple-700 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20">
+  <CardContent className="p-4 sm:p-6">
+    <h3 className="text-lg font-semibold mb-4 text-purple-700 dark:text-purple-300 flex items-center gap-2">
+      <Icon icon="mdi:calendar-check" className="text-xl" />
+      ملخص الحجوزات
+     
+    </h3>
+    
+{/* Add a note if customer type is 1 */}
+{customer.type === 1 && (
+    <div className="flex items-center gap-2">
+      <Icon icon="mdi:information" className="text-yellow-600 dark:text-yellow-400" />
+    </div>
+   
+)}
+    
+    {/* Bookings Summary Stats */}
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+        <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+          {customer?.bookings?.length || 0}
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          عدد الحجوزات
+        </div>
+      </div>
+     
+        {/*
+         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+          {formatCurrency(totalBookingAmount)}
+        </div>
+         <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          إجمالي الحجوزات
+          {customer.type === 1 && (
+            <div className="text-xs text-red-500 mt-1">
+              (غير محسوب للعقود المؤقتة)
+            </div>
+          )}
+        </div>
+      </div>
 
-                {/* Bookings Table */}
-                {customer?.bookings && customer.bookings.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
-                      <thead>
-                        <tr className="bg-purple-100 dark:bg-purple-900/50">
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            رقم الحجز
-                          </th>
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            تاريخ البدء
-                          </th>
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            تاريخ الانتهاء
-                          </th>
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            المدة (أيام)
-                          </th>
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            المساحة (م²)
-                          </th>
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            السعر ($)
-                          </th>
-                          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
-                            الحالة
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {customer.bookings.map((booking, index) => {
-                          const startDate = new Date(booking.start_date);
-                          const endDate = new Date(booking.end_date);
-                          const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-                          
-                          return (
-                            <tr 
-                              key={booking.id} 
-                              className={index % 2 === 0 ? "bg-gray-50 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}
-                            >
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center font-semibold text-gray-800 dark:text-gray-200">
-                                #{booking.id}
-                              </td>
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">
-                                {startDate.toLocaleDateString('ar-EG')}
-                              </td>
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">
-                                {endDate.toLocaleDateString('ar-EG')}
-                              </td>
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                  {duration} يوم
-                                </span>
-                              </td>
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                                <div className="space-y-1">
-                                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                                    إعلانية: {booking.total_advertising_space || 0} م²
-                                  </div>
-                                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                                    طباعية: {booking.total_printing_space || 0} م²
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                                <span className="font-bold text-green-600 dark:text-green-400">
-                                  {booking.total_price?.toFixed(2)} $
-                                </span>
-                              </td>
-                              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                  booking.approvement_status === 2 
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                }`}>
-                                  {booking.approvement_status === 2 ? 'مقبول' : 'قيد الانتظار'}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      {/* Footer with totals */}
-                      <tfoot>
-                        <tr className="bg-purple-50 dark:bg-purple-900/30 font-bold">
-                          <td colSpan="4" className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300">
-                            الإجمالي
-                          </td>
-                          <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                            <div className="space-y-1">
-                              <div className="text-sm">
-                                {totalAdvertisingSpace?.toFixed(2)} م²
-                              </div>
-                              <div className="text-sm">
-                                {totalPrintingSpace?.toFixed(2)} م²
-                              </div>
-                            </div>
-                          </td>
-                          <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                            <span className="text-green-600 dark:text-green-400">
-                              {totalBookingAmount?.toFixed(2)} $
-                            </span>
-                          </td>
-                          <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
-                            {customer.bookings.length} حجز
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400 italic">
-                    <Icon icon="mdi:calendar-remove" className="text-4xl mx-auto mb-3 text-gray-400" />
-                    <p>لا توجد حجوزات مسجلة لهذا الزبون</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        */ }
+       
+        
+        {/*
+        
+        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+          {totalAdvertisingSpace?.toFixed(2)} م²
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          المساحة الإعلانية
+        </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
+        <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+          {totalPrintingSpace?.toFixed(2)} م²
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          المساحة الطباعية
+        </div>
+      </div>
+        */}
+        
+    
+    </div>
+
+   {customer?.bookings && customer.bookings.length > 0 ? (
+  <div className="overflow-x-auto">
+    <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
+      <thead>
+        <tr className="bg-purple-100 dark:bg-purple-900/50">
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            رقم الحجز
+          </th>
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            تاريخ البدء
+          </th>
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            تاريخ الانتهاء
+          </th>
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            المدة (أيام)
+          </th>
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            السعر ($)
+          </th>
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            النوع
+          </th>
+          <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-purple-700 dark:text-purple-300 font-semibold">
+            الحالة
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {customer.bookings.map((booking, index) => {
+          const startDate = new Date(booking.start_date);
+          const endDate = new Date(booking.end_date);
+          const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+          
+          return (
+            <tr 
+              key={booking.id} 
+              className={index % 2 === 0 ? "bg-gray-50 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}
+            >
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center font-semibold text-gray-800 dark:text-gray-200">
+                #{booking.id}
+              </td>
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">
+                {startDate.toLocaleDateString('ar-EG')}
+              </td>
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">
+                {endDate.toLocaleDateString('ar-EG')}
+              </td>
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                  {duration} يوم
+                </span>
+              </td>
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                <span className="font-bold text-green-600 dark:text-green-400">
+                  {booking.total_price?.toFixed(2)} $
+                </span>
+              </td>
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  booking.type === 1 
+                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                }`}>
+                  {booking.type === 1 ? 'مؤقت' : 'دائم'}
+                </span>
+              </td>
+              <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  booking.approvement_status === 2 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                }`}>
+                  {booking.approvement_status === 2 ? 'مقبول' : 'قيد الانتظار'}
+                </span>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+    ) : (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400 italic">
+        <Icon icon="mdi:calendar-remove" className="text-4xl mx-auto mb-3 text-gray-400" />
+        <p>لا توجد حجوزات مسجلة لهذا الزبون</p>
+      </div>
+    )}
+  </CardContent>
+</Card>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t mt-6">
