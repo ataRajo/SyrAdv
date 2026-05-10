@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Eye, DownloadCloud } from "lucide-react";
+import { Eye, DownloadCloud, MapPin, Navigation } from "lucide-react";
 
 export const OrdersColumns = [
   {
@@ -42,16 +42,60 @@ export const OrdersColumns = [
     ),
   },
   {
+    header: "الموقع التفصيلي",
+    accessor: "road_sign.place",
+    className: "min-w-[150px]",
+    priority: 2,
+    format: (value, row) => {
+      const place = row.road_sign?.place;
+      return (
+        <div className="flex items-start gap-1">
+          <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+          <span className="text-sm text-gray-500 line-clamp-2" title={place}>
+            {place || "غير محدد"}
+          </span>
+        </div>
+      );
+    },
+  },
+  {
+    header: "الاتجاهات",
+    accessor: "road_sign.directions",
+    className: "min-w-[150px]",
+    priority: 2,
+    format: (value, row) => {
+      const directions = row.road_sign?.directions;
+      return (
+        <div className="flex items-start gap-1">
+          <Navigation className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+          <span className="text-sm text-gray-500 line-clamp-2" title={directions}>
+            {directions || "غير محددة"}
+          </span>
+        </div>
+      );
+    },
+  },
+
+  {
     header: "كود اللوحة",
     accessor: "road_sign.roadsign_code",
     prefixIcon: "mdi:numeric",
     className: "min-w-[120px]",
     priority: 3,
-    format: (value) => (
-      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 font-mono">
-        {value || "غير محدد"}
-      </span>
-    ),
+    format: (value, row) => {
+      const code = row.road_sign?.roadsign_code;
+      const direction = row.road_sign?.direction_code;
+      return (
+        <div className="flex flex-col">
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 font-mono">
+            {code || "غير محدد"}
+          </span>
+          {direction && (
+            <span className="text-xs text-gray-500 mt-1">الاتجاه: {direction}</span>
+          )}
+        </div>
+      );
+    },
   },
   {
     header: "نوع الطلب",

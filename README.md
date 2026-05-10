@@ -110,9 +110,16 @@ also seperate 1 huge component into several components to make it maintainable a
 - **Purpose**: Contract extension management
 - **Integration**: Icon-based actions within DynamicTable
 
+
 #### **PrintPrice.jsx**
 - **Purpose**: Price calculation and printing
 - **Features**: Dedicated API integration for pricing
+  
+  
+  ### paymentsContainer : 
+  - we add the handle recipt function to display the invoice dynamiclly and we add in the header sth like 
+  Accept : */* that accept all the files type
+
 
 #### **ChatInterface.jsx**
 - **Location**: `LandingPage/` folder

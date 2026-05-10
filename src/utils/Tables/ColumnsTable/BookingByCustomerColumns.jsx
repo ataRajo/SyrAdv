@@ -1,4 +1,6 @@
 import { BookingType } from "../../../Static/StaticData";
+import {BookingDetailsButton} from "../../../utils/Tables/ColumnsTable/BookingColumns"  
+
 
 export const BookingCustomerColumns = [
   {
@@ -27,36 +29,12 @@ export const BookingCustomerColumns = [
     className: "min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
     priority: 6,
   },
-  {
-    header: "القيمة قبل الحسم",
-    accessor: "total_price_befor_discount",
-    format: (value) => parseFloat(value).toFixed(2),
 
-    prefixIcon: "mdi:currency-usd",
-    className: "min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
-    priority: 6,
-  },
   {
-    header: "الحسم",
-    accessor: "value",
-    format: (value, row) => {
-      if (row?.discount_type === 1) {
-        return `${value}$`;
-      } else if (row?.discount_type === 2) {
-        return `${value}%`;
-      }
-      return value;
-    },
-    prefixIcon: "mdi:percent",
-    className: "min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
-    priority: 6,
-  },
-  {
-    header: "القيمة بعد الحسم",
-    accessor: "total_price",
-    format: (value) => parseFloat(value).toFixed(2),
-    prefixIcon: "mdi:currency-usd",
-    className: "min-w-[80px] sm:min-w-[100px] md:min-w-[120px]",
-    priority: 6,
+    header: "تفاصيل الحجز",
+    accessor: "id",
+    // Passing the row's booking ID straight into your custom Button component
+    cell: ({ row }) => <BookingDetailsButton bookingId={row.id || row.original?.id} />,
+    className: "min-w-[100px]",
   },
 ];

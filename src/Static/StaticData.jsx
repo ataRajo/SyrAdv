@@ -7,7 +7,10 @@ import {
   IconTemplate,
   IconRoad,
   IconReceipt , 
-  
+  IconChartBar,
+  IconChartInfographic,
+  IconDeviceDesktopAnalytics,
+  IconFlag  ,
 } from "@tabler/icons-react";
 
 export const BookingType = {
@@ -156,6 +159,34 @@ export const navLinkSidebar = [
     icon: IconReceipt, 
     permission: Permissions.ViewRegions, 
   },
+
+  {
+    title: "نسبة الاشغالية العامة",
+    url: "/dashboard/Statistics",
+    icon: IconChartBar, 
+    permission: Permissions.ViewRegions, 
+  },
+
+  {
+    title: "الاحصائيات العامة والخاصة",
+    url: "/dashboard/precentage",
+    icon: IconChartInfographic, 
+    permission: Permissions.ViewRegions, 
+  },
+  {
+    title: "الشاشات الرقمية",
+    url: "/dashboard/digital-screens",
+    icon: IconDeviceDesktopAnalytics, 
+    permission: Permissions.ViewRegions, 
+  },
+ 
+    {
+    title: "الحملات",
+    url: "/dashboard/campaigns",
+    icon: IconFlag, 
+    permission: Permissions.ViewRegions, 
+  },
+
 ];
 
 export const navLinksAdministrationPage = [
@@ -209,7 +240,32 @@ export const navLinksAdministrationPage = [
     mobileText: "الوسيط ",
     permission: Permissions.ViewBrokers,
   },
+
+  /*
   
+    {
+    to: "Ai",
+    text: "  المساعد الذكي",
+    mobileText: "المساعد الذكي ",
+    permission: Permissions.ViewBrokers,
+  },
+  */
+
+  /*
+    to: "Ai",
+    text: "تواصل مع العملاء",
+    mobileText: " تواصل مع العملاء ",
+    permission: Permissions.ViewBrokers,
+  },
+  
+  /*
+    to: "Ai",
+    text: "تواصل مع العملاء",
+    mobileText: " تواصل مع العملاء ",
+    permission: Permissions.ViewBrokers,
+  },
+/*
+
   /*
   {
     to: "notifications",

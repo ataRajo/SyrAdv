@@ -44,7 +44,6 @@ const RoadSignInfo = ({ roadSignId }) => {
           <InfoItem label="الموديل" value={roadSign.template?.model} />
           <InfoItem label="النوع" value={roadSign.template?.type} />
           <InfoItem label="الحجم" value={roadSign.template?.size} />
-          <InfoItem label="المساحة الإعلانية" value={`${roadSign.template?.advertising_space} m²`} />
           <InfoItem label="المساحة الطباعية" value={`${roadSign.template?.printing_space} m²`} />
         </div>
 
@@ -91,7 +90,6 @@ const RoadSignInfo = ({ roadSignId }) => {
         </div>
       )}
 
-      {/* If no bookings, show availability message */}
       {isAvailable && (
         <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
           <div className="flex items-center">
@@ -106,7 +104,6 @@ const RoadSignInfo = ({ roadSignId }) => {
         </div>
       )}
 
-      {/* Coordinates */}
       <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <InfoItem label="خط العرض" value={roadSign.latitudeX} />
@@ -114,7 +111,6 @@ const RoadSignInfo = ({ roadSignId }) => {
         </div>
       </div>
 
-      {/* Image */}
       {roadSign.image && (
         <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
           <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">صورة اللوحة</h4>
@@ -126,7 +122,6 @@ const RoadSignInfo = ({ roadSignId }) => {
         </div>
       )}
 
-      {/* Debug info - Simple */}
       <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
         <p><strong>منطق التوفر:</strong> {isAvailable ? 'متاحة (bookings array is empty)' : 'محجوزة (bookings array has items)'}</p>
         <p><strong>عدد الحجوزات:</strong> {roadSign.bookings?.length || 0}</p>

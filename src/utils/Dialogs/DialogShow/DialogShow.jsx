@@ -12,6 +12,7 @@ import { Icon } from '@iconify/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useNavigate } from 'react-router';
 
 const defaultImage = 'https://road.levantmenu.ae/storage/default.png';
 
@@ -26,6 +27,24 @@ const getImageUrl = (image) => {
 
   return `https://road.levantmenu.ae/storage/${image}`;
 };
+
+
+const renderValue = (field, value) => {
+  if (field.isImage && value) {
+    return (
+      <img 
+        src={value} 
+        alt={field.label}
+        className="max-w-full max-h-64 object-contain rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+        onClick={() => window.open(value, '_blank')}
+      />
+    );
+  }
+  return value || "غير متوفر";
+};
+
+
+
 
 const getNestedValue = (obj, path) => {
   if (!obj || !path) return undefined;
@@ -150,6 +169,11 @@ const DialogShow = ({
   loading,
 }) => {
   const imageUrl = getImageUrl(data?.image);
+  const navigate = useNavigate(); // Move navigate here
+
+
+ 
+
 
   return (
     <Dialog open={show} onOpenChange={handleClose}>
@@ -198,7 +222,7 @@ const DialogShow = ({
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Activities List */}
                 <div className="space-y-4">
                   {data.map((item, index) => {
@@ -212,7 +236,7 @@ const DialogShow = ({
                         className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-lg transition-all duration-200"
                       >
                         {/* Activity Header */}
-                        <div className={`p-4 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-${activityColor}-50 to-white dark:from-${activityColor}-900/10 dark:to-gray-800/50`}>
+                        <div className={`p-4 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r   dark:from-${activityColor}-900/10 dark:to-gray-800/50`}>
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3 flex-1">
                               <div className={`p-2 rounded-lg bg-${activityColor}-100 dark:bg-${activityColor}-900/30`}>
@@ -223,9 +247,10 @@ const DialogShow = ({
                               </div>
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">
-                                    {parsedActivity.title}
-                                  </h4>
+
+<h4 className="font-semibold text-gray-900 dark:text-gray-100">
+  {parsedActivity.title}
+</h4>
                                   <Badge 
                                     variant="outline" 
                                     className={`text-${activityColor}-600 dark:text-${activityColor}-400 border-${activityColor}-200 dark:border-${activityColor}-800`}
@@ -236,6 +261,17 @@ const DialogShow = ({
                                     {parsedActivity.type === 'login' && 'تسجيل دخول'}
                                     {parsedActivity.type === 'read' && 'قراءة'}
                                   </Badge>
+
+                                  {item.activable_id && (
+  <Badge 
+    variant="secondary" 
+    className="mr-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+  >
+    <Icon icon="mdi:identifier" className="ml-1 h-3 w-3" />
+    ID: {item.activable_id}
+  </Badge>
+)}
+
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
                                   <div className="flex items-center gap-1">
@@ -354,6 +390,60 @@ const DialogShow = ({
                                 </p>
                               </div>
                             </details>
+
+<div className="flex items-center gap-2 mt-3">
+  {item.activable_type && item.activable_id && (
+    (() => {
+      // Map activable_type to navigation path
+      const typeMap = {
+        'App\\Models\\Booking': { path: '/dashboard/bookings', label: 'حجز', icon: 'mdi:calendar' },
+        'App\\Models\\Payment': { path: '/dashboard/payments', label: 'دفعة', icon: 'mdi:cash' },
+        'App\\Models\\Customer': { path: '/dashboard/customers', label: 'عميل', icon: 'mdi:account-group' },
+        'App\\Models\\User': { path: '/dashboard/users', label: 'مستخدم', icon: 'mdi:account' },
+        'App\\Models\\RoadSign': { path: '/dashboard/road_signs', label: 'لوحة', icon: 'mdi:billboard' },
+        'App\\Models\\Template': { path: '/dashboard/templates', label: 'قالب', icon: 'mdi:file-document' },
+      };
+      
+      const mapping = typeMap[item.activable_type];
+      
+      if (mapping) {
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:border-blue-800 dark:text-blue-300"
+            onClick={() => {
+              // For payments: navigate to list page, for others: navigate to detail page
+              if (item.activable_type === 'App\\Models\\Payment') {
+                navigate(mapping.path);
+              } else {
+                navigate(`${mapping.path}/${item.activable_id}`);
+              }
+            }}
+          >
+            <Icon icon={mapping.icon} className="ml-1 h-3 w-3" />
+            {mapping.label} #{item.activable_id}
+          </Button>
+        );
+      }
+      
+      // Fallback for unknown types
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs bg-gray-50 hover:bg-gray-100 border-gray-200 text-gray-700"
+          onClick={() => console.log('Unknown type:', item.activable_type, 'ID:', item.activable_id)}
+        >
+          <Icon icon="mdi:link-variant" className="ml-1 h-3 w-3" />
+          عرض #{item.activable_id}
+        </Button>
+      );
+    })()
+  )}
+</div>
+
+
                           </div>
                         </div>
                       </div>
@@ -455,12 +545,18 @@ const DialogShow = ({
                                 {field.label}
                               </p>
                               <p className="text-base font-semibold text-gray-900 dark:text-gray-100 break-words">
-                                {field.format && value !== undefined && value !== null
-                                  ? field.format(value)
-                                  : value !== undefined && value !== null
-                                  ? String(value)
-                                  : <span className="text-gray-400 dark:text-gray-500">غير محدد</span>}
-                              </p>
+  {value !== undefined && value !== null ? (
+    field.isImage ? (
+      renderValue(field, value)
+    ) : field.format ? (
+      field.format(value)
+    ) : (
+      String(value)
+    )
+  ) : (
+    <span className="text-gray-400 dark:text-gray-500">غير محدد</span>
+  )}
+</p>
                             </div>
                           </div>
                         );
@@ -500,7 +596,7 @@ const DialogShow = ({
                               </div>
                               <div>
                                 <p className="font-semibold text-gray-900 dark:text-gray-100">
-                                  {booking.customer?.full_name || "عميل غير معروف"}
+                                  {booking.customer?.company_name || "عميل غير معروف"}
                                 </p>
                                 <div className="flex items-center gap-4 mt-2">
                                   {booking.start_date && (

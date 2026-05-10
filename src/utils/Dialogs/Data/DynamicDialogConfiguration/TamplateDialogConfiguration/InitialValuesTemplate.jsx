@@ -1,3 +1,4 @@
+
 export const TemplateInitialValues = {
   model: "",
   type: "",
@@ -5,6 +6,7 @@ export const TemplateInitialValues = {
   color:"",
   faces_number:"",
   advertising_space: "",
+  display_type: "physical",
   printing_space: "",
   image:null,
   products: [

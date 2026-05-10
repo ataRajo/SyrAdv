@@ -54,4 +54,6 @@ export const TemplateValidationSchema = Yup.object({
     .length(3, "يجب إدخال أسعار لجميع أنواع المنتجات الثلاثة")
     .required("حقل أسعار المنتجات مطلوب"),
   image: imageFileTest,
+  display_type: Yup.string().required("نوع العرض مطلوب"),
+
 });

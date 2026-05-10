@@ -170,9 +170,24 @@ body::-webkit-scrollbar-thumb , .dialog-content::-webkit-scrollbar-thumb{
   }
 }
 
-main{
- width: calc(100% - 256px) !important;
+main {
+  width: calc(100% - 256px) !important;
 }
+
+/* Tablet and mobile */
+@media (max-width: 1024px) {
+  main {
+    width: 100% !important;
+  }
+}
+
+/* Small tablets and large phones */
+@media (max-width: 768px) {
+  main {
+    width: 100% !important;
+  }
+}
+
 
 .table-cell{
   display: flex !important;
@@ -228,3 +243,4 @@ td div{
   box-shadow: 0 4px 18px rgba(0,0,0,0.10);
   transform: translateY(-1px);
 }
+

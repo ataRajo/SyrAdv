@@ -7,4 +7,5 @@ export const userInitialValues = {
   address: "",
   email: "",
   roles: "",
+  department: "", 
 };

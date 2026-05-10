@@ -94,7 +94,6 @@ const totalPrintingSpace = customer?.bookings?.reduce((sum, booking) => {
     if (val == null || isNaN(Number(val))) return "0.00 $";
     return Number(val).toFixed(2) + " $";
   };
-
 const exportToWord = () => {
   if (!customer) return;
   
@@ -158,8 +157,7 @@ body {
     margin-bottom: 40px;
     padding-bottom: 25px;
     border-bottom: 4px solid #1e40af;
-    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-    color: white;
+    color: #1e40af;
     border-radius: 12px;
     padding: 35px;
 }
@@ -167,13 +165,12 @@ body {
 .header h1 {
     font-size: 36px;
     margin-bottom: 15px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
 
 .header p {
     font-size: 18px;
-    opacity: 0.95;
     margin-top: 10px;
+    color: #4b5563;
 }
 
 .customer-header {
@@ -181,7 +178,6 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 30px;
     margin: 30px 0;
-    background-color: #f8fafc;
     padding: 25px;
     border-radius: 12px;
     border: 1px solid #e5e7eb;
@@ -196,7 +192,6 @@ body {
     justify-content: space-between;
     margin-bottom: 12px;
     padding: 10px;
-    background-color: white;
     border-radius: 8px;
     border: 1px solid #f1f5f9;
 }
@@ -215,7 +210,6 @@ body {
 }
 
 .financial-summary {
-    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
     padding: 25px;
     border-radius: 12px;
     border: 2px solid #0ea5e9;
@@ -238,11 +232,9 @@ body {
 }
 
 .financial-item {
-    background: white;
     padding: 20px;
     border-radius: 10px;
     text-align: center;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
     border: 1px solid #e5e7eb;
 }
 
@@ -278,9 +270,7 @@ body {
 .payments-section, .bookings-section, .discounts-section {
     margin-bottom: 40px;
     padding: 25px;
-    background-color: white;
     border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
     border: 1px solid #e5e7eb;
 }
 
@@ -291,13 +281,12 @@ table {
 }
 
 table th {
-    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-    color: white;
+    color: #1e40af;
     padding: 18px;
     text-align: center;
     font-weight: bold;
     font-size: 18px;
-    border: none;
+    border: 1px solid #e5e7eb;
 }
 
 table td {
@@ -317,13 +306,6 @@ table tr:nth-child(even) {
     direction: ltr;
 }
 
-.total-row {
-    background-color: #1e40af !important;
-    color: white !important;
-    font-weight: bold;
-    font-size: 18px;
-}
-
 .no-data {
     text-align: center;
     padding: 30px;
@@ -338,7 +320,6 @@ table tr:nth-child(even) {
     gap: 20px;
     margin: 30px 0;
     padding: 20px;
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     border-radius: 12px;
     border: 2px solid #e5e7eb;
 }
@@ -367,13 +348,11 @@ table tr:nth-child(even) {
     text-align: center;
     color: #6b7280;
     font-size: 14px;
-    background-color: #f8fafc;
     padding: 25px;
     border-radius: 12px;
 }
 
 .temporary-contract-note {
-    background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
     border: 2px solid #f59e0b;
     border-radius: 12px;
     padding: 20px;
@@ -395,7 +374,6 @@ table tr:nth-child(even) {
 }
 
 .highlight {
-    background-color: #fef3c7;
     padding: 2px 8px;
     border-radius: 4px;
     font-weight: bold;
@@ -527,13 +505,6 @@ table tr:nth-child(even) {
                         </tr>
                     `).join('')}
                 </tbody>
-                <tfoot>
-                    <tr class="total-row">
-                        <td colspan="2"><strong>الإجمالي:</strong></td>
-                        <td class="amount-cell"><strong>${totalPaidAmount.toFixed(2)} $</strong></td>
-                        <td></td>
-                    </tr>
-                </tfoot>
             </table>
             `
             : `
@@ -554,12 +525,10 @@ table tr:nth-child(even) {
             ? `
             <div class="summary-row">
                 <div class="summary-item">
-                    <div class="summary-value">${customerData.bookings.filter(b => b.type !== 1).length
-}</div>
+                    <div class="summary-value">${customerData.bookings.filter(b => b.type !== 1).length}</div>
                     <div class="summary-label">عدد الحجوزات</div>
                 </div>
                 <div class="summary-item">
-                    
                     <div class="summary-label">${customerData.type === 1 ? '' : 'إجمالي الحجوزات'}</div>
                 </div>
             </div>
@@ -594,8 +563,8 @@ ${customerData.bookings
                                 <td>
                                     <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; ${
                                       booking.type === 1 
-                                        ? 'background-color: #fef3c7; color: #92400e;' 
-                                        : 'background-color: #dbeafe; color: #1e40af;'
+                                        ? 'color: #92400e;' 
+                                        : 'color: #1e40af;'
                                     }">
                                         ${booking.type === 1 ? 'مؤقت' : 'دائم'}
                                     </span>
@@ -603,8 +572,8 @@ ${customerData.bookings
                                 <td>
                                     <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; ${
                                       booking.approvement_status === 2 
-                                        ? 'background-color: #d1fae5; color: #065f46;' 
-                                        : 'background-color: #fef3c7; color: #92400e;'
+                                        ? 'color: #065f46;' 
+                                        : 'color: #92400e;'
                                     }">
                                         ${booking.approvement_status === 2 ? 'مقبول' : 'قيد الانتظار'}
                                     </span>
@@ -613,20 +582,6 @@ ${customerData.bookings
                         `;
                     }).join('')}
                 </tbody>
-                <tfoot>
-                    <tr class="total-row">
-                        <td colspan="4"><strong>الإجمالي:</strong></td>
-                        <td class="amount-cell">
-                            <strong>${
-                              customerData.type === 1 
-                                ? actualTotalBookings.toFixed(2) 
-                                : totalBookingAmount.toFixed(2)
-                            } $</strong>
-                        </td>
-                        <td colspan="2"><strong>${customerData.bookings.filter(b => b.type !== 1).length
-} حجز</strong></td>
-                    </tr>
-                </tfoot>
             </table>
             `
             : `
@@ -658,6 +613,7 @@ ${customerData.bookings
     
     URL.revokeObjectURL(link.href);
 };
+
 
 const printCustomerSummaryReport = () => {
   if (!customer) return;

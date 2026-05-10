@@ -118,6 +118,7 @@ export const DynamicTable = ({
                     onExtendBooking ||
                     onStatusChange ||
                     onReceipt ||
+                    onEditBooking ||
                     showTemporaryBookingIcon) && (
                     <TableCell className="text-center">
                       <div className="flex justify-end gap-2">
@@ -315,23 +316,18 @@ export const DynamicTable = ({
                           </Button>
                         )}
 
-                        {/* Edit Booking Button - Show in all tables EXCEPT booking table */}
-                        {onEditBooking &&
-                          hasPermission(permissions?.edit) &&
-                          row?.status == 1 && 
-                          !showTemporaryBookingIcon && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => onEditBooking(row)}
-                              className="h-7 w-7 p-0"
-                            >
-                              <Icon
-                                icon="mdi:pencil"
-                                className="text-primary"
-                              />
-                            </Button>
-                          )}
+                    {/* Edit Booking Button */}
+{onEditBooking && hasPermission(permissions?.edit) && row?.status == 1 && (
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={() => onEditBooking(row)}
+    className="h-7 w-7 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100"
+    title="تعديل الحجز"
+  >
+    <Icon icon="mdi:calendar-edit" className="text-blue-600" />
+  </Button>
+)}
 
                         {onDelete &&
                           !hideDeleteIcon &&

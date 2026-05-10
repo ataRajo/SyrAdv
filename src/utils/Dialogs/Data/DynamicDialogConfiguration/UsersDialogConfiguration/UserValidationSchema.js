@@ -15,4 +15,6 @@ export const userValidationSchema = Yup.object({
     .email("البريد الإلكتروني غير صالح")
     .required("البريد الإلكتروني مطلوب"),
   roles: Yup.string().required("الدور مطلوب"),
+  department: Yup.string().required("القسم مطلوب"),
+
 });

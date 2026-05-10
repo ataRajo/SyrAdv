@@ -120,6 +120,16 @@ export const BookingSlice = createApi({
 }),
 
 
+uploadBookingPdf: builder.mutation({
+  query: ({ id, body }) => ({
+    url: `bookings/${id}/uploadPdf`,
+    method: 'POST',
+    body: body, // Pass the FormData object directly here
+  }),
+  invalidatesTags: (result, error, { id }) => [{ type: "bookings", id }],
+}),
+
+
     confirmBooking: builder.mutation({
   query: (id) => ({
     url: `bookings/${id}/confirm-booking`,
@@ -149,6 +159,7 @@ export const {
   useUpdateBookingStatusMutation,
   useMoveBookingMutation ,
   useExtendBookingMutation,
-  useConfirmBookingMutation, 
+  useConfirmBookingMutation,
+  useUploadBookingPdfMutation,
   //useCalculateExtendedPriceMutation
 } = BookingSlice;

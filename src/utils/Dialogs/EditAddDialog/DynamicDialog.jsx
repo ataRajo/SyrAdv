@@ -80,6 +80,11 @@ case "select": {
     return { value, label };
   });
 
+  if (field.name === 'department' && formik.values[field.name] && typeof formik.values[field.name] === 'object') {
+  formik.setFieldValue(field.name, formik.values[field.name].value || formik.values[field.name].id || '');
+}
+
+
   return (
     <div key={field.name} className="space-y-2">
       <Label htmlFor={field.name}>{field.label}</Label>

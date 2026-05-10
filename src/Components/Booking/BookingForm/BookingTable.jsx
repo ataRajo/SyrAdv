@@ -199,7 +199,7 @@ const GroupRow = memo(({
             <span>{group.similarSignsCount} لوحة متماثلة</span>
             {group.totalAvailable > 0 && (
               <span className="text-sm text-green-600 dark:text-green-400">
-                متاح: {group.totalAvailable} لوحة
+                 {group.totalAvailable} لوحة
               </span>
             )}
             {group.totalAvailable === 0 && (
@@ -335,77 +335,48 @@ const BookingTable = () => {
     return [Array.from(directions).sort(), Array.from(places).sort()];
   }, [roadSigns]);
 
-  // Optimize groupedRoadSigns calculation
-  const groupedRoadSigns = useMemo(() => {
-    if (!roadSigns || roadSigns.length === 0) return [];
+// ✅ FIXED: Remove ALL date calculation logic
+const groupedRoadSigns = useMemo(() => {
+  if (!roadSigns || roadSigns.length === 0) return [];
 
-    const groups = new Map();
-    const startDate = formik.values.start_date;
-    const endDate = formik.values.end_date;
+  const groups = new Map();
+  
+  for (let i = 0; i < roadSigns.length; i++) {
+    const sign = roadSigns[i];
+    const key = `${sign.city?.name}_${sign.template?.model}_${sign.place}_${sign.region?.name}_${sign.directions || "غير_محدد"}`;
     
-    const requestedStart = startDate ? new Date(startDate) : null;
-    const requestedEnd = endDate ? new Date(endDate) : null;
-
-    for (let i = 0; i < roadSigns.length; i++) {
-      const sign = roadSigns[i];
-      const key = `${sign.city?.name}_${sign.template?.model}_${sign.place}_${sign.region?.name}_${sign.directions || "غير_محدد"}`;
-      
-      let group = groups.get(key);
-      if (!group) {
-        group = {
-          id: key,
-          city: sign.city,
-          template: sign.template,
-          place: sign.place,
-          region: sign.region,
-          directions: sign.directions || "غير محدد",
-          roadsign_code: sign.roadsign_code || "غير متوفر",  
-          direction_code: sign.direction_code || "------- ",    
-          signs: [],
-          totalAvailable: 0,
-          totalPanels: 0,
-          similarSignsCount: 0
-        };
-        groups.set(key, group);
-      }
-      
-      group.signs.push(sign);
-      
-      // Calculate availability
-      let occupiedPanels = 0;
-      const bookings = sign.bookings || [];
-      
-      if (requestedStart) {
-        for (let j = 0; j < bookings.length; j++) {
-          const booking = bookings[j];
-          const bookingStart = new Date(booking.start_date);
-          const bookingEnd = new Date(booking.end_date);
-          
-          // Check start date
-          if (requestedStart >= bookingStart && requestedStart <= bookingEnd) {
-            if (requestedStart.getTime() !== bookingEnd.getTime()) {
-              occupiedPanels += booking.pivot?.number_of_reserved_panels || 0;
-            }
-          }
-          
-          // Check end date
-          if (requestedEnd && requestedEnd >= bookingStart && requestedEnd <= bookingEnd) {
-            if (requestedEnd.getTime() !== bookingStart.getTime()) {
-              occupiedPanels += booking.pivot?.number_of_reserved_panels || 0;
-            }
-          }
-        }
-      }
-      
-      const availablePanels = Math.max(0, sign.panels_number - occupiedPanels);
-      group.totalAvailable += availablePanels;
-      group.totalPanels += sign.panels_number;
-      group.similarSignsCount += 1;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        id: key,
+        city: sign.city,
+        template: sign.template,
+        place: sign.place,
+        region: sign.region,
+        directions: sign.directions || "غير محدد",
+        roadsign_code: sign.roadsign_code || "غير متوفر",  
+        direction_code: sign.direction_code || "------- ",    
+        signs: [],
+        totalAvailable: 0,
+        totalPanels: 0,
+        similarSignsCount: 0
+      };
+      groups.set(key, group);
     }
+    
+    group.signs.push(sign);
+    
+    // ✅ IMPORTANT: API already returns only available signs
+    // So available panels = sign.panels_number (NO SUBTRACTION)
+    const availablePanels = sign.panels_number;
+    
+    group.totalAvailable += availablePanels;
+    group.totalPanels += sign.panels_number;
+    group.similarSignsCount += 1;
+  }
 
-    return Array.from(groups.values());
-  }, [roadSigns, formik.values.start_date, formik.values.end_date]);
-
+  return Array.from(groups.values());
+}, [roadSigns]); // ✅ Remove date dependencies
   // Optimize event handlers
   const toggleGroup = useCallback((groupId) => {
     setExpandedGroups(prev => {
@@ -421,84 +392,66 @@ const BookingTable = () => {
     setIsDialogOpen(true);
   }, []);
 
-  const handleAddToCart = useCallback(() => {
-    if (!selectedGroup) return;
+ // ✅ FIXED: Remove ALL date calculation logic
+const handleAddToCart = useCallback(() => {
+  if (!selectedGroup) return;
 
-    // Calculate availability once
-    let totalAvailable = 0;
-    const availableSigns = [];
+  // Calculate availability - NO DATE CALCULATION
+  let totalAvailable = 0;
+  const availableSigns = [];
+  
+  for (let i = 0; i < selectedGroup.signs.length; i++) {
+    const sign = selectedGroup.signs[i];
+    if (!addedSignIds?.has?.(sign.id)) {
+      // ✅ API already returns only available signs
+      const available = sign.panels_number;
+      totalAvailable += available;
+      availableSigns.push({ sign, available });
+    }
+  }
+
+  if (selectedQuantity > totalAvailable) {
+    alert(`عذراً، لا يتوفر ${selectedQuantity} لوحات. العدد المتاح الفعلي هو ${totalAvailable}`);
+    return;
+  }
+
+  if (selectedQuantity < 1) {
+    alert("يرجى اختيار عدد صحيح من اللوحات");
+    return;
+  }
+
+  // Add panels to cart
+  let remaining = selectedQuantity;
+  const signsToAdd = [];
+  
+  for (let i = 0; i < availableSigns.length; i++) {
+    if (remaining <= 0) break;
+    const item = availableSigns[i];
+    const addCount = Math.min(item.available, remaining);
     
-    for (let i = 0; i < selectedGroup.signs.length; i++) {
-      const sign = selectedGroup.signs[i];
-      if (!addedSignIds?.has?.(sign.id)) {
-        // Recalculate availability for this sign
-        let occupiedPanels = 0;
-        const bookings = sign.bookings || [];
-        const requestedStart = formik.values.start_date ? new Date(formik.values.start_date) : null;
-        
-        if (requestedStart) {
-          for (let j = 0; j < bookings.length; j++) {
-            const booking = bookings[j];
-            const bookingStart = new Date(booking.start_date);
-            const bookingEnd = new Date(booking.end_date);
-            
-            if (requestedStart >= bookingStart && requestedStart <= bookingEnd) {
-              if (requestedStart.getTime() !== bookingEnd.getTime()) {
-                occupiedPanels += booking.pivot?.number_of_reserved_panels || 0;
-              }
-            }
-          }
-        }
-        
-        const available = Math.max(0, sign.panels_number - occupiedPanels);
-        if (available > 0) {
-          totalAvailable += available;
-          availableSigns.push({ sign, available });
-        }
-      }
+    for (let j = 0; j < addCount; j++) {
+      signsToAdd.push(item.sign);
     }
+    remaining -= addCount;
+  }
 
-    if (selectedQuantity > totalAvailable) {
-      alert(`عذراً، لا يتوفر ${selectedQuantity} لوحات. العدد المتاح الفعلي هو ${totalAvailable}`);
-      return;
-    }
+  signsToAdd.forEach((sign) => {
+    const uniqueBooking = {
+      ...sign,
+      cartId: `sign-${sign.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      customDateRanges: [{
+        startDate: formik.values.start_date,
+        endDate: formik.values.end_date,
+        booking_faces: 1,
+      }],
+    };
+    addToCart(uniqueBooking);
+  });
 
-    if (selectedQuantity < 1) {
-      alert("يرجى اختيار عدد صحيح من اللوحات");
-      return;
-    }
+  setIsDialogOpen(false);
+  setSelectedQuantity(1);
+}, [selectedGroup, selectedQuantity, addedSignIds, addToCart]); // ✅ Remove formik.values
 
-    // Add panels to cart
-    let remaining = selectedQuantity;
-    const signsToAdd = [];
-    
-    for (let i = 0; i < availableSigns.length; i++) {
-      if (remaining <= 0) break;
-      const item = availableSigns[i];
-      const addCount = Math.min(item.available, remaining);
-      
-      for (let j = 0; j < addCount; j++) {
-        signsToAdd.push(item.sign);
-      }
-      remaining -= addCount;
-    }
-
-    signsToAdd.forEach((sign) => {
-      const uniqueBooking = {
-        ...sign,
-        cartId: `sign-${sign.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        customDateRanges: [{
-          startDate: formik.values.start_date,
-          endDate: formik.values.end_date,
-          booking_faces: 1,
-        }],
-      };
-      addToCart(uniqueBooking);
-    });
-
-    setIsDialogOpen(false);
-    setSelectedQuantity(1);
-  }, [selectedGroup, selectedQuantity, addedSignIds, formik.values, addToCart]);
 
   const handleViewSignImage = useCallback((sign) => {
     // Use cached image if available

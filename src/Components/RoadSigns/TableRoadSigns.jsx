@@ -420,13 +420,7 @@ const TableRoadSigns = ({ isLoading }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (isError) {
-    return (
-      <div className="text-center p-4 text-red-500">
-        حدث خطأ أثناء جلب البيانات
-      </div>
-    );
-  }
+
 
   const permissions = {
     delete: Permissions.DeleteRoadSigns,
@@ -456,6 +450,14 @@ const TableRoadSigns = ({ isLoading }) => {
   return (
     <div dir="rtl" className="p-4 sm:p-6 w-full mx-auto space-y-6 overflow-x-auto">
       {/* Filter Section */}
+    {isError && (
+      <div className="text-center p-4 text-red-500">
+        حدث خطأ أثناء جلب البيانات
+      </div>
+    )}
+
+
+
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div>
           <Label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">

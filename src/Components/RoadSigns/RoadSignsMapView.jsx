@@ -31,6 +31,7 @@ import {
   Map
 } from "lucide-react";
 import { showToast } from "../../utils/Notifictions/showToast";
+import RoadSignsExport from "./RoadSignsExport";
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -415,13 +416,13 @@ const RoadSignDetails = ({ roadSignId }) => {
       </div>
       
       {roadSignDetails.image ? (
-        <div className="mb-3">
-          <img 
-            src={roadSignDetails.image} 
-            alt={`Road sign ${roadSignDetails.id}`}
-            className="w-full h-32 object-cover rounded border"
-          />
-        </div>
+       <div className="mb-3 flex justify-center">
+  <img 
+    src={roadSignDetails.image} 
+    alt={`Road sign ${roadSignDetails.id}`}
+    className="max-w-full max-h-32 w-auto h-auto rounded border"
+  />
+</div>
       ) : (
         <div className="mb-3 bg-gray-100 rounded border h-20 flex items-center justify-center">
           <span className="text-xs text-gray-500">لا توجد صورة</span>
@@ -633,6 +634,77 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
   
   // State for satellite view control
   const [mapType, setMapType] = useState(viewType);
+
+  // ✅ SELECTION MODE STATE
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedRoadSigns, setSelectedRoadSigns] = useState([]);
+  const [isExporting, setIsExporting] = useState(false);
+
+
+const [markerFilter, setMarkerFilter] = useState("all"); // "all", "booked", "available"
+
+// Filter functions
+const handleFilterAll = () => {
+  setMarkerFilter("all");
+  showToast("info", "عرض جميع اللوحات");
+};
+
+const handleFilterBooked = () => {
+  setMarkerFilter("booked");
+  showToast("info", "عرض اللوحات المحجوزة فقط");
+};
+
+const handleFilterAvailable = () => {
+  setMarkerFilter("available");
+  showToast("info", "عرض اللوحات المتاحة فقط");
+};
+
+  // ✅ SELECTION MODE FUNCTIONS
+  const handleMarkerSelect = (roadSign) => {
+    if (!selectionMode) return;
+    
+    setSelectedRoadSigns(prev => {
+      const isAlreadySelected = prev.some(item => item.id === roadSign.id);
+      if (isAlreadySelected) {
+        return prev.filter(item => item.id !== roadSign.id);
+      } else {
+        return [...prev, {
+          id: roadSign.id,
+          name: roadSign.template?.model || `لوحة ${roadSign.id}`,
+          place: roadSign.place,
+          coords: getCoordinates(roadSign)
+        }];
+      }
+    });
+  };
+
+  const clearSelections = () => {
+    setSelectedRoadSigns([]);
+    showToast("info", "تم إلغاء تحديد جميع اللوحات");
+  };
+
+  const cancelSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedRoadSigns([]);
+    showToast("info", "تم إلغاء وضع الاختيار");
+  };
+
+  // ✅ Selection Toolbar Component
+  const SelectionToolbar = () => {
+    if (!selectionMode) return null;
+    
+    return (
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white rounded-lg shadow-lg border p-3 min-w-[300px]">
+        <RoadSignsExport 
+          selectedRoadSigns={selectedRoadSigns}
+          onClearSelections={clearSelections}
+          onCancelMode={cancelSelectionMode}
+          isExporting={isExporting}
+          setIsExporting={setIsExporting}
+        />
+      </div>
+    );
+  };
 
   // Update map type when viewType prop changes
   useEffect(() => {
@@ -919,11 +991,19 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
     return filtered;
   }, [roadSigns, selectedCity, selectedRegion]);
 
-  // Get road signs with valid coordinates
-  const roadSignsWithCoordinates = useMemo(() => {
-    const signsWithCoords = filteredRoadSigns.filter(sign => getCoordinates(sign) !== null);
-    return signsWithCoords;
-  }, [filteredRoadSigns]);
+ // Get road signs with valid coordinates
+const roadSignsWithCoordinates = useMemo(() => {
+  let signsWithCoords = filteredRoadSigns.filter(sign => getCoordinates(sign) !== null);
+  
+  // Apply marker filter
+  if (markerFilter === "booked") {
+    signsWithCoords = signsWithCoords.filter(sign => isFaceBooked(sign) === true);
+  } else if (markerFilter === "available") {
+    signsWithCoords = signsWithCoords.filter(sign => isFaceBooked(sign) === false && checkSpecialDualFaceCase(sign, roadSigns) === false);
+  }
+  
+  return signsWithCoords;
+}, [filteredRoadSigns, markerFilter, roadSigns]);
 
   // Handle marker click
   const handleMarkerClick = (roadSignId) => {
@@ -1201,10 +1281,18 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
   const dualFaceInfo = getDualFaceInfo(roadSign, roadSigns);
   const isSpecialDualFace = checkSpecialDualFaceCase(roadSign, roadSigns);
   
+  // ✅ Check if this road sign is selected
+  const isSelected = selectedRoadSigns.some(item => item.id === roadSign.id);
+  
   // تحديد لون ورمز الماركر بناءً على الحالة
   let markerColor, markerIcon, markerText;
   
-  if (isBooked) {
+  if (selectionMode && isSelected) {
+    // Selected marker in selection mode - Purple
+    markerColor = "#8b5cf6";
+    markerIcon = "✓";
+    markerText = "مختار";
+  } else if (isBooked) {
     // محجوز - أحمر
     markerColor = "#ef4444";
     markerIcon = "🔴";
@@ -1230,27 +1318,28 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
         html: `
           <div style="
             background-color: ${markerColor};
-            width: 40px;
-            height: 40px;
+            width: ${selectionMode && isSelected ? '48px' : '40px'};
+            height: ${selectionMode && isSelected ? '48px' : '40px'};
             border-radius: 50%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 16px;
-            border: 3px solid white;
+            font-size: ${selectionMode && isSelected ? '20px' : '16px'};
+            border: ${selectionMode && isSelected ? '4px solid #fbbf24' : '3px solid white'};
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
+            cursor: ${selectionMode ? 'pointer' : 'default'};
             position: relative;
             font-weight: bold;
             text-align: center;
             line-height: 1;
             padding-top: 2px;
+            transition: all 0.2s ease;
           ">
-            <div style="font-size: 18px; margin-bottom: 2px;">${markerIcon}</div>
-            <div style="font-size: 9px; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">${markerText}</div>
-            ${dualFaceInfo ? `
+            <div style="font-size: ${selectionMode && isSelected ? '22px' : '18px'}; margin-bottom: 2px;">${selectionMode && isSelected ? '✓' : markerIcon}</div>
+            <div style="font-size: 9px; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">${selectionMode && isSelected ? 'مختار' : markerText}</div>
+            ${dualFaceInfo && !selectionMode ? `
               <div style="
                 position: absolute;
                 top: -5px;
@@ -1272,23 +1361,64 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
             ` : ''}
           </div>
         `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 40],
-        popupAnchor: [0, -40],
+        iconSize: [selectionMode && isSelected ? 48 : 40, selectionMode && isSelected ? 48 : 40],
+        iconAnchor: [selectionMode && isSelected ? 24 : 20, selectionMode && isSelected ? 48 : 40],
+        popupAnchor: [0, selectionMode && isSelected ? -48 : -40],
         className: 'road-sign-marker'
       })}
       eventHandlers={{
-        click: () => handleMarkerClick(roadSign.id),
+        click: () => {
+          if (selectionMode) {
+            handleMarkerSelect(roadSign);
+          } else {
+            handleMarkerClick(roadSign.id);
+          }
+        },
       }}
     >
-      <Popup
-        onClose={() => setSelectedRoadSignId(null)}
-        className="custom-popup"
-        minWidth={300}
-        maxWidth={400}
+      {/* Only show popup when NOT in selection mode */}
+      {!selectionMode && (
+        <Popup
+          onClose={() => setSelectedRoadSignId(null)}
+          className="custom-popup"
+          minWidth={300}
+          maxWidth={400}
+        >
+          <RoadSignDetails roadSignId={roadSign.id} />
+          
+   <div className="mt-3 pt-3 border-t">
+    <Button
+      onClick={() => {
+        const roadSignCoords = getCoordinates(roadSign);
+        if (roadSignCoords) {
+          const url = `https://www.google.com/maps/search/?api=1&query=${roadSignCoords[0]},${roadSignCoords[1]}`;
+          window.open(url, '_blank');
+        } else {
+          showToast("error", "لا توجد إحداثيات صالحة لهذه اللوحة");
+        }
+      }}
+      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+      size="sm"
+    >
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        className="w-4 h-4 ml-2" 
+        fill="none" 
+        viewBox="0 0 24 24" 
+        stroke="currentColor"
       >
-        <RoadSignDetails roadSignId={roadSign.id} />
-        
+        <path 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          strokeWidth={2} 
+          d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" 
+        />
+      </svg>
+      فتح الموقع في خرائط جوجل
+    </Button>
+  </div>
+
+
         {/* Booking Status Section */}
         <div className="mt-4">
           <div className={`p-3 rounded-lg text-center font-bold ${isBooked ? 'bg-red-50 border-2 border-red-200' : 'bg-green-50 border-2 border-green-200'}`}>
@@ -1379,10 +1509,14 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
           )}
         </div>
       </Popup>
+      )}
     </Marker>
   );
 })}
             </MapContainer>
+
+            {/* Selection Toolbar */}
+            <SelectionToolbar />
 
             {/* Map Type Toggle Button */}
             <div className="absolute top-20 right-4 z-[1000]">
@@ -1406,6 +1540,35 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
               </Button>
             </div>
 
+            {/* Selection Mode Button */}
+            <div className="absolute top-4 left-4 z-[1000]">
+              {!selectionMode ? (
+                <Button
+                  onClick={() => {
+                    setSelectionMode(true);
+                    showToast("info", "وضع الاختيار مفعل - اضغط على اللوحات لاختيارها");
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg"
+                  size="sm"
+                >
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  اختيار
+                </Button>
+              ) : (
+                <Button
+                  onClick={cancelSelectionMode}
+                  variant="outline"
+                  className="bg-white shadow-lg"
+                  size="sm"
+                >
+                  <X className="w-4 h-4 ml-2" />
+                  إلغاء الاختيار
+                </Button>
+              )}
+            </div>
+
             {/* Map Legend */}
             <div className="absolute bottom-4 left-4 bg-gray-700 p-3 rounded-lg shadow-lg z-[1000] border">
               <h4 className="font-semibold text-sm mb-2">مفتاح الخريطة</h4>
@@ -1421,6 +1584,10 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 rounded-full bg-amber-500"></div>
                   <span className="text-xs">وجه محجوز ووجه متاح</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-purple-500"></div>
+                  <span className="text-xs">لوحات مختارة</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 rounded-full bg-blue-500"></div>
@@ -1451,50 +1618,85 @@ const RoadSignsMapView = ({ viewType = "map" }) => {
             </div>
           </div>
 
-          {/* Road Sign Summary */}
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">إجمالي اللوحات</p>
-                    <p className="text-2xl font-bold">{roadSigns.length}</p>
-                  </div>
-                  <div className="p-2 bg-blue-100 rounded-full">
-                    <NavigationIcon className="w-5 h-5 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+       {/* Road Sign Summary */}
+<div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+  <Card>
+    <CardContent className="p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">إجمالي اللوحات</p>
+          <p className="text-2xl font-bold">{roadSigns.length}</p>
+        </div>
+        <div className="p-2 bg-blue-100 rounded-full">
+          <NavigationIcon className="w-5 h-5 text-blue-600" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">اللوحات المعروضة</p>
-                    <p className="text-2xl font-bold">{filteredRoadSigns.length}</p>
-                  </div>
-                  <div className="p-2 bg-green-100 rounded-full">
-                    <MapPin className="w-5 h-5 text-green-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+  <Card>
+    <CardContent className="p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">اللوحات المعروضة</p>
+          <p className="text-2xl font-bold">{filteredRoadSigns.length}</p>
+        </div>
+        <div className="p-2 bg-green-100 rounded-full">
+          <MapPin className="w-5 h-5 text-green-600" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">بإحداثيات صالحة</p>
-                    <p className="text-2xl font-bold">{roadSignsWithCoordinates.length}</p>
-                  </div>
-                  <div className="p-2 bg-purple-100 rounded-full">
-                    <Ruler className="w-5 h-5 text-purple-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+  <Card>
+    <CardContent className="p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">بإحداثيات صالحة</p>
+          <p className="text-2xl font-bold">{roadSignsWithCoordinates.length}</p>
+        </div>
+        <div className="p-2 bg-purple-100 rounded-full">
+          <Ruler className="w-5 h-5 text-purple-600" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+
+  {/* Filter Buttons */}
+  <Card>
+    <CardContent className="p-4">
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-gray-500 text-center">تصفية اللوحات</p>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={markerFilter === "all" ? "default" : "outline"}
+            onClick={handleFilterAll}
+            className="flex-1 text-xs h-8"
+          >
+            الكل
+          </Button>
+          <Button
+            size="sm"
+            variant={markerFilter === "booked" ? "default" : "outline"}
+            onClick={handleFilterBooked}
+            className="flex-1 text-xs h-8 bg-red-500 hover:bg-red-600 text-white"
+          >
+            محجوز
+          </Button>
+          <Button
+            size="sm"
+            variant={markerFilter === "available" ? "default" : "outline"}
+            onClick={handleFilterAvailable}
+            className="flex-1 text-xs h-8 bg-green-500 hover:bg-green-600 text-white"
+          >
+            متاح
+          </Button>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+</div>
         </div>
       </div>
     </div>

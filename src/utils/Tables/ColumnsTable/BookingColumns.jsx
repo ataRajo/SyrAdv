@@ -2,7 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useUpdateBookingStatusMutation, useCalculateReservationMutation } from "../../../../src/RtkQuery/Slice/Booking/BookingApi";
 import { BookingType } from "../../../Static/StaticData";
 import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button"; // Add this import
+import { Button } from "@/components/ui/button";
+import { Icon } from "@iconify/react";
+// قمنا باستيراد Link للتنقل بين الصفحات
+import { Link } from "react-router-dom";
+import { Eye , Share2  } from "lucide-react";
+import { BookingDetailsAction } from "../../../Components/Booking/BookingDetailsAction";
+import {toast} from "sonner";
 
 export const statusBookings = {
   1: "انتظار",
@@ -10,11 +16,84 @@ export const statusBookings = {
   3: "مرفوض",
 };
 
+
+
+// تم تعديل هذا المكون ليصبح رابطاً ينقلك إلى صفحة جديدة بدلاً من فتح Modal
+export const BookingDetailsButton = ({ bookingId }) => {
+  return (
+  <Button
+      variant="ghost"
+      size="sm"
+      className="text-blue-600 hover:text-blue-800"
+      onClick={() => {
+        window.location.href = `/dashboard/bookings/${bookingId}`;
+      }}
+    >
+      <Eye className="h-4 w-4 ml-1" />
+    توليد pdf 
+    </Button>
+  );
+};
+
+export const ShareMapButton = ({ bookingId }) => {
+  const [isSharing, setIsSharing] = useState(false);
+
+ const handleOpenMap = () => {
+    const mapLink = `https://tsyr.addresses.sy/public-map/${bookingId}`;
+    console.log("Opening map link:", mapLink);
+    
+    // Try multiple methods for mobile compatibility
+    try {
+      // Method 1: Try to open in same tab (more reliable on mobile)
+      window.location.href = mapLink;
+    } catch (err) {
+      console.error("Error opening map:", err);
+      // Method 2: Fallback to alert with link
+      alert(`رابط الخريطة: ${mapLink}\nالرجاء نسخ الرابط وفتحه في المتصفح`);
+    }
+  };
+
+  const handleCopyLink = () => {
+    const mapLink = `https://tsyr.addresses.sy/public-map/${bookingId}`;
+    
+    navigator.clipboard.writeText(mapLink).then(() => {
+      toast.success("تم نسخ رابط الخريطة! ✅", {
+        description: "يمكنك مشاركة الرابط مع الآخرين",
+        duration: 3000,
+      });
+    }).catch(() => {
+      alert(`رابط الخريطة: ${mapLink}`);
+    });
+  };
+
+  
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-green-600 hover:text-green-800"
+        onClick={handleOpenMap}
+        title="عرض الخريطة"
+      >
+        <Share2 className="h-4 w-4 ml-1" />
+        مشاركة
+      </Button>
+    </div>
+  );
+};
+
+
+
+// Booking Price Cell Component (كما هو بدون تعديل)
 const BookingPriceCell = ({ booking }) => {
   const [calculateReservation, { isLoading }] = useCalculateReservationMutation();
   const [price, setPrice] = useState(null);
   const [error, setError] = useState(null);
 
+
+
+  
   useEffect(() => {
     const fetchBookingPrice = async () => {
       if (!booking?.id) return;
@@ -47,13 +126,8 @@ const BookingPriceCell = ({ booking }) => {
           product_type: booking.product_type
         };
 
-        console.log("Sending calculation data:", calculationData);
-
         const result = await calculateReservation(calculationData).unwrap();
         
-        console.log("Calculation result:", result);
-        
-        // Adjust this based on your API response structure
         if (result?.price_per_period) {
           setPrice(result.price_per_period);
         } else if (result?.total_price) {
@@ -67,7 +141,6 @@ const BookingPriceCell = ({ booking }) => {
         }
       } catch (err) {
         console.error("Error calculating price:", err);
-        console.error("Error details:", err.data);
         setError("Failed to load price");
       }
     };
@@ -84,21 +157,8 @@ const BookingPriceCell = ({ booking }) => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="text-red-500 text-sm">
-        {error}
-      </div>
-    );
-  }
-
-  if (price == null) {
-    return (
-      <div className="text-gray-400 text-sm">
-        —
-      </div>
-    );
-  }
+  if (error) return <div className="text-red-500 text-sm">{error}</div>;
+  if (price == null) return <div className="text-gray-400 text-sm">—</div>;
 
   return (
     <div className="text-gray-500 font-semibold">
@@ -107,6 +167,7 @@ const BookingPriceCell = ({ booking }) => {
   );
 };
 
+// Status Selector Component (كما هو بدون تعديل)
 const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
   const [selectedStatus, setSelectedStatus] = useState(booking?.approvement_status ?? 1);
   const [rejectReason, setRejectReason] = useState(booking?.reject_reason || "");
@@ -125,12 +186,9 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
         reject_reason: selectedStatus === 3 ? rejectReason : undefined,
       }).unwrap();
 
-      // Update UI immediately
       if (onLocalUpdate) {
         onLocalUpdate(booking.id, selectedStatus, rejectReason);
       }
-
-      console.log("تم تحديث حالة الحجز بنجاح");
     } catch (err) {
       console.error("Failed to update status:", err);
     }
@@ -139,24 +197,21 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Status select dropdown */}
         <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
           className="border rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700 min-w-[100px]"
         >
           {Object.entries(statusBookings).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
+            <option key={key} value={key}>{label}</option>
           ))}
         </select>
 
-      <Button
-  onClick={handleUpdateStatus}
-  disabled={isLoading}
-  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-400 min-h-[32px] flex items-center justify-center border-2 border-red-500" // Added red border
->
+        <Button
+          onClick={handleUpdateStatus}
+          disabled={isLoading}
+          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-400 min-h-[32px] flex items-center justify-center"
+        >
           {isLoading ? (
             <>
               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -168,8 +223,7 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
         </Button>
       </div>
 
-      {/* Reject reason input */}
-      {selectedStatus === 3 && (
+      {selectedStatus === "3" && (
         <div className="mt-2">
           <input
             type="text"
@@ -181,7 +235,6 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
         </div>
       )}
 
-      {/* Show current status badge */}
       <div className="mt-1">
         <span className="text-xs text-gray-500">الحالة الحالية:</span>
         <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
@@ -198,6 +251,7 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
 
 export default StatusSelectorWithButton;
 
+// Booking Columns Configuration
 export const BookingColumns = [
   {
     header: "اسم الشركة",
@@ -211,11 +265,7 @@ export const BookingColumns = [
     format: (value) => {
       if (!value) return "—";
       const date = new Date(value);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     },
     prefixIcon: "mdi:calendar-start",
     className: "min-w-[120px]",
@@ -226,11 +276,7 @@ export const BookingColumns = [
     format: (value) => {
       if (!value) return "—";
       const date = new Date(value);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     },
     prefixIcon: "mdi:calendar-end",
     className: "min-w-[120px]",
@@ -250,13 +296,22 @@ export const BookingColumns = [
     className: "min-w-[120px]",
   },
   {
+    header: "العمليات",
+    accessor: "id",
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <BookingDetailsButton bookingId={row.id} />
+        <ShareMapButton bookingId={row.id} />
+        <BookingDetailsAction booking={row} />
+      </div>
+    ),
+    className: "min-w-[280px]",
+  },
+  {
     header: "السعر",
-    accessor: "total_price", // CHANGED from "price" to "total_price"
+    accessor: "total_price",
     prefixIcon: "mdi:cash",
-    format: (value) => {
-      if (value == null) return "—";
-      return `${parseFloat(value).toFixed(2)} $`;
-    },
+    format: (value) => (value == null ? "—" : `${parseFloat(value).toFixed(2)} $`),
     className: "min-w-[120px]",
   },
   {
@@ -264,14 +319,17 @@ export const BookingColumns = [
     accessor: "approvement_status",
     cell: ({ row }) => (
       <div className="py-2">
-        <StatusSelectorWithButton booking={row} onLocalUpdate={(id, status, reason) => {
-          row.approvement_status = status;
-          row.reject_reason = reason;
-        }} />
-        
-        {/* Rejection reason display */}
+        <StatusSelectorWithButton 
+          booking={row} 
+          onLocalUpdate={(id, status, reason) => {
+            row.approvement_status = status;
+            row.reject_reason = reason;
+          }} 
+        />
         {row.approvement_status === 3 && row.reject_reason && (
-          <p className="text-xs text-red-500 mt-2 p-1 bg-red-50 rounded">سبب الرفض: {row.reject_reason}</p>
+          <p className="text-xs text-red-500 mt-2 p-1 bg-red-50 rounded">
+            سبب الرفض: {row.reject_reason}
+          </p>
         )}
       </div>
     ),

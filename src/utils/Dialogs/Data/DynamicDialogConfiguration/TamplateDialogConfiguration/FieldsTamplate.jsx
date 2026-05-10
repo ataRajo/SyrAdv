@@ -15,6 +15,12 @@ export const TemplateFields = [
     accept: "image/*",
   },
   {
+    name: "image_on_map",
+    label: "صورة SVG",
+    type: "file",
+    accept: ".svg,image/svg+xml",
+  },
+  {
     name: "type",
     label: "النوع",
     type: "select",
@@ -24,6 +30,17 @@ export const TemplateFields = [
 
     ],
   },
+  
+  {
+    
+    name: "display_type",                                    
+    label: "نوع العرض",                                      
+    type: "select",                                          
+    options: [                                               
+      { value: "digital", label: "رقمي (Digital)" },               
+      { value: "physical", label: "فيزيائي (Physical)" },          
+    ],                                                       
+  },                                                        
   {
     name: "products",
     label: "أسعار المنتجات",

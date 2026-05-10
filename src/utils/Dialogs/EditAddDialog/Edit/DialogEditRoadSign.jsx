@@ -2,7 +2,7 @@ import {
   useGetTemplateProductsQuery,
   useUpdateRoadSignMutation,
 } from "../../../../RtkQuery/Slice/RoadSings/RoadSingsApi";
-import {  roadSignFieldsEdit } from "../../Data/DynamicDialogConfiguration/RoadSignDialogConfiguration/roadSignFields";
+import { roadSignFieldsEdit } from "../../Data/DynamicDialogConfiguration/RoadSignDialogConfiguration/roadSignFields";
 import {
   useGetActiveRegionsByCityMutation,
   useGetCitiesQuery,
@@ -18,8 +18,8 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
   const [
     activeRegionsByCityMutation,
     { 
-      data: regionsData, // Add this to get data directly from mutation
-      isSuccess: isRegionsSuccess, // Rename for clarity
+      data: regionsData,
+      isSuccess: isRegionsSuccess,
       isLoading: isRegionsLoading 
     }
   ] = useGetActiveRegionsByCityMutation();
@@ -27,14 +27,12 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
   const { data: tempProd, isSuccess: isTempProdSuccess } =
     useGetTemplateProductsQuery();
 
-  // Remove the regions state and use data directly from mutation
   const [cityId, setCityId] = useState(initData?.city_id || "");
   const [selectedLocation, setSelectedLocation] = useState(null);
 
   const handleLocationSelect = (locationData) => {
     setSelectedLocation(locationData);
     showToast("success", "تم اختيار الموقع بنجاح");
-    console.log("الموقع المختار:", locationData);
   };
 
   const getRegionsByCityId = async (cityId) => {
@@ -66,7 +64,6 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
           }))
         : [],
     },
-
     regions: {
       data: isRegionsSuccess && regionsData
         ? regionsData.map((region) => ({
@@ -74,7 +71,7 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
             name: region.name,
           }))
         : [],
-      loading: isRegionsLoading, // Add loading state
+      loading: isRegionsLoading,
     },
     template_id: {
       data: isTempProdSuccess ? tempProd : [],
@@ -84,82 +81,142 @@ export const DialogEditRoadSign = ({ show, handleClose, initData }) => {
     },
   };
 
-const onSubmitTransform = (values) => {
-  // Helper function to safely convert to number
-  const safeToNumber = (value) => {
-    if (value === '' || value === null || value === undefined) {
-      return null;
-    }
-    const num = Number(value);
-    return isNaN(num) ? null : num;
-  };
-
-  const formData = {
-    city_id: safeToNumber(values.city_id),
-    region_id: safeToNumber(values.region_id),
-    product_id: values.product_id ? parseInt(values.product_id, 10) : null,
-    is_available: values.is_available ? parseInt(values.is_available, 10) : null,
-    faces_number: safeToNumber(values.faces_number),
-    advertising_meters: safeToNumber(values.advertising_meters),
-    printing_meters: safeToNumber(values.printing_meters),
-    // Use the helper function for latitude/longitude
-    latitudeX: safeToNumber(values.latitudeX),
-    longitudeY: safeToNumber(values.longitudeY),
-    place: values?.place || null,
-    directions: values?.directions || null,
-    _method: 'PUT'
-  };
-  
-  // Remove null values if not needed by backend
-  Object.keys(formData).forEach(key => {
-    if (formData[key] === null) {
-      delete formData[key];
-    }
-  });
-  
-  // Handle image - if it's a File, you'll need FormData
-  if (values.image && values.image instanceof File) {
-    // If there's a file, use FormData
-    const fd = new FormData();
-    Object.keys(formData).forEach(key => {
-      if (formData[key] !== null && formData[key] !== undefined) {
-        fd.append(key, formData[key]);
+  const onSubmitTransform = (values) => {
+    console.log("Original values:", values);
+    
+    
+    // Helper function to safely convert to number
+    const safeToNumber = (value) => {
+      if (value === '' || value === null || value === undefined) {
+        return null;
       }
-    });
-    fd.append('image', values.image);
-    return fd;
-  }
+      const num = Number(value);
+      return isNaN(num) ? null : num;
+    };
+
+    // Create FormData
+    const formData = new FormData();
+    
+    // Add _method for PUT
+    formData.append('_method', 'PUT');
+    
+    // Add regular fields
+    const addIfNotEmpty = (key, value) => {
+      if (value !== null && value !== undefined && value !== '') {
+        formData.append(key, value);
+      }
+    };
+    
+    // City and Region
+    const cityIdValue = safeToNumber(values.city_id);
+    if (cityIdValue !== null) addIfNotEmpty('city_id', cityIdValue);
+    
+    const regionIdValue = safeToNumber(values.region_id);
+    if (regionIdValue !== null) addIfNotEmpty('region_id', regionIdValue);
+    
+    // Product and availability
+    if (values.product_id) {
+      const productIdValue = parseInt(values.product_id, 10);
+      if (!isNaN(productIdValue)) addIfNotEmpty('product_id', productIdValue);
+    }
+    
+    if (values.is_available) {
+      const isAvailableValue = parseInt(values.is_available, 10);
+      if (!isNaN(isAvailableValue)) addIfNotEmpty('is_available', isAvailableValue);
+    }
+    
+    // Numbers
+    const facesNumberValue = safeToNumber(values.faces_number);
+    if (facesNumberValue !== null) addIfNotEmpty('faces_number', facesNumberValue);
+    
+    const advertisingMetersValue = safeToNumber(values.advertising_meters);
+    if (advertisingMetersValue !== null) addIfNotEmpty('advertising_meters', advertisingMetersValue);
+    
+    const printingMetersValue = safeToNumber(values.printing_meters);
+    if (printingMetersValue !== null) addIfNotEmpty('printing_meters', printingMetersValue);
+    
+    // Coordinates
+    let latValue = safeToNumber(values.latitudeX);
+    let lngValue = safeToNumber(values.longitudeY);
+    
+    if (latValue === null) latValue = 0;
+    if (lngValue === null) lngValue = 0;
+    
+    formData.append('latitudeX', latValue);
+    formData.append('longitudeY', lngValue);
+    
+    // Text fields
+    if (values.place && values.place.trim() !== '') {
+      formData.append('place', values.place);
+    }
+    
+    if (values.directions && values.directions.trim() !== '') {
+      formData.append('directions', values.directions);
+    }
+    
+    // ✅ Handle main image - ONLY send if it's a File (new upload)
+    if (values.image instanceof File) {
+      console.log("Adding NEW main image:", values.image.name);
+      formData.append('image', values.image);
+    } else {
+      console.log("SKIPPING main image (keeping existing)");
+    }
+    
+    if (values.location_image1 instanceof File) {
+      console.log("Adding NEW location_image1:", values.location_image1.name);
+      formData.append('location_image1', values.location_image1);
+    } else {
+      console.log("SKIPPING location_image1 (keeping existing)");
+    }
+    
+    if (values.location_image2 instanceof File) {
+      console.log("Adding NEW location_image2:", values.location_image2.name);
+      formData.append('location_image2', values.location_image2);
+    } else {
+      console.log("SKIPPING location_image2 (keeping existing)");
+    }
+    
+    console.log("Final FormData being sent:");
+    for (let pair of formData.entries()) {
+      if (pair[1] instanceof File) {
+        console.log(pair[0], ":", "FILE:", pair[1].name);
+      } else {
+        console.log(pair[0], ":", pair[1]);
+      }
+    }
+    
+    return formData;
+  };
   
-  // If no file, send as JSON
-  return formData;
-};
   const handleCityChange = (value) => {
     setCityId(value);
   };
 
-const transformedInitialValues = useMemo(() => {
-  if (!initData) return {};
+  const transformedInitialValues = useMemo(() => {
+    if (!initData) return {};
+    
+    const safeToString = (value) => {
+      if (value === null || value === undefined) return "";
+      return String(value);
+    };
+    
+    console.log("initData:", initData);
+    
+    return {
+      ...initData,
+      city_id: initData?.city_id ? String(initData?.city_id) : "",
+      region_id: initData?.region_id ? String(initData.region_id) : "",
+      is_available: initData?.is_available ? String(initData?.is_available) : "",
+      number: initData?.number ? String(initData.number) : "",
+      latitudeX: safeToString(initData?.latitudeX),
+      longitudeY: safeToString(initData?.longitudeY),
+      // Keep image paths for display only - they won't be sent
+      image: initData?.image || null,
+      location_image1: initData?.location_image1 || null,
+      location_image2: initData?.location_image2 || null,
+    };
+  }, [initData]);
   
-  // Helper function to safely convert to string
-  const safeToString = (value) => {
-    if (value === null || value === undefined) {
-      return "";
-    }
-    return String(value);
-  };
-  
-  return {
-    ...initData,
-    city_id: initData?.city_id ? String(initData?.city_id) : "",
-    region_id: initData?.region_id ? String(initData.region_id) : "",
-    is_available: initData?.is_available ? String(initData?.is_available) : "",
-    number: initData?.number ? String(initData.number) : "",
-    image: initData?.image || null,
-    // Use safeToString for latitude/longitude
-    latitudeX: safeToString(initData?.latitudeX),
-    longitudeY: safeToString(initData?.longitudeY),
-  };
-}, [initData]);
   return (
     <DynamicDialog
       show={show}
@@ -171,7 +228,7 @@ const transformedInitialValues = useMemo(() => {
       initialValues={transformedInitialValues}
       selectData={selectData}
       handleLocationSelect={handleLocationSelect}
-      selectedLocation={selectedLocation} // Fix this prop - should be the state, not the function
+      selectedLocation={selectedLocation}
       onSubmitTransform={onSubmitTransform}
       onFieldChange={(fieldName, value) => {
         if (fieldName === "city_id") {

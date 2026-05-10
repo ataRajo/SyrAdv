@@ -140,5 +140,19 @@ export const roadSignFieldsEdit = [
      type:"map"
    },
 
+{
+  name: "location_image1",
+  type: "file",
+  label: "صورة الموقع 1",
+  accept: "image/*",
+},
+{
+  name: "location_image2",
+  type: "file",
+  label: "صورة الموقع 2",
+  accept: "image/*",
+}
+
+
 
 ];

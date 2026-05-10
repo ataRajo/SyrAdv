@@ -14,6 +14,27 @@ export const TemplateSlice = createApi({
       query: (id) => `/templates?model=${id}`,
       providesTags: (result, error, id) => [{ type: "Templates", id }],
     }),
+
+getTemplatesByLocation: builder.query({
+      query: ({ city_id, region_id }) => {
+        const params = new URLSearchParams();
+        if (city_id) params.append('city_id', city_id);
+        if (region_id) params.append('region_id', region_id);
+        return `/templates?${params.toString()}`;
+      },
+      providesTags: (result, error, { city_id, region_id }) => 
+        [{ type: "Templates", id: `location-${city_id}-${region_id}` }],
+    }),
+
+
+// Add this in the endpoints object of TemplateSlice:
+getAllTemplates: builder.query({
+  query: () => "/templates",
+  providesTags: ["Templates"],
+}),
+
+
+
     getTemplatesById: builder.mutation({
       query: (id) => ({
         url: `/templates/${id}`,
@@ -64,8 +85,10 @@ export const TemplateSlice = createApi({
 export const {
   useGetTemplatesModelQuery,
   useGetTemplatesQuery,
+  useGetTemplatesByLocationQuery,
   useCreateTemplateMutation,
   useDeleteTemplateMutation,
   useGetTemplatesByIdMutation,
+    useGetAllTemplatesQuery,
   useUpdataTemplateMutation,
 } = TemplateSlice;

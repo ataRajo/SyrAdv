@@ -7,24 +7,18 @@ import DynamicDialog from "../DynamicDialog";
 export const DialogAddTemplate = ({ show, handleClose }) => {
   const [createTemplate, { isLoading, isError, error }] = useCreateTemplateMutation();
 
-const handleSubmit = async (values) => {
+  const handleSubmit = async (values) => {
     try {
       const formData = onSubmitTransform(values);
       const result = await createTemplate(formData).unwrap();
-      
-      // Force refetch templates list after successful creation
-      // You might need to invalidate tags here
-      
-      handleClose(); // Close dialog on success
+      handleClose();
     } catch (error) {
       console.error('Failed to create template:', error);
     }
   };
 
-
-
   const onSubmitTransform = (values) => {
-     console.log('🎯 Form submitted with values:', values);
+    console.log('🎯 Form submitted with values:', values);
     const formData = new FormData();
     formData.append("model", values.model);
     formData.append("size", values.size);
@@ -33,6 +27,7 @@ const handleSubmit = async (values) => {
     formData.append("printing_space", values.printing_space);
     formData.append("type", values.type);
     formData.append("color", values.color);
+    formData.append("display_type", values.display_type);
 
     values?.products?.forEach((product, index) => {
       formData.append(`products[${index}][price]`, product?.price);
@@ -40,6 +35,7 @@ const handleSubmit = async (values) => {
     });
 
     if (values.image) formData.append("image", values.image);
+    if (values.image_on_map) formData.append("image_on_map", values.image_on_map);
 
     return formData;
   };

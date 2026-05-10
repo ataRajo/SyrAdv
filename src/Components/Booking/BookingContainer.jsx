@@ -624,13 +624,11 @@ const filteredData = useMemo(() => {
           }
           navigate(`/dashboard/booking/edit/${row.id}`);
         }}
-        onDeleteBooking={(row) => {
-          if (row.is_archived === 1 || archiveFilter === "all") {
-            toast.warning("لا يمكن حذف هذا الحجز");
-            return;
-          }
-          handleDelete(row);
-        }}
+      onDeleteBooking={(row) => {
+  handleDelete(row);
+}}
+
+/*
         onUnconfirmOrder={(row) => {
           if (row.is_archived === 1 || archiveFilter === "all") {
             toast.warning("لا يمكن إيقاف هذا الحجز");
@@ -638,6 +636,7 @@ const filteredData = useMemo(() => {
           }
           handlePauseBooking(row);
         }}
+          */
         onStatusChange={(row) => {
           if (row.is_archived === 1 || archiveFilter === "all") {
             toast.warning("لا يمكن تغيير حالة هذا الحجز");

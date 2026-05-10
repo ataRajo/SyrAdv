@@ -31,6 +31,14 @@ import ExtendBooking from "./Components/Booking/ExtendBooking/ExtendBooking";
 import LandingPage from "./Pages/LandingPage/LandingPage";
 import PrintPrice from "./Components/PrintPrice/PrintPrice"
 import ErrorBoundary from "./ErrorBoundary";
+import AdminAi from "./Ai/AdminAi";
+import BookingDetails from "./Pages/Booking/BookingDetails";
+import RoadSignStatstics from "./Components/RoadSigns/Statstics/RoadSignStatstics";
+import ContractMapPage from "./Components/Booking/ContractMapPage";
+import PublicMapPage from "./Components/Booking/ContractMapPage";
+import Precentage from "./Pages/precentage/Precentage";
+import DigitalScreens from "./Pages/DigitalScreens/DigitalScreens";
+import CampaignsPage from "./Pages/campaign/CampaignsPage";
 
 
 function App() {
@@ -49,6 +57,8 @@ function App() {
 
           <Route path="/Login" element={<Login />} />
           <Route path="/" element={<LandingPage />} />
+                <Route path="public-map/:id" element={<PublicMapPage />} />
+
           <Route path="/dashboard" element={<DashboardPage />}>
           
 
@@ -69,6 +79,7 @@ function App() {
               */ }
 
 
+
               <Route path="box" element={<Box />} />
               <Route path="brokers" element={<BrokersPage />} />
               <Route path="brokers/:id" element={<BrokerInfo />} />
@@ -85,6 +96,8 @@ function App() {
             <Route path="models/:id" element={<TableTemplate />} />
             <Route path="road_signs" element={<RoadSignsPage />} />
             <Route path="road_signs/:id" element={<TableRoadSigns />} />
+            
+
             {/*
             
             */}
@@ -93,6 +106,7 @@ function App() {
             {/*<Route path="road_signs/:id/stats" element={<RoadSignStats />} />*/}
 
             <Route path="bookings" element={<BookingPage />} />
+            <Route path="bookings/:bookingId" element={<BookingDetails />} />
             <Route path="booking/add" element={<BookingForm />} />
             <Route
               path="booking/edit/:id"
@@ -102,14 +116,21 @@ function App() {
             <Route path="booking/:id" element={<ContractPage />} />
             <Route path="brokers" element={<BrokersPage />} />
 
+
+
             <Route path="regions-city" element={<RegionsCityPage />} />
             <Route path="profile" element={<ProfilePage />} />
+
+            
               {/*New Routes*/}
 
               <Route path="booking/extend/:id" element={<ExtendBooking />} />
               <Route path ='/dashboard/PrintPrice' element ={<PrintPrice />} />
-              
-
+             <Route path ='/dashboard/administration-page/Ai' element ={<AdminAi />} />
+            <Route path="Statistics" element={<RoadSignStatstics />} />
+            <Route path ="precentage" element ={<Precentage />} />
+            <Route path = "digital-screens" element={<DigitalScreens />} />
+            <Route path = "campaigns" element={<CampaignsPage />} />
           </Route>
         </Routes>
       </ErrorBoundary>

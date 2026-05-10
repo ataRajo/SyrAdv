@@ -33,10 +33,7 @@ const STATUS_FILTER_OPTIONS = [
   { label: PAYMENT_STATUS.REJECTED.label, value: PAYMENT_STATUS.REJECTED.value.toString() },
 ];
 
-const raw = localStorage.getItem("SuperAdminInfo");
-      const info = raw ? JSON.parse(raw) : null;
-      const token = info?.user?.token || info?.token || null;
-      
+
 
 const CUSTOMER_FILTER_OPTIONS = [
   { label: "جميع العملاء", value: "all" },
@@ -77,11 +74,9 @@ const PaymentsContainer = () => {
   
   const { user } = useAuth(); 
   
-  // Fetch ALL payments and ALL customers
   const { data: payments = [], isLoading: isFetchingPayments } = useGetPaymentsQuery();
   const { data: customers = [], isLoading: isFetchingCustomers } = useGetCustomersQuery();
 
-  // حساب العملاء الذين لديهم رصيد متبقي مباشرة من حقل remaining في بيانات العميل
   const customersWithRemainingBalance = useMemo(() => {
     if (!customers || customers.length === 0) {
       return [];
@@ -90,35 +85,28 @@ const PaymentsContainer = () => {
     const result = [];
     let counter = 0; // عداد للعملاء الذين لديهم رصيد متبقي
     
-    // معالجة جميع العملاء
     customers.forEach(customer => {
-      // الحصول على الرصيد المتبقي مباشرة من حقل remaining في بيانات العميل
       const remaining = parseFloat(customer.remaining) || 0;
       const hasRemaining = remaining > 0;
       
-      // زيادة العداد إذا كان الرصيد المتبقي أكبر من 0
       if (hasRemaining) {
         counter++;
       }
       
-      // تجميع دفعات هذا العميل لحساب الإحصائيات
       const customerPayments = payments?.filter(p => p.customer_id === customer.id) || [];
       
       const totalPaid = customerPayments.reduce((sum, payment) => {
         return sum + (parseFloat(payment.paid) || 0);
       }, 0);
       
-      // حساب إجمالي المبلغ الكلي
       const totalAmount = customerPayments.reduce((sum, payment) => {
         return sum + (parseFloat(payment.total) || 0);
       }, 0);
       
-      // حساب عدد الدفعات غير المكتملة (التي لديها remaining > 0)
       const incompletePayments = customerPayments.filter(p => 
         (parseFloat(p.remaining) || 0) > 0
       ).length;
       
-      // العثور على آخر دفعة
       const latestPayment = customerPayments.sort((a, b) => 
         new Date(b.date || b.created_at) - new Date(a.date || a.created_at)
       )[0];
@@ -145,7 +133,6 @@ const PaymentsContainer = () => {
     
     console.log(`عدد العملاء الذين لديهم رصيد متبقي: ${counter} من ${customers.length}`);
     
-    // ترتيب العملاء حسب الرصيد المتبقي (من الأعلى إلى الأقل)
     return result.sort((a, b) => b.remaining - a.remaining);
   }, [customers, payments]);
 
@@ -215,7 +202,17 @@ const PaymentsContainer = () => {
   }, [calculateBookingNotifications, filteredNotReceivedPayments]);
 
  
-
+const getToken = () => {
+    try {
+      const raw = localStorage.getItem("SuperAdminInfo");
+      const info = raw ? JSON.parse(raw) : null;
+      return info?.user?.token || info?.token || localStorage.getItem("token");
+    } catch (error) {
+      console.error("Error getting token:", error);
+      return localStorage.getItem("token");
+    }
+  };
+  
   
 const handleReceipt = async (paymentId) => {
   if (!paymentId) {
@@ -224,11 +221,15 @@ const handleReceipt = async (paymentId) => {
   }
 
   try {
+    const token = getToken()
+console.log(token)
+
     const response = await fetch(`${BASE_URL}/payments/${paymentId}/pdf`, {
       method: "POST",
       headers: {
-        "Accept": "*/*", //  أنواع 
+        "Accept": "*/*",
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`   
       },
       body: JSON.stringify({ id: paymentId })
     });
@@ -270,13 +271,12 @@ const handleReceipt = async (paymentId) => {
     const isWord = contentType && (
       contentType.includes("application/msword") ||
       contentType.includes("application/vnd.openxmlformats-officedocument.wordprocessingml.document") ||
-      contentType.includes("application/octet-stream") // نوع عام للملفات
+      contentType.includes("application/octet-stream")
     );
     
     const isPdf = contentType && contentType.includes("application/pdf");
 
     if (isWord) {
-      // معالجة ملف Word
       const wordBlob = await response.blob();
       
       if (wordBlob.size === 0) {
@@ -286,11 +286,9 @@ const handleReceipt = async (paymentId) => {
       const wordUrl = URL.createObjectURL(wordBlob);
       const fileName = `سند_قبض_${paymentId}_${new Date().toISOString().split("T")[0]}.doc`;
       
-      // تحميل ملف Word مباشرة
       downloadFile(wordUrl, fileName);
       
     } else if (isPdf) {
-      // معالجة ملف PDF (الكود القديم)
       const pdfBlob = await response.blob();
 
       if (pdfBlob.size === 0) {
@@ -325,7 +323,6 @@ const handleReceipt = async (paymentId) => {
       };
       
     } else {
-      // إذا كان الرد ليس Word ولا PDF
       try {
         const result = await response.clone().json();
 
@@ -1322,7 +1319,7 @@ const handleExportWord = async () => {
                               </div>
                               {customer.totalAmount > 0 && (
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                  إجمالي المبلغ: {customer.totalAmount.toFixed(2)} $
+                                 
                                 </p>
                               )}
                               {customer.latestPaymentDate && (

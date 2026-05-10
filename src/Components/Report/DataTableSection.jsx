@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader } from "lucide-react";
+import { Loader, MapPin, ExternalLink } from "lucide-react";
 import { 
   calculateTotalAdvertisingSpace,
   weeklyTableColumns,
@@ -19,7 +19,111 @@ const DataTableSection = ({
   startDate,
   endDate
 }) => {
-  const tableColumns = isWeeklyReport ? weeklyTableColumns : detailsTableColumns;
+  // Function to handle live location click
+  const handleLiveLocation = (lat, lng, placeName) => {
+    if (lat && lng) {
+      // Open in Google Maps
+      const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      window.open(googleMapsUrl, '_blank');
+      
+      // Optional: Log for debugging
+      console.log(`Opening location for ${placeName}: ${lat}, ${lng}`);
+    } else {
+      console.warn('No coordinates available for this location');
+      alert('لا توجد إحداثيات متاحة لهذا الموقع');
+    }
+  };
+
+  // Define table columns with live location column
+  const getTableColumns = () => {
+    if (isWeeklyReport) {
+      return [
+        ...weeklyTableColumns,
+        {
+          header: 'الموقع المباشر',
+          accessor: 'live_location',
+          cell: (item) => {
+            const lat = item.latitudeX || item.lat;
+            const lng = item.longitudeY || item.lng;
+            const hasCoordinates = lat && lng;
+            
+            return (
+              <button
+                onClick={() => handleLiveLocation(lat, lng, item.place || item.name)}
+                disabled={!hasCoordinates}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  hasCoordinates 
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md hover:shadow-lg transform hover:scale-105' 
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                <MapPin className="w-4 h-4" />
+                <span>عرض الموقع</span>
+                {hasCoordinates && <ExternalLink className="w-3 h-3" />}
+              </button>
+            );
+          },
+          cellClassName: "text-center"
+        }
+      ];
+    } else {
+      // Details report columns
+      const baseColumns = [...detailsTableColumns];
+      
+      // Add type indicator column for details report only
+      const typeColumn = {
+        header: 'نوع الحجز',
+        accessor: 'booking_type',
+        cell: (item) => {
+          if (item.bookings && item.bookings.some(booking => booking.type === 1)) {
+            return (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xs font-medium">
+                مؤقت
+              </span>
+            );
+          }
+          return null;
+        },
+        cellClassName: "text-center"
+      };
+      
+      // Add live location column
+      const locationColumn = {
+        header: 'الموقع المباشر',
+        accessor: 'live_location',
+        cell: (item) => {
+          const lat = item.latitudeX || item.lat;
+          const lng = item.longitudeY || item.lng;
+          const hasCoordinates = lat && lng;
+          
+          return (
+       <button
+  onClick={() => handleLiveLocation(lat, lng, item.place || item.name)}
+  disabled={!hasCoordinates}
+  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-medium transition-all duration-200 ${
+    hasCoordinates 
+      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm hover:shadow-md transform hover:scale-105' 
+      : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+  }`}
+>
+  <MapPin className="w-3 h-3" />
+  <span>عرض الموقع</span>
+  {hasCoordinates && <ExternalLink className="w-2.5 h-2.5" />}
+</button>
+
+          );
+        },
+        cellClassName: "text-center"
+      };
+      
+      // Insert columns at position 2
+      const updatedColumns = [...baseColumns];
+      updatedColumns.splice(2, 0, typeColumn, locationColumn);
+      return updatedColumns;
+    }
+  };
+
+  const tableColumns = getTableColumns();
 
   return (
     <div className="space-y-4">
@@ -89,13 +193,25 @@ const DataTableSection = ({
             <tbody>
               {currentData.map((item, index) => (
                 <tr key={item.id || index} className="hover:bg-gray-50 dark:hover:bg-gray-700 border-b">
-                  {tableColumns.map((column, colIndex) => (
-                    <td key={colIndex} className={`px-4 py-3 text-right ${column.cellClassName ? 
-                      (typeof column.cellClassName === 'function' ? column.cellClassName(item) : column.cellClassName) 
-                      : ''}`}>
-                      {column.cell ? column.cell(item) : item[column.accessor]}
-                    </td>
-                  ))}
+                  {tableColumns.map((column, colIndex) => {
+                    // Special handling for live_location and booking_type columns
+                    if (column.accessor === 'live_location' || column.accessor === 'booking_type') {
+                      return (
+                        <td key={colIndex} className={`px-4 py-3 text-right ${column.cellClassName || ''}`}>
+                          {column.cell(item)}
+                        </td>
+                      );
+                    }
+                    
+                    // Regular columns
+                    return (
+                      <td key={colIndex} className={`px-4 py-3 text-right ${column.cellClassName ? 
+                        (typeof column.cellClassName === 'function' ? column.cellClassName(item) : column.cellClassName) 
+                        : ''}`}>
+                        {column.cell ? column.cell(item) : item[column.accessor]}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

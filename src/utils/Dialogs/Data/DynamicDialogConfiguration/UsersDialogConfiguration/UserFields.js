@@ -6,6 +6,14 @@ export const UserFields = [
   { name: "address", label: "العنوان", type: "text", dir: "rtl" },
   { name: "email", label: "البريد الإلكتروني", type: "email", dir: "rtl" },
   {
+    name: "department",
+    label: "القسم",
+    type: "select",
+    required: true,
+      valueKey: "value",  // Add this
+    displayKey: "label", // Add this
+  },
+  {
     name: "roles",
     label: "الدور",
     type: "select",

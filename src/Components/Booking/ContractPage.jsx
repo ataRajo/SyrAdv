@@ -280,51 +280,52 @@ const ContractPage = () => {
   // ✅ تحديد متى نخفي سعر الطباعة - الشرط الجديد: إذا كان printing_price > 0 نظهر
   const showPrintingPrice = getBooking?.printing_price > 0;
 
-  // ✅ COMMON TABLE ROWS
-  const CommonTableRows = () => {
-    return (
-      <>
+// ✅ COMMON TABLE ROWS
+const CommonTableRows = () => {
+  return (
+    <>
+      <tr>
+        <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+          قيمة الفترات الاعلانية    
+        </th>
+        <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
+      </tr>
+      
+      {/* ✅ نخبّي سعر الطباعة إذا كان printing_price > 0 */}
+      {showPrintingPrice && getBooking?.total_printing_space && (
         <tr>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-            قيمة الفترات الاعلانية    
+            سعر الطباعة ({getBooking.printing_price}$ × {getBooking.total_printing_space} م²)
           </th>
-          <td style={styles.adTableThTd}>{getBooking?.total_price_befor_discount} $</td>
+          <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
         </tr>
-        
-        {/* ✅ نخبّي سعر الطباعة إذا كان printing_price > 0 */}
-        {showPrintingPrice && getBooking?.total_printing_space && (
-          <tr>
-            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-              سعر الطباعة ({getBooking.printing_price}$ × {getBooking.total_printing_space} م²)
-            </th>
-            <td style={styles.adTableThTd}>{printingTotalPrice} $</td>
-          </tr>
-        )}
-        
-        {getBooking?.value && (
-          <tr>
-            <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-              الحسم المقدم من الشركة السورية   
-            </th>
-            <td style={styles.adTableThTd}>
-              {getBooking.discount_type === 1 ? (
-                <span>{getBooking.value} $ </span>
-              ) : (
-                <span>{getBooking.value} %</span>
-              )}
-            </td>
-          </tr>
-        )}
-        
+      )}
+      
+      {getBooking?.value && (
         <tr>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
-            القيمة الكلية للعقد
+            الحسم المقدم من الشركة السورية   
           </th>
-          <td style={styles.adTableThTd}>{getBooking?.total_price} $ </td>
+          <td style={styles.adTableThTd}>
+            {getBooking.discount_type === 1 ? (
+              <span>{getBooking.value} $</span>
+            ) : (
+              <span>{getBooking.value} %</span>
+            )}
+          </td>
         </tr>
-      </>
-    );
-  };
+      )}
+      
+      <tr>
+        <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>
+          القيمة الكلية للعقد
+        </th>
+        <td style={styles.adTableThTd}>{getBooking?.total_price} $</td>
+      </tr>
+    </>
+  );
+};
+
 
   // ✅ COMMON PRINTING INFO
   const CommonPrintingInfo = () => {
@@ -374,7 +375,6 @@ const ContractPage = () => {
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>عدد الأوجه</th>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>المدة الإعلانية (بالايام)</th>
           <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>السعر الإفرادي</th>
-          <th style={{ ...styles.adTableThTd, ...styles.adTableTh }}>العدد</th>
         </tr>
       </thead>
       <tbody>
@@ -391,7 +391,6 @@ const ContractPage = () => {
               {group.booking_faces} وجه اعلاني
               {group.count > 1 && (
                 <div style={{ fontSize: '12px', color: '#666' }}>
-                  ({group.booking_faces / group.count} لكل لوحة)
                 </div>
               )}
             </td>
@@ -400,20 +399,9 @@ const ContractPage = () => {
               {group.total_faces_price} $
               {group.count > 1 && (
                 <div style={{ fontSize: '12px', color: '#666' }}>
-                  ({group.total_faces_price / group.count}$ لكل لوحة)
+                  ({group.total_faces_price / group.count}$ لكل وجه)
                 </div>
               )}
-            </td>
-            <td style={styles.adTableThTd}>
-              <div style={{ 
-                backgroundColor: group.count > 1 ? '#e8f5e9' : '#f5f5f5',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                fontWeight: group.count > 1 ? 'bold' : 'normal'
-              }}>
-                {group.count}
-                {group.count > 1 && ' لوحة'}
-              </div>
             </td>
           </tr>
         ))}

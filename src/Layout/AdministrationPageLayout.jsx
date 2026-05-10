@@ -114,9 +114,9 @@ const AdministrationPageLayout = () => {
   };
 
   return (
-    <div style={{ direction: "rtl" }} className="flex flex-col h-full">
-      <nav className="bg-card border-b">
-        <div className="flex items-center justify-between p-4">
+    <div style={{ direction: "rtl" }} className="flex flex-col h-full min-h-screen bg-background">
+      <nav className="bg-card border-b sticky top-0 z-50">
+        <div className="flex items-center justify-between p-3 md:p-4 max-w-full">
           <Button
             variant="ghost"
             size="icon"
@@ -130,75 +130,84 @@ const AdministrationPageLayout = () => {
             )}
           </Button>
 
-          <div className="hidden sm:flex gap-2 items-center">
+          {/* Desktop navigation - hidden on mobile */}
+          <div className="hidden sm:flex sm:flex-wrap sm:gap-1 md:gap-2 items-center flex-1">
             {/* الروابط العادية */}
-            {navLinksAdministrationPage.map((link) => (
-              hasPermission(link.permission) && (
-                <Button
-                  key={link.to}
-                  asChild
-                  variant={isActive(link.to) ? "default" : "ghost"}
-                  className={cn(
-                    "justify-start relative min-h-[40px]",
-                    !isActive(link.to) &&
-                      "text-muted-foreground hover:text-primary"
-                  )}
-                >
-                  <Link to={link.to} className="flex items-center gap-2 px-4">
-                    {link.text}
-                    
-                    {/* Show orders notification badge */}
-                    {link.to === "orders" && renderNotificationBadge(ordersNotificationCount)}
-                    
-                    {/* Show payments notification badge */}
-                    {link.to === "payments" && renderNotificationBadge(
-                      paymentsNotificationCount, 
-                      paymentsOverdueCount
+            <div className="flex flex-wrap items-center gap-1 md:gap-2">
+              {navLinksAdministrationPage.map((link) => (
+                hasPermission(link.permission) && (
+                  <Button
+                    key={link.to}
+                    asChild
+                    variant={isActive(link.to) ? "default" : "ghost"}
+                    className={cn(
+                      "justify-start relative min-h-[40px] whitespace-nowrap text-sm md:text-base",
+                      !isActive(link.to) &&
+                        "text-muted-foreground hover:text-primary"
                     )}
-                  </Link>
-                </Button>
-              )
-            ))}
-
-            {/*
-            <div className="relative">
-              <Button
-                variant="ghost"
-                onClick={() => setNotificationsOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Bell className="h-5 w-5" />
-                <span>الإشعارات</span>
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
+                  >
+                    <Link to={link.to} className="flex items-center gap-1 md:gap-2 px-2 md:px-4">
+                      <span className="hidden lg:inline">{link.text}</span>
+                      <span className="lg:hidden">{link.mobileText || link.text}</span>
+                      
+                      {/* Show orders notification badge */}
+                      {link.to === "orders" && renderNotificationBadge(ordersNotificationCount)}
+                      
+                      {/* Show payments notification badge */}
+                      {link.to === "payments" && renderNotificationBadge(
+                        paymentsNotificationCount, 
+                        paymentsOverdueCount
+                      )}
+                    </Link>
+                  </Button>
+                )
+              ))}
             </div>
-            */}
+          </div>
+
+         
+              {/*
+              
+            <Button
+              variant="ghost"
+              onClick={() => setNotificationsOpen(true)}
+              className="flex items-center gap-2 relative"
+              size="icon"
+            >
+              <Bell className="h-5 w-5" />
+            </Button>
+              
+              */}
+
+          <div className="hidden sm:block">
+          
           </div>
         </div>
 
+        {/* Mobile menu */}
         <div
           className={cn(
-            "sm:hidden overflow-hidden transition-all duration-300 ease-in-out",
+            "sm:hidden overflow-hidden transition-all duration-300 ease-in-out w-full",
             mobileMenuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
           )}
         >
-          <div className="flex flex-col gap-2 p-2 border-t">
-            {/* زر الإشعارات في الجوال */}
-            <Button
+
+          {/*
+          <Button
               variant="ghost"
               onClick={() => {
                 setMobileMenuOpen(false);
                 setNotificationsOpen(true);
               }}
-              className="justify-start w-full"
+              className="justify-start w-full px-4 py-3 h-auto"
             >
-              <Bell className="h-5 w-5 mr-2" />
+              <Bell className="h-5 w-5 ml-2" />
               <span>الإشعارات</span>
             </Button>
+          
+          */}
+          <div className="flex flex-col gap-1 p-2 border-t">
+            
 
             {/* الروابط العادية للجوال */}
             {navLinksAdministrationPage.map((link) => (
@@ -208,14 +217,14 @@ const AdministrationPageLayout = () => {
                   asChild
                   variant={isActive(link.to) ? "default" : "ghost"}
                   className={cn(
-                    "justify-start w-full relative transition-colors",
+                    "justify-start w-full relative transition-colors px-4 py-3 h-auto",
                     !isActive(link.to) &&
                       "text-muted-foreground hover:text-primary"
                   )}
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <Link to={link.to} className="flex items-center justify-between w-full px-4 py-3">
-                    <span>{link.mobileText}</span>
+                  <Link to={link.to} className="flex items-center justify-between w-full">
+                    <span className="text-sm">{link.mobileText || link.text}</span>
                     
                     {/* Show notification badges for mobile */}
                     {link.to === "orders" && renderNotificationBadge(
@@ -245,8 +254,8 @@ const AdministrationPageLayout = () => {
         unreadCount={0}
       />
 
-      {/* المحتوى الرئيسي */}
-      <div className="p-4 md:p-6 space-y-4">
+      {/* المحتوى الرئيسي - Responsive padding */}
+      <div className="flex-1 p-3 sm:p-4 md:p-5 lg:p-6 space-y-3 sm:space-y-4 overflow-auto">
         <Outlet />
       </div>
     </div>
