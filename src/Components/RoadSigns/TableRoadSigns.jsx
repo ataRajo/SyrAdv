@@ -208,122 +208,90 @@ const TableRoadSigns = ({ isLoading }) => {
     });
   }, [customerSearch, allCustomers]);
 
-  // ✅ فلترة اللوحات النهائية
-  const filteredRoadSigns = useMemo(() => {
-    if (!roadSigns || !Array.isArray(roadSigns)) return [];
-    
-    let result = [...roadSigns];
-    
-    if (regionId) {
-      result = result.filter(roadSign => 
-        String(roadSign.region_id) === String(regionId)
+
+// ✅ فلترة اللوحات النهائية
+const filteredRoadSigns = useMemo(() => {
+  if (!roadSigns || !Array.isArray(roadSigns)) return [];
+  
+  let result = [...roadSigns];
+  
+  if (regionId) {
+    result = result.filter(roadSign => 
+      String(roadSign.region_id) === String(regionId)
+    );
+  }
+  
+  if (direction && direction.trim() !== "") {
+    result = result.filter(roadSign => {
+      const roadSignDirection = roadSign.directions;
+      return roadSignDirection && 
+             roadSignDirection.toString().trim() === direction.trim();
+    });
+  }
+  
+  if (customerId && customerId !== "") {
+    result = result.filter(roadSign => {
+      if (!roadSign.bookings || !Array.isArray(roadSign.bookings)) {
+        return false;
+      }
+      
+      return roadSign.bookings.some(booking => 
+        String(booking.customer_id) === String(customerId)
       );
-    }
-    
-    if (direction && direction.trim() !== "") {
-      result = result.filter(roadSign => {
-        const roadSignDirection = roadSign.directions;
-        return roadSignDirection && 
-               roadSignDirection.toString().trim() === direction.trim();
-      });
-    }
-    
-    if (customerId && customerId !== "") {
-      result = result.filter(roadSign => {
-        if (!roadSign.bookings || !Array.isArray(roadSign.bookings)) {
-          return false;
-        }
-        
-        return roadSign.bookings.some(booking => 
-          String(booking.customer_id) === String(customerId)
-        );
-      });
-    }
-    
-    if (activeTab === "booked") {
-      result = result.filter(roadSign => {
-        const hasBookings = roadSign.bookings && 
-                           Array.isArray(roadSign.bookings) && 
-                           roadSign.bookings.length > 0;
-        
-        const hasPivotBookings = roadSign.pivot && 
-                                roadSign.pivot.booking_faces && 
-                                roadSign.pivot.booking_faces > 0;
-        
-        return hasBookings || hasPivotBookings;
-      });
-    } else if (activeTab === "unbooked") {
-      result = result.filter(roadSign => {
-        const hasBookings = roadSign.bookings && 
-                           Array.isArray(roadSign.bookings) && 
-                           roadSign.bookings.length > 0;
-        
-        const hasPivotBookings = roadSign.pivot && 
-                                roadSign.pivot.booking_faces && 
-                                roadSign.pivot.booking_faces > 0;
-        
-        return !hasBookings && !hasPivotBookings;
-      });
-    }
-    
-    return result;
-  }, [roadSigns, regionId, direction, customerId, activeTab]);
+    });
+  }
+  
+  // ✅ FIXED: Use is_booked property directly
+  if (activeTab === "booked") {
+    result = result.filter(roadSign => roadSign.is_booked === true);
+  } else if (activeTab === "unbooked") {
+    result = result.filter(roadSign => roadSign.is_booked === false);
+  }
+  
+  return result;
+}, [roadSigns, regionId, direction, customerId, activeTab]);
 
   // ✅ === CALCULATE BOOKED AND UNBOOKED COUNTS ===
-  const { bookedCount, unbookedCount } = useMemo(() => {
-    if (!roadSigns || !Array.isArray(roadSigns)) {
-      return { bookedCount: 0, unbookedCount: 0 };
-    }
-    
-    let result = [...roadSigns];
-    
-    if (regionId) {
-      result = result.filter(roadSign => 
-        String(roadSign.region_id) === String(regionId)
-      );
-    }
-    
-    if (direction && direction.trim() !== "") {
-      result = result.filter(roadSign => {
-        const roadSignDirection = roadSign.directions;
-        return roadSignDirection && 
-               roadSignDirection.toString().trim() === direction.trim();
-      });
-    }
-    
-    if (customerId && customerId !== "") {
-      result = result.filter(roadSign => {
-        if (!roadSign.bookings || !Array.isArray(roadSign.bookings)) {
-          return false;
-        }
-        
-        return roadSign.bookings.some(booking => 
-          String(booking.customer_id) === String(customerId)
-        );
-      });
-    }
-    
-    let booked = 0;
-    let unbooked = 0;
-    
-    result.forEach(roadSign => {
-      const hasBookings = roadSign.bookings && 
-                         Array.isArray(roadSign.bookings) && 
-                         roadSign.bookings.length > 0;
-      
-      const hasPivotBookings = roadSign.pivot && 
-                              roadSign.pivot.booking_faces && 
-                              roadSign.pivot.booking_faces > 0;
-      
-      if (hasBookings || hasPivotBookings) {
-        booked++;
-      } else {
-        unbooked++;
-      }
+const { bookedCount, unbookedCount } = useMemo(() => {
+  if (!roadSigns || !Array.isArray(roadSigns)) {
+    return { bookedCount: 0, unbookedCount: 0 };
+  }
+  
+  let result = [...roadSigns];
+  
+  if (regionId) {
+    result = result.filter(roadSign => 
+      String(roadSign.region_id) === String(regionId)
+    );
+  }
+  
+  if (direction && direction.trim() !== "") {
+    result = result.filter(roadSign => {
+      const roadSignDirection = roadSign.directions;
+      return roadSignDirection && 
+             roadSignDirection.toString().trim() === direction.trim();
     });
-    
-    return { bookedCount: booked, unbookedCount: unbooked };
-  }, [roadSigns, regionId, direction, customerId]);
+  }
+  
+  if (customerId && customerId !== "") {
+    result = result.filter(roadSign => {
+      if (!roadSign.bookings || !Array.isArray(roadSign.bookings)) {
+        return false;
+      }
+      
+      return roadSign.bookings.some(booking => 
+        String(booking.customer_id) === String(customerId)
+      );
+    });
+  }
+  
+  // ✅ FIXED: Count using is_booked property
+  let booked = result.filter(roadSign => roadSign.is_booked === true).length;
+  let unbooked = result.filter(roadSign => roadSign.is_booked === false).length;
+  
+  return { bookedCount: booked, unbookedCount: unbooked };
+}, [roadSigns, regionId, direction, customerId]);
+
 
   // ✅ === معالجة الأحداث ===
   const handleEdit = useCallback((roadSign) => {

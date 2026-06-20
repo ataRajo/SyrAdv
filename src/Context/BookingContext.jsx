@@ -43,8 +43,15 @@ export const BookingContextApi = ({ children, bookingId }) => {
     useGetOneBookingsQuery(id, {
       skip: !isEditMode,
     });
-  const { data: customers, isLoading: isLoadingCustomers } =
-    useGetCustomersQuery();
+ 
+const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
+  //page: customerPage,
+  per_page: 80
+});
+
+
+
+const customers = customersResponse?.data || [];
   const [addNewBooking, { isLoading: isLoadingAdd }] =
     useAddNewBookingMutation();
   const [updateBookings, { isLoading: isLoadingUpdate }] =

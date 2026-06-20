@@ -4,5 +4,7 @@ export const CustomerInitialValues = {
   address: "",
   phone_number: "",
   commercial_registration_number:""
+    work_type_id: "",
+
   
 };

@@ -86,7 +86,7 @@ export const RoadSignsSlice = createApi({
     }),
 
     getBoardReservationsStats: builder.query({
-      query: ({ city_id, region_id , month, year, from_month, to_month, to_year } = {}) => {
+      query: ({ city_id, region_id , month, year, from_month, to_month, to_year ,work_type_id } = {}) => {
         const params = new URLSearchParams();
         if (city_id)    params.append("city_id",    city_id);
         if(region_id) params.append("region_id" , region_id)
@@ -95,6 +95,7 @@ export const RoadSignsSlice = createApi({
         if (from_month) params.append("from_month", from_month);
         if (to_month)   params.append("to_month",   to_month);
         if (to_year)    params.append("to_year",    to_year);
+        if(work_type_id) params.append("work_type_id" , work_type_id)
         const qs = params.toString();
         return `/road-signs/statistics/board-reservations${qs ? `?${qs}` : ""}`;
       },

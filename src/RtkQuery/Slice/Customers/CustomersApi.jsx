@@ -7,14 +7,34 @@ export const CustomersSlice = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: ["customers"],
   endpoints: (builder) => ({
-    getCustomers: builder.query({
-      query: () => "customers",
-      providesTags: ["customers"],
+     getCustomers: builder.query({
+      query: (params) => {
+        if (!params) return "/customers";
+
+       const queryString = new URLSearchParams(
+  Object.entries({ page: params.page, per_page: params.per_page, ...params }).filter(([_, v]) => v !== undefined && v !== "" && v !== null)
+).toString();
+
+        return `/customers${queryString ? `?${queryString}` : ""}`;
+      },
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: "Customers", id })),
+              { type: "Customers", id: "LIST" },
+            ]
+          : [{ type: "Customers", id: "LIST" }],
     }),
+
+    
     addNewCustomer: builder.mutation({
       query: (data) => ({
         url: "customers",
         method: "POST",
+        headers :{ 
+      'Accept': 'application/json',
+
+        } ,
         body: data,
       }),
       invalidatesTags: ["customers"],

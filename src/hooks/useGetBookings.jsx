@@ -9,8 +9,17 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../Context/AuthProvider";
 import { Permissions } from "../Static/StaticData";
 import { useEffect } from "react";
-const useGetBookings = () => {
-  const { data, isLoading } = useGetBookingQuery();
+const useGetBookings = ({page = 1, per_page = 20}={}) => {
+  
+  const { data:bookingsResponse, isLoading } = useGetBookingQuery({page,per_page});
+
+const data = bookingsResponse?.data || [];
+const paginationMeta = {
+  currentPage: bookingsResponse?.current_page || 1,
+  lastPage: bookingsResponse?.last_page || 1,
+  total: bookingsResponse?.total || 0,
+  perPage: bookingsResponse?.per_page || 20,
+};
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const [openDelete, setOpenDelete] = useState(false);
@@ -79,6 +88,7 @@ useEffect(() => {
     data,
     isLoading,
     navigate,
+    paginationMeta,
     hasPermission,
     openDelete,
     setOpenDelete,

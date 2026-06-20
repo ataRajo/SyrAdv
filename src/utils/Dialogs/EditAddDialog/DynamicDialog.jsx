@@ -68,8 +68,8 @@ const DynamicDialog = ({
     switch (field.type) {
 case "select": {
   const options = field.options || (selectData[field.dataKey]?.data || []);
+  const pagination = selectData[field.dataKey]?.pagination;
   
-  // Check if this is the bookings select and there are no options but customer is selected
   const isBookingsSelect = field.name === "booking_id";
   const hasCustomerSelected = formik.values.customer_id && formik.values.customer_id !== "";
   const hasNoBookings = options.length === 0;
@@ -81,15 +81,13 @@ case "select": {
   });
 
   if (field.name === 'department' && formik.values[field.name] && typeof formik.values[field.name] === 'object') {
-  formik.setFieldValue(field.name, formik.values[field.name].value || formik.values[field.name].id || '');
-}
-
+    formik.setFieldValue(field.name, formik.values[field.name].value || formik.values[field.name].id || '');
+  }
 
   return (
     <div key={field.name} className="space-y-2">
       <Label htmlFor={field.name}>{field.label}</Label>
       
-      {/* Special handling for bookings dropdown */}
       {isBookingsSelect && hasCustomerSelected && hasNoBookings ? (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
           <p className="text-sm text-yellow-700 text-center">
@@ -102,51 +100,82 @@ case "select": {
           />
         </div>
       ) : (
-        <Select
-          className="text-red-600"
-          options={selectOptions}
-          value={
-            selectOptions.find((opt) => opt.value === formik.values[field.name]) || null
-          }
-          onChange={(selectedOption) => {
-            const value = selectedOption ? selectedOption.value : "";
-            formik.setFieldValue(field.name, value);
-            onFieldChange(field.name, value);
-          }}
-          onBlur={() => formik.setFieldTouched(field.name, true)}
-          placeholder={
-            isBookingsSelect && !hasCustomerSelected 
-              ? "اختر العميل أولاً" 
-              : `اختر ${field.label}`
-          }
-          isDisabled={isBookingsSelect && !hasCustomerSelected}
-          isSearchable
-          noOptionsMessage={() => 
-            isBookingsSelect && hasCustomerSelected 
-              ? "لا توجد حجوزات دائمة لهذا العميل" 
-              : "لا توجد خيارات مطابقة"
-          }
-          styles={{
-            control: (base, state) => ({
-              ...base,
-              borderColor:
-                formik.touched[field.name] && formik.errors[field.name]
-                  ? "red"
-                  : state.isDisabled
-                  ? "#e5e7eb"
-                  : base.borderColor,
-              backgroundColor: state.isDisabled ? "#f9fafb" : base.backgroundColor,
-              cursor: state.isDisabled ? "not-allowed" : base.cursor,
-              direction: "rtl",
-              textAlign: "right",
-            }),
-            menu: (base) => ({ ...base, direction: "rtl", zIndex: 9999 }),
-            placeholder: (base) => ({
-              ...base,
-              color: isBookingsSelect && !hasCustomerSelected ? "#9ca3af" : base.color,
-            }),
-          }}
-        />
+        <>
+          <Select
+            className="text-red-600"
+            options={selectOptions}
+            value={
+              selectOptions.find((opt) => opt.value === formik.values[field.name]) || null
+            }
+            onChange={(selectedOption) => {
+              const value = selectedOption ? selectedOption.value : "";
+              formik.setFieldValue(field.name, value);
+              onFieldChange(field.name, value);
+            }}
+            onBlur={() => formik.setFieldTouched(field.name, true)}
+            placeholder={
+              isBookingsSelect && !hasCustomerSelected 
+                ? "اختر العميل أولاً" 
+                : `اختر ${field.label}`
+            }
+            isDisabled={isBookingsSelect && !hasCustomerSelected}
+            isSearchable
+            noOptionsMessage={() => 
+              isBookingsSelect && hasCustomerSelected 
+                ? "لا توجد حجوزات دائمة لهذا العميل" 
+                : "لا توجد خيارات مطابقة"
+            }
+            styles={{
+              control: (base, state) => ({
+                ...base,
+                borderColor:
+                  formik.touched[field.name] && formik.errors[field.name]
+                    ? "red"
+                    : state.isDisabled
+                    ? "#e5e7eb"
+                    : base.borderColor,
+                backgroundColor: state.isDisabled ? "#f9fafb" : base.backgroundColor,
+                cursor: state.isDisabled ? "not-allowed" : base.cursor,
+                direction: "rtl",
+                textAlign: "right",
+              }),
+              menu: (base) => ({ ...base, direction: "rtl", zIndex: 9999 }),
+              placeholder: (base) => ({
+                ...base,
+                color: isBookingsSelect && !hasCustomerSelected ? "#9ca3af" : base.color,
+              }),
+            }}
+          />
+          
+          {/* PAGINATION CONTROLS - Added here */}
+          {pagination && (
+            <div className="flex items-center justify-between mt-2 px-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => pagination.onPageChange(pagination.currentPage - 1)}
+                disabled={!pagination.hasPrevPage}
+                className="text-xs h-7 px-2"
+              >
+                ← السابق
+              </Button>
+              <span className="text-xs text-gray-600">
+                {pagination.currentPage} / {pagination.totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => pagination.onPageChange(pagination.currentPage + 1)}
+                disabled={!pagination.hasNextPage}
+                className="text-xs h-7 px-2"
+              >
+                التالي ←
+              </Button>
+            </div>
+          )}
+        </>
       )}
       
       {formik.touched[field.name] && formik.errors[field.name] && (
@@ -155,6 +184,7 @@ case "select": {
     </div>
   );
 }
+
 
       case "array":
         return (

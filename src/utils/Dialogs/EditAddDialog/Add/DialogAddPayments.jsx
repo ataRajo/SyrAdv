@@ -3,10 +3,11 @@ import { useGetBookingQuery } from "../../../../RtkQuery/Slice/Booking/BookingAp
 import { useGetCustomersQuery } from "../../../../RtkQuery/Slice/Customers/CustomersApi";
 import DynamicDialog from "../DynamicDialog";
 import * as Yup from "yup";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PaymentInitialValues } from "../../Data/DynamicDialogConfiguration/PaymentsDialogConfiguration/PaymentInitialValues";
+import Select from "react-select";
 
-// Update validation schema to remove booking_id requirement
+// Update validation schema
 export const PaymentValidationSchema = Yup.object({
   customer_id: Yup.string().required("يجب اختيار العميل أولاً"),
   paid: Yup.number()
@@ -17,7 +18,7 @@ export const PaymentValidationSchema = Yup.object({
   payment_image: Yup.mixed().required("صورة الدفعة مطلوبة"),
 });
 
-// Updated fields configuration - remove booking selection
+// Updated fields configuration - keep customer_id field but we'll handle it differently
 export const PaymentFields = [
   {
     name: "customer_id",
@@ -31,35 +32,36 @@ export const PaymentFields = [
     name: "paid", 
     label: "المبلغ المدفوع", 
     type: "number",
-    // You might want to add some custom validation here
   },
   { name: "payment_number", label: "رقم الدفعة", type: "text" },
   { name: "payment_image", label: "صورة الدفعة", type: "file", accept: "image/*" },
 ];
 
 export const DialogAddPayments = ({ show, handleClose }) => {
-  const { data: bookingsData, isSuccess: isBookingsSuccess } = useGetBookingQuery();
-  const { data: customersData, isSuccess: isCustomersSuccess } = useGetCustomersQuery();
+  const [page, setPage] = useState(1);
+  
+  const { data: bookingsResponse } = useGetBookingQuery();
+  const { data: customersResponse, isSuccess: isCustomersSuccess, isLoading: isCustomersLoading } = useGetCustomersQuery({
+    page: page,
+    per_page: 20,
+  });
+
+  const bookingsData = bookingsResponse?.data || [];
+  const customersData = customersResponse?.data || [];
   const [addPayment] = useAddNewPaymentMutation();
   
-  // State to hold customer's total remaining amount
   const [customerTotalRemaining, setCustomerTotalRemaining] = useState(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-  
-  // Prepare customers data with their total remaining amounts
-  const customersWithTotals = customersData?.map(customer => {
-    // Calculate total remaining for this customer
+
+  const customersWithTotals = Array.isArray(customersData) ? customersData.map(customer => {
     let totalRemaining = 0;
     
     if (bookingsData) {
-      // Sum all bookings for this customer with type === 2
       const customerBookings = bookingsData.filter(
         booking => String(booking.customer_id) === String(customer.id) && booking.type === 2
       );
       
-      // Calculate remaining for each booking (you might need to adjust this logic)
       customerBookings.forEach(booking => {
-        // Assuming booking has: total_price, paid_amount, remaining_amount
         const paid = booking.paid_amount || 0;
         const total = booking.total_price || 0;
         const remaining = total - paid;
@@ -75,28 +77,34 @@ export const DialogAddPayments = ({ show, handleClose }) => {
       company_name: customer.company_name || customer.full_name || `زبون #${customer.id}`,
       total_remaining: totalRemaining,
     };
-  }) || [];
+  }) : [];
 
-  // Prepare select data for DynamicDialog with enhanced display
   const selectData = {
     customers: {
       data: customersWithTotals.map(customer => ({
         id: customer.id,
-        // Display customer with total remaining amount
-        //company_name: `${customer.company_name} - المتبقي: ${customer.total_remaining}$`,
-        company_name: `${customer.company_name} `, 
-
+        company_name: `${customer.company_name}`, 
         total_remaining: customer.total_remaining,
       })),
+      // PAGINATION DATA - This is the key addition
+      pagination: {
+        currentPage: customersResponse?.current_page || 1,
+        totalPages: customersResponse?.last_page || 1,
+        hasNextPage: customersResponse?.current_page < customersResponse?.last_page,
+        hasPrevPage: customersResponse?.current_page > 1,
+        onPageChange: (newPage) => {
+          if (newPage >= 1 && newPage <= (customersResponse?.last_page || 1)) {
+            setPage(newPage);
+          }
+        },
+      },
     },
   };
 
-  // Handle customer selection
   const handleFieldChange = (fieldName, value) => {
     if (fieldName === "customer_id") {
       setSelectedCustomerId(value);
       
-      // Find selected customer's total remaining
       const selectedCustomer = customersWithTotals.find(
         customer => String(customer.id) === String(value)
       );
@@ -109,7 +117,6 @@ export const DialogAddPayments = ({ show, handleClose }) => {
     }
   };
 
-  // Custom field renderer to show remaining amount
   const renderCustomFields = (formik) => {
     if (!selectedCustomerId) return null;
     
@@ -135,7 +142,6 @@ export const DialogAddPayments = ({ show, handleClose }) => {
     );
   };
 
-  // Transform form values to FormData
   const onSubmitTransform = (values) => {
     const formData = new FormData();
     formData.append("paid", values.paid);
@@ -146,14 +152,13 @@ export const DialogAddPayments = ({ show, handleClose }) => {
     return formData;
   };
 
-  // Reset state when dialog closes
   const handleDialogClose = () => {
     setCustomerTotalRemaining(0);
     setSelectedCustomerId(null);
+    setPage(1); // Reset to page 1 when closing
     handleClose();
   };
 
-  // Custom validation for paid amount
   const customValidation = (values) => {
     const errors = {};
     

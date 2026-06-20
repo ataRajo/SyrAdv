@@ -8,15 +8,21 @@ export const BookingSlice = createApi({
   endpoints: (builder) => ({
     
     getBooking: builder.query({
-      query: () => "/bookings",
-      providesTags: (result) =>
-        result
-          ? [
-              ...result.map(({ id }) => ({ type: "bookings", id })),
-              { type: "bookings", id: "LIST" },
-            ]
-          : [{ type: "bookings", id: "LIST" }],
-    }),
+  query: ({ page, per_page } = {}) => {
+    const params = new URLSearchParams();
+    if (page) params.append("page", page);
+    if (per_page) params.append("per_page", per_page);
+    const queryString = params.toString();
+    return `/bookings${queryString ? `?${queryString}` : ""}`;
+  },
+  providesTags: (result) =>
+    result?.data
+      ? [
+          ...result.data.map(({ id }) => ({ type: "bookings", id })),
+          { type: "bookings", id: "LIST" },
+        ]
+      : [{ type: "bookings", id: "LIST" }],
+}),
 
     // ✅ Add booking (no forced status)
     addNewBooking: builder.mutation({
@@ -83,8 +89,10 @@ export const BookingSlice = createApi({
           new_roadsign_id
         },
       }),
-      invalidatesTags: [{ type: "bookings", id: "LIST" }],
-    }),
+invalidatesTags: (result, error, { booking_id }) => [
+        { type: "bookings", id: "LIST" },
+        { type: "bookings", id: booking_id },
+      ],    }),
 
     // ✅ Update status (with reject reason if needed)
     

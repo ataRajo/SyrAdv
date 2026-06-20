@@ -16,7 +16,7 @@ const CustomersContainer = ({customers , isFetching}) => {
       className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 p-2  lg:grid-cols-3 gap-4"
       dir="rtl"
     >
-      {customers.map((item, ind) => {
+{Array.isArray(customers) && customers.map((item, ind) => {
         return (
           <CustomerCard
             key={ind}

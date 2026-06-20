@@ -9,7 +9,7 @@ import { Link } from "react-router-dom";
 import { Eye , Share2  } from "lucide-react";
 import { BookingDetailsAction } from "../../../Components/Booking/BookingDetailsAction";
 import {toast} from "sonner";
-
+import { PrintOrderButton } from "../../../Components/Booking/PrintOrderButton";
 export const statusBookings = {
   1: "انتظار",
   2: "موافقة",
@@ -167,7 +167,6 @@ const BookingPriceCell = ({ booking }) => {
   );
 };
 
-// Status Selector Component (كما هو بدون تعديل)
 const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
   const [selectedStatus, setSelectedStatus] = useState(booking?.approvement_status ?? 1);
   const [rejectReason, setRejectReason] = useState(booking?.reject_reason || "");
@@ -180,17 +179,25 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
 
   const handleUpdateStatus = async () => {
     try {
-      await updateBookingStatus({
+      // ✅ FIX: Always send reject_reason when status is 3, even if empty string
+      const payload = {
         id: booking.id,
         status: selectedStatus,
-        reject_reason: selectedStatus === 3 ? rejectReason : undefined,
-      }).unwrap();
+      };
+
+      // Only add reject_reason when status is 3 (rejected)
+      if (String(selectedStatus) === "3") {
+        payload.reject_reason = rejectReason.trim() || "—"; // Send at least something
+      }
+
+      await updateBookingStatus(payload).unwrap();
 
       if (onLocalUpdate) {
         onLocalUpdate(booking.id, selectedStatus, rejectReason);
       }
     } catch (err) {
       console.error("Failed to update status:", err);
+      toast.error(err?.data?.message || "فشل في تحديث الحالة");
     }
   };
 
@@ -223,15 +230,22 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
         </Button>
       </div>
 
-      {selectedStatus === "3" && (
+      {/* ✅ FIX: Show reject reason input immediately when status is 3, with required indicator */}
+      {String(selectedStatus) === "3" && (
         <div className="mt-2">
           <input
             type="text"
-            placeholder="أدخل سبب الرفض"
+            placeholder="أدخل سبب الرفض *"
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
-            className="w-full border rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700"
+            className={`w-full border rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700 ${
+              !rejectReason.trim() ? "border-red-300 bg-red-50 dark:bg-red-900/10" : ""
+            }`}
+            required
           />
+          {!rejectReason.trim() && (
+            <p className="text-xs text-red-500 mt-1">* سبب الرفض مطلوب</p>
+          )}
         </div>
       )}
 
@@ -248,6 +262,7 @@ const StatusSelectorWithButton = ({ booking, onLocalUpdate }) => {
     </div>
   );
 };
+
 
 export default StatusSelectorWithButton;
 
@@ -281,6 +296,7 @@ export const BookingColumns = [
     prefixIcon: "mdi:calendar-end",
     className: "min-w-[120px]",
   },
+  /*
   {
     header: "المتبقي",
     accessor: "remaining",
@@ -288,6 +304,34 @@ export const BookingColumns = [
     format: (value) => (value != null ? value : "—"),
     className: "min-w-[100px]",
   },
+*/
+{
+  header: "نوع العمل",
+  accessor: "customer.work_type_id",
+  prefixIcon: "mdi:briefcase",
+  format: (value) => {
+    // value here is customer.work_type_id
+    if (value !== null && value !== undefined) {
+      return value; // Display the ID number directly
+    }
+    return "—";
+  },
+  className: "min-w-[120px]",
+},
+
+  {
+  header: "الوسيط",
+  accessor: "broker.username",
+  prefixIcon: "mdi:account",
+  format: (value, row) => {
+    if (row?.broker?.username) {
+      return row.broker.username;
+    }
+    return "-----";
+  },
+  className: "min-w-[120px]",
+},
+
   {
     header: "نوع الحجز",
     accessor: "type",
@@ -303,6 +347,7 @@ export const BookingColumns = [
         <BookingDetailsButton bookingId={row.id} />
         <ShareMapButton bookingId={row.id} />
         <BookingDetailsAction booking={row} />
+        <PrintOrderButton bookingId={row.id} />
       </div>
     ),
     className: "min-w-[280px]",

@@ -32,11 +32,13 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {useGetCustomerOffersQuery } from "../../RtkQuery/Slice/Offers/offersApiSlice"
 
 const CustomerInfo = () => {
   const { id } = useParams();
   const [showAccountStatement, setShowAccountStatement] = useState(false);
   const [selectedPdfType, setSelectedPdfType] = useState("summary");
+const { data: customerOffersData, isLoading: isOffersLoading } = useGetCustomerOffersQuery(id);
 
   const {
     data: customer,
@@ -1420,6 +1422,91 @@ ${customerData.bookings
               </CardContent>
             </Card>
 
+
+{/* 🆕 Customer Offers Section - New Card */}
+<Card className="mt-6 sm:mt-8 border-0 bg-gradient-to-br from-pink-50 to-rose-50 dark:from-gray-800 dark:to-rose-900/20 shadow-xl rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
+  <CardContent className="p-4 sm:p-6">
+    <div className="flex justify-between items-center mb-4">
+      <h1 className="text-xl sm:text-2xl font-bold tracking-tight bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+        🎁 العروض
+      </h1>
+      {customerOffersData?.offers?.length > 0 && (
+        <Badge className="bg-pink-100 dark:bg-pink-900/50 text-pink-700 dark:text-pink-300">
+          {customerOffersData.offers.length} عروض
+        </Badge>
+      )}
+    </div>
+
+    {isOffersLoading ? (
+      <div className="flex justify-center py-8">
+        <Icon icon="mdi:loading" className="animate-spin text-3xl text-pink-500 dark:text-pink-400" />
+      </div>
+    ) : customerOffersData?.offers?.length > 0 ? (
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
+          <thead>
+            <tr className="bg-pink-100 dark:bg-pink-900/50">
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">#</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">اسم العرض</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">الوصف</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">السعر</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">من تاريخ</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">إلى تاريخ</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">الحالة</th>
+              <th className="border border-gray-200 dark:border-gray-700 p-3 text-right text-pink-700 dark:text-pink-300 font-semibold">التعيين</th>
+            </tr>
+          </thead>
+          <tbody>
+            {customerOffersData.offers.map((offer, index) => (
+              <tr
+                key={offer.id}
+                className={index % 2 === 0 ? "bg-gray-50 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}
+              >
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-800 dark:text-gray-200">{index + 1}</td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center font-semibold text-gray-800 dark:text-gray-200">{offer.offer_name}</td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">{offer.offer_description}</td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                  <span className="font-bold text-green-600 dark:text-green-400">{offer.offer_price} $</span>
+                </td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">{offer.from_date}</td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center text-gray-700 dark:text-gray-300">{offer.to_date}</td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    offer.status === "active"
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                  }`}>
+                    {offer.status === "active" ? "نشط" : "غير نشط"}
+                  </span>
+                </td>
+                <td className="border border-gray-200 dark:border-gray-700 p-3 text-center">
+                  {offer.is_assigned ? (
+                    <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                      <Icon icon="mdi:check-circle" />
+                      تم الارسال
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
+                      <Icon icon="mdi:minus-circle" />
+                      لم يتم الارسال 
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400 italic">
+        <Icon icon="mdi:tag-off" className="text-4xl mx-auto mb-3 text-gray-400" />
+        <p>لا توجد عروض مخصصة لهذا الزبون</p>
+      </div>
+    )}
+  </CardContent>
+</Card>
+
+
          {/* Financial Summary Section - Add the customer's total */}
 <Card className="border border-green-200 dark:border-green-700 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
   <CardContent className="p-4 sm:p-6">
@@ -1428,26 +1515,7 @@ ${customerData.bookings
       الملخص المالي
     </h3>
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-    {/*
-    
-  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          {customer?.total?.toFixed(2) || "0.00"} $
-        </div>
-       
-        
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          إجمالي المستحق
-        </div>
-      </div>
 
-    */}
-
-
-    
-      
-
-{/* In bookings summary section */}
 
 {/* In bookings summary section */}
 <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
@@ -1615,43 +1683,6 @@ ${customerData.bookings
           عدد الحجوزات
         </div>
       </div>
-     
-        {/*
-         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          {formatCurrency(totalBookingAmount)}
-        </div>
-         <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          إجمالي الحجوزات
-          {customer.type === 1 && (
-            <div className="text-xs text-red-500 mt-1">
-              (غير محسوب للعقود المؤقتة)
-            </div>
-          )}
-        </div>
-      </div>
-
-        */ }
-       
-        
-        {/*
-        
-        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-          {totalAdvertisingSpace?.toFixed(2)} م²
-        </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          المساحة الإعلانية
-        </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center shadow-sm">
-        <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-          {totalPrintingSpace?.toFixed(2)} م²
-        </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          المساحة الطباعية
-        </div>
-      </div>
-        */}
-        
     
     </div>
 

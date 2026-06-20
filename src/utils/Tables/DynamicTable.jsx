@@ -53,11 +53,8 @@ export const DynamicTable = ({
       toast.success("تم تأكيد الحجز وتحويله إلى دائم بنجاح!");
     } catch (error) {
       console.error("Error confirming booking:", error);
-      toast.error(
-        error?.data?.message ||
-          error?.data?.error ||
-          "فشل في تأكيد الحجز. يرجى المحاولة مرة أخرى."
-      );
+          const message = error?.data?.message || "فشل في تأكيد الحجز";
+      alert(message)
     }
   };
 

@@ -26,7 +26,7 @@ const BookingFields = () => {
 
   const [printingTypes, setPrintingTypes] = useState([]);
   const [loadingPrintingTypes, setLoadingPrintingTypes] = useState(false);
-  
+
   const { 
     data: directionsData = [], 
     isLoading: loadingDirections,
@@ -254,34 +254,36 @@ const BookingFields = () => {
     }
   }, []);
 
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div>
-        <label className="block text-sm font-medium mb-2">الزبون</label>
-        <Select
-          onValueChange={(value) => formik.setFieldValue("customer_id", value)}
-          value={
-            bookingData?.customer_id?.toString() ||
-            formik.values.customer_id?.toString() ||
-            ""
-          }
-        >
-          <SelectTrigger className="w-full text-right">
-            <SelectValue placeholder="اختر الزبون" />
-          </SelectTrigger>
-          <SelectContent>
-            {isLoadingCustomers ? (
-              <SelectItem value="loading">جاري التحميل...</SelectItem>
-            ) : (
-              customers?.map((customer) => (
-                <SelectItem key={customer.id} value={customer.id.toString()}>
-                  {customer.full_name} - {customer.company_name}
-                </SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-      </div>
+ <div>
+  <label className="block text-sm font-medium mb-2">الزبون</label>
+  <Select
+    onValueChange={(value) => formik.setFieldValue("customer_id", value)}
+    value={formik.values.customer_id?.toString() || ""}
+  >
+    <SelectTrigger className="w-full text-right">
+      <SelectValue placeholder="اختر الزبون" />
+    </SelectTrigger>
+    <SelectContent className="max-h-[300px]">
+      {isLoadingCustomers && customers.length === 0 ? (
+        <div className="p-2 text-center text-gray-500">جاري التحميل...</div>
+      ) : customers.length > 0 ? (
+        customers.map((customer) => (
+          <SelectItem 
+            key={customer.id} 
+            value={customer.id.toString()}
+          >
+            {customer.full_name} - {customer.company_name}
+          </SelectItem>
+        ))
+      ) : (
+        <div className="p-2 text-center text-gray-500">لا توجد زبائن</div>
+      )}
+    </SelectContent>
+  </Select>
+</div>
 
       <div>
         <label className="block text-sm font-medium mb-2">نوع الحجز</label>

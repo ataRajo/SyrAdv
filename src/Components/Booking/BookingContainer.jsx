@@ -85,6 +85,9 @@ if (statusIndex !== -1) {
 }
 
 const BookingContainer = () => {
+  const [currentPage, setCurrentPage] = useState(1);
+const [itemsPerPage, setItemsPerPage] = useState(20);
+
   const {
     permissions,
     data,
@@ -101,9 +104,10 @@ const BookingContainer = () => {
     onCancelBooking,
     onConfirmDelete,
     handelCancelBooking,
-  } = useGetBookings();
+    paginationMeta,
+  } = useGetBookings({page : currentPage ,per_page:itemsPerPage});
 
-  // ✅ Filter states
+    // ✅ Filter states
   const [statusFilter, setStatusFilter] = useState("");
   const [archiveFilter, setArchiveFilter] = useState("active");
   const [customerNameFilter , setCustomerNameFilter] = useState("")
@@ -176,6 +180,11 @@ const BookingContainer = () => {
       day: 'numeric'
     });
   }, []);
+
+  useEffect(() => {
+  setCurrentPage(1);
+}, [statusFilter, archiveFilter, customerNameFilter]);
+
 
   // Calculate remaining days
   const calculateRemainingDays = useCallback((endDate) => {
@@ -655,6 +664,52 @@ const filteredData = useMemo(() => {
         showTemporaryBookingIcon={archiveFilter === "active"}
         isOrdersTable={false}
       />
+
+
+{/* Pagination Controls */}
+<div className="flex justify-between items-center mt-4 p-4" dir="rtl">
+  <div className="flex gap-2 items-center">
+    <span className="text-sm text-gray-600 dark:text-gray-400">عرض:</span>
+    <select
+      value={itemsPerPage}
+      onChange={(e) => {
+        setItemsPerPage(Number(e.target.value));
+        setCurrentPage(1);
+      }}
+      className="p-1 border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+    >
+      <option value={10}>10</option>
+      <option value={20}>20</option>
+      <option value={50}>50</option>
+      <option value={100}>100</option>
+    </select>
+  </div>
+  
+  <div className="flex gap-2 items-center">
+    <button
+      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+      disabled={currentPage === 1}
+      className="px-3 py-1 border rounded disabled:opacity-50 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+    >
+      السابق
+    </button>
+    <span className="px-3 py-1 text-gray-900 dark:text-gray-100">
+      صفحة {currentPage} من {paginationMeta?.lastPage || 1}
+    </span>
+    <button
+      onClick={() => setCurrentPage(prev => Math.min(prev + 1, paginationMeta?.lastPage || 1))}
+      disabled={currentPage === (paginationMeta?.lastPage || 1)}
+      className="px-3 py-1 border rounded disabled:opacity-50 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+    >
+      التالي
+    </button>
+  </div>
+  
+  <div className="text-sm text-gray-600 dark:text-gray-400">
+    إجمالي: {paginationMeta?.total || 0} حجز
+  </div>
+</div>
+
 
       {/* Delete dialog */}
       <DeleteDialog

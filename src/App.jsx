@@ -39,8 +39,16 @@ import PublicMapPage from "./Components/Booking/ContractMapPage";
 import Precentage from "./Pages/precentage/Precentage";
 import DigitalScreens from "./Pages/DigitalScreens/DigitalScreens";
 import CampaignsPage from "./Pages/campaign/CampaignsPage";
-
-
+import {BrokerLogin} from "./Pages/BrokerLogin/BrokerLogin"
+import { BrokerWelcome } from "./Pages/Broker/BrokerWelcome";
+import { BrokerClients } from "./Pages/Broker/BrokerClients";
+import { CitiesRegions } from "./Pages/Broker/CitiesRegions";
+import { MapBroker } from "./Pages/Broker/MapBroker";
+import {CreateBrokerBooking} from "./Pages/Broker/CreateBrokerBooking"
+import { BrokerBookings } from "./Pages/Broker/BrokerBookings";
+import { Toaster } from "react-hot-toast";
+import WorkTypePage from "./Pages/WorkTypesPage/WorkTypesPage"
+import OffersPage from "./Pages/offers/OffersPage";
 function App() {
 
   axios.defaults.baseURL = "/api"; // goes through Vite proxy
@@ -50,17 +58,37 @@ function App() {
     <div className="bg-primary">
 
       
+      <Toaster position="top-center" reverseOrder={false} />
+
       <BrowserRouter>
       <ErrorBoundary>
 
         <Routes>
 
+{/*-------PUBLIC ROUTES HERE  -------*/ }
+
+
           <Route path="/Login" element={<Login />} />
           <Route path="/" element={<LandingPage />} />
-                <Route path="public-map/:id" element={<PublicMapPage />} />
+         <Route path="public-map/:id" element={<PublicMapPage />} />
+
+{/*----BROKER ROUTES----*/}
+
+    
+        <Route path="/broker/login" element ={<BrokerLogin />} />
+        <Route path="/broker/welcome" element ={<BrokerWelcome />} />
+<Route path="/broker/clients" element={<BrokerClients />} />
+<Route path="/broker/cities-regions" element={<CitiesRegions />} />
+<Route path="/broker/map" element={<MapBroker />} />           
+<Route path="/broker/bookings/create" element={<CreateBrokerBooking/>} />
+<Route path="/broker/bookings" element={<BrokerBookings />} />
+
+
+{/**----------*/}
 
           <Route path="/dashboard" element={<DashboardPage />}>
-          
+          <Route path="work-types" element={<WorkTypePage />} />
+          <Route path="offers" element={<OffersPage />} />
 
             <Route
               path="administration-page"
@@ -131,6 +159,7 @@ function App() {
             <Route path ="precentage" element ={<Precentage />} />
             <Route path = "digital-screens" element={<DigitalScreens />} />
             <Route path = "campaigns" element={<CampaignsPage />} />
+
           </Route>
         </Routes>
       </ErrorBoundary>

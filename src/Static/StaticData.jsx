@@ -11,6 +11,9 @@ import {
   IconChartInfographic,
   IconDeviceDesktopAnalytics,
   IconFlag  ,
+  IconBriefcase,
+  IconFlag2Off,
+  Icon24Hours
 } from "@tabler/icons-react";
 
 export const BookingType = {
@@ -160,6 +163,13 @@ export const navLinkSidebar = [
     permission: Permissions.ViewRegions, 
   },
 
+ {
+    title: "أنواع الأعمال",
+    url: "/dashboard/work-types",
+    icon: IconBriefcase, // or any icon you prefer
+    permission: Permissions.ViewCities,
+  },
+
   {
     title: "نسبة الاشغالية العامة",
     url: "/dashboard/Statistics",
@@ -186,6 +196,14 @@ export const navLinkSidebar = [
     icon: IconFlag, 
     permission: Permissions.ViewRegions, 
   },
+
+  {
+    title : "العروض" , 
+    url:"/dashboard/offers" ,
+    icon:Icon24Hours , 
+    permission:Permissions.ViewRegions ,
+   
+  }
 
 ];
 

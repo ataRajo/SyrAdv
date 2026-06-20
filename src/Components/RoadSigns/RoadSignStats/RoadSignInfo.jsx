@@ -9,7 +9,7 @@ const RoadSignInfo = ({ roadSignId }) => {
   if (!roadSign) return <div className="text-center p-4">لا توجد بيانات</div>;
 
   // ✅ SIMPLE LOGIC: Check bookings array
-  const isAvailable = !roadSign.bookings || roadSign.bookings.length === 0;
+const isAvailable = !roadSign.is_booked;
   
   // Status based on bookings array
   const status = isAvailable ? 'available' : 'fully_booked';
@@ -123,8 +123,9 @@ const RoadSignInfo = ({ roadSignId }) => {
       )}
 
       <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
-        <p><strong>منطق التوفر:</strong> {isAvailable ? 'متاحة (bookings array is empty)' : 'محجوزة (bookings array has items)'}</p>
-        <p><strong>عدد الحجوزات:</strong> {roadSign.bookings?.length || 0}</p>
+        <p><strong>منطق التوفر:</strong> {isAvailable ? 'متاحة (is_booked = false)' : 'محجوزة (is_booked = true)'}</p>
+<p><strong>حالة الحجز:</strong> {roadSign.is_booked ? 'محجوزة' : 'متاحة'}</p>
+<p><strong>عدد الحجوزات:</strong> {roadSign.bookings?.length || 0}</p>
       </div>
     </div>
   );

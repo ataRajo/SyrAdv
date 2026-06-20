@@ -6,6 +6,9 @@ export const CustomersValidationSchema = Yup.object({
   address: Yup.string().required("العنوان مطلوب"),
   phone_number: Yup.number().required("رقم الهاتف"),
   commercial_registration_number: Yup.number(),
+  work_type_id: Yup.number()
+  .required("نوع العمل مطلوب")
+  .typeError("يجب اختيار نوع عمل صحيح"),
   
     // .test(
     //   "len",

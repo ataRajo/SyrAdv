@@ -8,17 +8,22 @@
     tagTypes: ["payments"], // 👈 keep consistent lowercase
     endpoints: (builder) => ({
       getPayments: builder.query({
-        query: ({ is_received } = {}) => {
-          const params = new URLSearchParams();
-          if (typeof is_received === "boolean") {
-            params.append("is_received", is_received);
-          }
-
-          const queryString = params.toString();
-          return `/payments${queryString ? `?${queryString}` : ""}`;
-        },
-        providesTags: ["payments"],
-      }),
+  query: ({ is_received, page, per_page } = {}) => {
+    const params = new URLSearchParams();
+    if (typeof is_received === "boolean") {
+      params.append("is_received", is_received);
+    }
+    if (page) {
+      params.append("page", page);
+    }
+    if (per_page) {
+      params.append("per_page", per_page);
+    }
+    const queryString = params.toString();
+    return `/payments${queryString ? `?${queryString}` : ""}`;
+  },
+  providesTags: ["payments"],
+}),
 
      getTotalPaymentAndRemaining: builder.query({
   query: ({ from_date, to_date, user_id, customer_id } = {}) => {

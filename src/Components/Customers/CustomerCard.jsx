@@ -277,6 +277,7 @@ const CustomerCard = ({
           open={showContactModal}
           onClose={() => setShowContactModal(false)}
           customerName={fullName}
+            customerId={id}     
           companyName={companyName}
           phoneNumber={phone_number}
         />

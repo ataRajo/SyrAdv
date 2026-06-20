@@ -11,6 +11,9 @@ import { OrdersSlice } from "../Slice/Orders/OrdersApi";
 import { CitiesAndRegionsSlice } from "../Slice/CitiesAndRegions/CitiesAndRegionsApi";
 import { ReportSlice } from "../Slice/Report/ReportApi";
 import { PaymentsSlice } from "../Slice/Payments/PaymentsApi";
+import { MediatorSlice } from "../Slice/mediatorapis/MediatorApi"; // ADDED
+import {WorkTypesSlice} from "../Slice/WorkTypesApi/WorkTypesApi"
+import {offersApiSlice} from "../Slice/Offers/offersApiSlice"
 
 const store = configureStore({
   reducer: {
@@ -25,7 +28,10 @@ const store = configureStore({
     [BookingSlice.reducerPath]: BookingSlice.reducer,
     [OrdersSlice.reducerPath]: OrdersSlice.reducer,
     [CitiesAndRegionsSlice.reducerPath]: CitiesAndRegionsSlice.reducer,
-    [ReportSlice.reducerPath]: ReportSlice.reducer
+    [ReportSlice.reducerPath]: ReportSlice.reducer ,
+    [MediatorSlice.reducerPath]: MediatorSlice.reducer, // ADDED
+    [WorkTypesSlice.reducerPath] :WorkTypesSlice.reducer , 
+    [offersApiSlice.reducerPath] :offersApiSlice.reducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -40,7 +46,10 @@ const store = configureStore({
       BookingSlice.middleware, 
       OrdersSlice.middleware, 
       CitiesAndRegionsSlice.middleware, 
-      ReportSlice.middleware
+      ReportSlice.middleware , 
+      MediatorSlice.middleware ,
+      WorkTypesSlice.middleware , 
+      offersApiSlice.middleware ,
     ),
 });
 

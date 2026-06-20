@@ -10,8 +10,13 @@ import {
 import { useAuth } from "../Context/AuthProvider";
 import { useNavigate } from "react-router";
 
-const useCustomers = ({ id = 0, refetch = () => {} }) => {
+const useCustomers = ({ id = 0, refetch = () => {} , filters = () =>{} }) => {
   // State variables for dialogs and display toggles
+
+
+    const { status, work_type_id, search , page, per_page } = filters;
+
+
   const [open, setOpen] = useState(false);
   const [openAddPayment, setOpenAddPayment] = useState(false);
   const [showBookings, setShowBooking] = useState(false);
@@ -41,8 +46,19 @@ const useCustomers = ({ id = 0, refetch = () => {} }) => {
   const [deleteCustomer, { isLoading: isDeleting }] =
     useDeleteCustomerMutation();
 
-  const { data: customers, isSuccess, isFetching } = useGetCustomersQuery();
+const { data: customersResponse, isSuccess, isFetching } = useGetCustomersQuery(
+  status || work_type_id || search || page || per_page
+    ? { status, work_type_id, search, page, per_page }
+    : undefined
+);
 
+const customers = customersResponse?.data || [];
+const paginationMeta = {
+  currentPage: customersResponse?.current_page || 1,
+  lastPage: customersResponse?.last_page || 1,
+  total: customersResponse?.total || 0,
+  perPage: customersResponse?.per_page || 10,
+};
   const [addNewCustomer, { isLoading: isAdding }] = useAddNewCustomerMutation();
 
 
@@ -133,6 +149,7 @@ const useCustomers = ({ id = 0, refetch = () => {} }) => {
     open,
     setOpen,
     customers,
+    paginationMeta,
     addNewCustomer,
     isSuccess,
     isFetching,

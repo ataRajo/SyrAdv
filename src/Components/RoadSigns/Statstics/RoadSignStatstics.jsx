@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import { useGetBoardReservationsStatsQuery } from "../../../RtkQuery/Slice/RoadSings/RoadSingsApi"; // adjust path
 import { useGetCitiesQuery, useGetRegionsQuery } from "../../../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi"; // adjust path
+import { useGetWorkTypesQuery } from "../../../RtkQuery/Slice/WorkTypesApi/WorkTypesApi";
 
 const COLORS = [
   "#6366f1","#f59e0b","#10b981","#ef4444","#3b82f6",
@@ -170,10 +171,14 @@ export default function RoadSignStatstics() {
     to_month: "",
     to_year: "",
     month: "",
+    work_type_id :""
   });
   const [topN, setTopN]           = useState(5);
   const [activeFilters, setActiveFilters] = useState({ year: currentYear });
   const [activePieIdx, setActivePieIdx]   = useState(0);
+const { data: workTypes = [], isLoading: isWorkTypesLoading } = useGetWorkTypesQuery();
+
+
 
   // ── cities and regions data ──────────────────────────────────────────────────
   const { data: cities = [], isLoading: isCitiesLoading } = useGetCitiesQuery();
@@ -205,6 +210,8 @@ export default function RoadSignStatstics() {
     if (filters.from_month) f.from_month = filters.from_month;
     if (filters.to_month)   f.to_month   = filters.to_month;
     if (filters.to_year)    f.to_year    = filters.to_year;
+    if (filters.work_type_id) f.work_type_id = filters.work_type_id
+
     //console.log("sending the filter data" ,f)
     setActiveFilters(f);
   }, [filters]);
@@ -316,6 +323,22 @@ export default function RoadSignStatstics() {
               </small>
             )}
           </FilterInput>
+
+
+
+<FilterInput label="Work Type">
+  <select 
+    value={filters.work_type_id} 
+    onChange={set("work_type_id")} 
+    style={inputStyle}
+    disabled={isWorkTypesLoading}
+  >
+    <option value="">— All Work Types —</option>
+    {(workTypes?.data || workTypes || []).map(wt => (
+      <option key={wt.id} value={wt.id}>{wt.type || wt.name || `Work Type ${wt.id}`}</option>
+    ))}
+  </select>
+</FilterInput>
 
           {/* Month */}
           <FilterInput label="Month">

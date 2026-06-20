@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useGetOneBookingsQuery, useUploadBookingPdfMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
 import toast from "react-hot-toast";
+import firstPage from "../../assets/images/new.jpeg"
 
 const BookingDetails = ({ bookingId: propBookingId }) => {
   const [imagesPerSign, setImagesPerSign] = useState({});
@@ -484,267 +485,362 @@ const getStatistics = (signs) => {
       {/* ══════════════════════════════════════
           PRINT CONTAINER
       ══════════════════════════════════════ */}
-      <div className="print-container">
+   <div className="print-container">
 
-        {/* ─────────────────────────────────────
-            PAGE 1 — Statistics
-            · height: auto in print → never clips
-            · 4-column grid in print → dense layout
-            · break-inside: auto → wraps to extra
-              A4 pages if there are 40+ entries
-        ───────────────────────────────────── */}
-        <div className="statistics-page max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl mb-8" style={{ overflow: "visible" }}>
-
-          {/* Split header (print only) */}
-          <div className="stats-header-band hidden print:flex w-full h-20 shrink-0" style={{ borderRadius: "2.5rem 2.5rem 0 0", overflow: "hidden" }}>
-            <div className="bg-[#1a1a1a] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-amber-500">
-              <span className="text-white text-3xl font-extrabold tracking-widest">الشركة</span>
-            </div>
-            <div className="bg-[#cc0000] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-amber-500">
-              <span className="text-white text-3xl font-extrabold tracking-widest">السورية للإعلان</span>
-            </div>
-          </div>
-
-          <div className="stats-body-print p-6 md:p-10" dir="rtl">
-
-            {/* Title */}
-            <h2 className="stats-title-print text-base md:text-lg font-bold text-gray-500 mb-5 pb-3 border-b border-gray-200 text-center tracking-widest uppercase">
-              ملخص اللوحات الإعلانية
-            </h2>
-
-            {/* ── Stats grid ──────────────────────────────────────────
-                Screen : 1 col (mobile) → 2 col (sm) → 3 col (lg)
-                Print  : 4 columns, minimal padding → ~40 cards/page,
-                         extra rows flow naturally onto the next sheet
-            ──────────────────────────────────────────────────────── */}
-            <div className="stats-grid-print grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {statsEntries.map((item, idx) => (
+  {/* ─────────────────────────────────────
+      PAGE 0 — First Page with Photo
+  ───────────────────────────────────── */}
+<div
+  className="max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl mb-8 print:!max-w-full print:!mx-0 print:!rounded-none print:!shadow-none print:!mb-0"
+  style={{ overflow: "visible" }}
+>
   <div
-    key={idx}
-    className="stat-card-print flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors"
+    className="flex flex-col items-center justify-center p-8 print:!p-0"
+    style={{ minHeight: "95vh" }}
   >
-    <div className="flex items-center gap-2 min-w-0 flex-1">
-      <span className="stat-region text-sm md:text-base font-bold text-gray-800 truncate leading-tight">
-        {item.region}
-      </span>
-      <span className="stat-model shrink-0 text-[11px] md:text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-lg">
-        {item.modelsString}
-      </span>
-    </div>
-    <span className="stat-count shrink-0 w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-full bg-white border-2 border-gray-200 text-sm md:text-base font-black text-gray-900">
-      {item.count}
-    </span>
-  </div>
-))}
-            </div>
-
-
-{/* Model Summary */}
-<div className="mt-6 pt-4 border-t border-gray-200">
-  <h3 className="text-sm font-bold text-gray-500 mb-3 tracking-widest uppercase">ملخص النماذج</h3>
-  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-    {Object.entries(statistics.modelSummary).map(([model, count]) => (
-      <div key={model} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
-        <span className="text-xs font-bold text-gray-700 truncate">{model}</span>
-        <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-black">
-          {count}
-        </span>
-      </div>
-    ))}
+    <img
+      src={firstPage}
+      alt="First Page"
+      className="w-full h-auto object-contain rounded-lg shadow-xl print:!w-full print:!h-[100vh] print:!max-h-[100vh] print:!object-contain print:!rounded-none print:!shadow-none"
+      style={{ maxHeight: "90vh" }}
+    />
   </div>
 </div>
 
-            {/* Total */}
-            <div className="stats-total-print mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
-              <span className="total-label text-sm text-gray-500 font-medium">إجمالي اللوحات</span>
-              <span className="total-value text-2xl md:text-3xl font-black text-gray-800">{totalSigns}</span>
+  {/* ─────────────────────────────────────
+      PAGE 1 — Statistics
+  ───────────────────────────────────── */}
+  <div className="statistics-page max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl mb-8" style={{ overflow: "visible" }}>
+
+   {/* Split header (print only) */}
+<div className="stats-header-band hidden print:flex w-full h-20 shrink-0" style={{ borderRadius: "2.5rem 2.5rem 0 0", overflow: "hidden" }}>
+  <div className="bg-[#1a1a1a] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-[#DAA520]">
+    <span className="text-white text-3xl font-extrabold tracking-widest">الشركة</span>
+  </div>
+  <div className="bg-[#DAA520] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-[#DAA520]">
+    <span className="text-white text-3xl font-extrabold tracking-widest">السورية للإعلان</span>
+  </div>
+</div>
+
+    <div className="stats-body-print p-6 md:p-10" dir="rtl">
+
+      {/* Title */}
+      <h2 className="stats-title-print text-base md:text-lg font-bold text-gray-500 mb-5 pb-3 border-b border-gray-200 text-center tracking-widest uppercase">
+        ملخص اللوحات الإعلانية
+      </h2>
+
+      {/* ── Stats grid ──────────────────────────────────────────
+          Screen : 1 col (mobile) → 2 col (sm) → 3 col (lg)
+          Print  : 4 columns, minimal padding → ~40 cards/page,
+                   extra rows flow naturally onto the next sheet
+      ──────────────────────────────────────────────────────── */}
+      <div className="stats-grid-print grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {statsEntries.map((item, idx) => (
+<div key={idx}
+  className="stat-card-print flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors"
+>
+  <div className="flex items-center gap-2 min-w-0 flex-1">
+    <span className="stat-region text-sm md:text-base font-bold text-gray-800 truncate leading-tight">
+      {item.region}
+    </span>
+    <span className="stat-model shrink-0 text-[11px] md:text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-lg">
+      {item.modelsString}
+    </span>
+  </div>
+  <span className="stat-count shrink-0 w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-full bg-white border-2 border-gray-200 text-sm md:text-base font-black text-gray-900">
+    {item.count}
+  </span>
+</div>
+))}
+      </div>
+
+      {/* Total */}
+      <div className="stats-total-print mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
+        <span className="total-label text-sm text-gray-500 font-medium">إجمالي اللوحات</span>
+        <span className="total-value text-2xl md:text-3xl font-black text-gray-800">{totalSigns}</span>
+      </div>
+    </div>
+  </div>
+  {/* ── END PAGE 1 ── */}
+
+  {/* ─────────────────────────────────────
+      PAGE 2 — Model Summary (ملخص النماذج) - Separate Page
+  ───────────────────────────────────── */}
+  <div className="statistics-page max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl mb-8" style={{ overflow: "visible" }}>
+
+    {/* Split header (print only) */}
+    <div className="stats-header-band hidden print:flex w-full h-20 shrink-0" style={{ borderRadius: "2.5rem 2.5rem 0 0", overflow: "hidden" }}>
+      <div className="bg-[#1a1a1a] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-[#DAA520]">
+        <span className="text-white text-3xl font-extrabold tracking-widest">الشركة</span>
+      </div>
+      <div className="bg-[#DAA520] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-[#DAA520]">
+        <span className="text-white text-3xl font-extrabold tracking-widest">السورية للإعلان</span>
+      </div>
+    </div>
+
+    <div className="stats-body-print p-6 md:p-10" dir="rtl">
+
+      {/* Title */}
+      <h2 className="stats-title-print text-base md:text-lg font-bold text-gray-500 mb-5 pb-3 border-b border-gray-200 text-center tracking-widest uppercase">
+        ملخص النماذج
+      </h2>
+
+      {/* Model Summary - Displayed vertically grouped by template */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {Object.entries(statistics.modelSummary).map(([model, count]) => (
+          <div key={model} style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "space-between", 
+            gap: "0.5rem", 
+            padding: "0.75rem 1rem", 
+            borderRadius: "0.75rem", 
+            backgroundColor: "#f9fafb", 
+            border: "1px solid #f3f4f6" 
+          }}>
+            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#374151", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{model}</span>
+            <span style={{ 
+              flexShrink: 0, 
+              width: "2rem", 
+              height: "2rem", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              borderRadius: "9999px", 
+              backgroundColor: "#eef2ff", 
+              color: "#4f46e5", 
+              fontSize: "0.875rem", 
+              fontWeight: 900 
+            }}>
+              {count}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Total Models */}
+      <div className="stats-total-print mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
+        <span className="total-label text-sm text-gray-500 font-medium">إجمالي النماذج</span>
+        <span className="total-value text-2xl md:text-3xl font-black text-gray-800">{Object.keys(statistics.modelSummary).length}</span>
+      </div>
+    </div>
+  </div>
+  {/* ── END PAGE 2 ── */}
+
+
+ 
+{groupedSigns.map((group, groupIdx) => {
+  const groupSign = group.sign;
+  const signCount = group.count;
+  const signIds = group.signIds;
+  const primarySignId = signIds[0];
+  const groupImages = imagesPerSign[primarySignId] || [];
+
+  return (
+    <div key={groupIdx} className="print-full-card max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl overflow-hidden mb-8">
+
+      {/* Split header (print only) */}
+<div className="hidden print:flex w-full h-24 z-10 shrink-0">
+  <div style={{ backgroundColor: "#1a1a1a", width: "50%", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 2rem", borderBottom: "6px solid #DAA520", position: "relative" }}>
+    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, transparent, rgba(255,255,255,0.05))", pointerEvents: "none" }} />
+    <span style={{ color: "white", fontSize: "2.25rem", fontWeight: 800, letterSpacing: "0.1em", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.3))", position: "relative", zIndex: 10 }}>الشركة</span>
+  </div>
+  <div style={{ backgroundColor: "#DAA520", width: "50%", display: "flex", alignItems: "center", justifyContent: "flex-start", padding: "0 2rem", borderBottom: "6px solid #DAA520", position: "relative" }}>
+    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent, rgba(0,0,0,0.1))", pointerEvents: "none" }} />
+    <span style={{ color: "white", fontSize: "2.25rem", fontWeight: 800, letterSpacing: "0.1em", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.3))", position: "relative", zIndex: 10 }}>السورية للإعلان</span>
+  </div>
+</div>
+
+      {signCount > 1 && (
+        <div className="no-print bg-indigo-600 text-white px-4 py-2 text-center">
+          <p className="text-sm font-bold">🖨️ {signCount} لوحات متطابقة - سيتم طباعة صفحة واحدة</p>
+        </div>
+      )}
+
+      {/* Main layout: Left (add photo top + location bottom) | Right (full info) */}
+      <div style={{ display: "flex", height: "calc(100% - 6rem)", minHeight: "500px" }}>
+
+        {/* ─── LEFT SIDE: Stacked (Add Photo Top + Location Bottom) ─── */}
+        <div style={{ display: "flex", flexDirection: "column", width: "50%" }}>
+
+          {/* Top Left: Add Photo / Uploaded Photo */}
+          <div style={{ 
+            height: "50%", 
+            padding: "1.5rem", 
+            display: "flex", 
+            flexDirection: "column", 
+            alignItems: "center", 
+            justifyContent: "center",
+            backgroundColor: "#f9fafb",
+            borderBottom: "1px solid #e5e7eb"
+          }}>
+            {/* Upload dropzone (screen only) */}
+            <div className="w-full text-center no-print">
+              <h3 style={{ fontSize: "0.875rem", fontWeight: 700, color: "#9ca3af", marginBottom: "1rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                <Plus size={18} /> إضافة صورة
+              </h3>
+              <div style={{ 
+                position: "relative", 
+                width: "100%", 
+                height: "140px", 
+                border: "4px dashed #e5e7eb", 
+                borderRadius: "2rem", 
+                display: "flex", 
+                flexDirection: "column", 
+                alignItems: "center", 
+                justifyContent: "center",
+                cursor: "pointer",
+                marginBottom: "0.5rem",
+                backgroundColor: "rgba(255,255,255,0.5)",
+                transition: "all 0.2s"
+              }}>
+                <input type="file" accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setImagesPerSign((prev) => ({ ...prev, [primarySignId]: [reader.result] }));
+                        localStorage.setItem(`booking_images_${bookingId}_sign_${primarySignId}`, JSON.stringify([reader.result]));
+                        toast.success("تم حفظ الصورة محلياً");
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
+                <div style={{ backgroundColor: "#eef2ff", padding: "0.75rem", borderRadius: "9999px", color: "#4f46e5", transition: "transform 0.2s" }}><Plus size={24} /></div>
+                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#6b7280", fontWeight: 500 }}>اضغط لرفع الصورة</p>
+                <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.125rem" }}>أو اسحب وأفلت الصورة هنا</p>
+              </div>
+            </div>
+
+            {groupImages.length > 0 ? (
+              <>
+                {/* Screen view */}
+                <div className="photos-grid-view no-print" style={{ width: "100%" }}>
+                  <div style={{ width: "100%", display: "flex", justifyContent: "center", padding: "0.5rem" }}>
+                    <div style={{ position: "relative", width: "100%", maxWidth: "36rem", borderRadius: "1rem", overflow: "hidden", border: "2px solid white", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}>
+                      <img src={groupImages[0]} style={{ width: "100%", height: "auto", objectFit: "contain", backgroundColor: "#f9fafb" }} alt="uploaded" />
+                      <div style={{ position: "absolute", top: "0.75rem", right: "0.75rem", display: "flex", gap: "0.5rem", opacity: 0, transition: "opacity 0.2s" }} className="group-hover:opacity-100">
+                        <button onClick={() => handleEditImage(primarySignId, 0, groupImages[0])} style={{ backgroundColor: "#3b82f6", color: "white", padding: "0.5rem", borderRadius: "9999px", border: "none", cursor: "pointer" }}><Edit2 size={16} /></button>
+                        <button onClick={() => handleDeleteImage(primarySignId, 0)} style={{ backgroundColor: "#ef4444", color: "white", padding: "0.5rem", borderRadius: "9999px", border: "none", cursor: "pointer" }}><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Print view */}
+                <div className="photos-large-view" style={{ display: "none", width: "100%", flex: 1, alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.5rem" }}>
+                    <div style={{ width: "100%", maxWidth: "32rem", margin: "0 auto" }}>
+                      <img src={groupImages[0]} style={{ width: "100%", height: "auto", borderRadius: "1.5rem", border: "1px solid #e5e7eb", maxHeight: "200px", objectFit: "contain" }} alt="uploaded-photo" />
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "1.5rem 0", flex: 1 }}>
+                <div style={{ backgroundColor: "#f3f4f6", padding: "1rem", borderRadius: "9999px", marginBottom: "0.5rem" }}><FileText size={32} style={{ color: "#9ca3af" }} /></div>
+                <p className="hidden print:block" style={{ color: "#9ca3af", fontStyle: "italic" }}>لم يتم إرفاق صورة</p>
+                <p className="no-print" style={{ color: "#9ca3af", fontSize: "0.875rem", textAlign: "center" }}>لا توجد صورة مضافة</p>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Left: Location Photo (صورة الموقع) */}
+          <div style={{ 
+            height: "50%", 
+            padding: "1.5rem", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            backgroundColor: "#ffffff"
+          }}>
+            <div style={{ width: "100%", height: "100%", maxHeight: "280px", borderRadius: "1.5rem", overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", border: "1px solid #f3f4f6" }}>
+              <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                <img src={groupSign?.location_image1 || "/api/placeholder/400/300"} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="Location" />
+                <div style={{ position: "absolute", bottom: "0.5rem", right: "0.5rem", backgroundColor: "rgba(0,0,0,0.5)", color: "white", fontSize: "10px", padding: "0.25rem 0.5rem", borderRadius: "0.25rem" }}>صورة الموقع</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ─── RIGHT SIDE: All Information (Full Height, No Empty Space) ─── */}
+        <div style={{ 
+          width: "50%", 
+          padding: "2rem", 
+          display: "flex", 
+          flexDirection: "column", 
+          justifyContent: "center",
+          borderRight: "1px solid #e5e7eb",
+          backgroundColor: "#ffffff"
+        }}>
+          {signCount > 1 && (
+            <div style={{ marginBottom: "1rem", padding: "0.75rem", backgroundColor: "#eef2ff", borderRadius: "0.5rem", textAlign: "center", border: "1px solid #c7d2fe" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+                <Copy size={16} style={{ color: "#4f46e5" }} />
+                <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#4f46e5" }}>{signCount} لوحات متطابقة</p>
+              </div>
+              <p style={{ fontSize: "0.75rem", color: "#6366f1", marginTop: "0.25rem" }}>جميع المواصفات متطابقة</p>
+            </div>
+          )}
+          
+          <div style={{ borderBottom: "1px solid #f3f4f6", paddingBottom: "1rem", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", marginTop: "0.25rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Building size={16} style={{ color: "#9ca3af" }} />
+                <span style={{ fontSize: "1rem", marginTop: "0.25rem", fontWeight: 700, color: "#374151" }}>نموذج: {groupSign?.template?.model || "---"}</span>
+              </div>
+              <p style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#6b7280", fontSize: "0.875rem" }}>
+                <MapPin size={16} style={{ color: "#9ca3af" }} />
+                {groupSign?.city?.name || "---"} - {groupSign?.region?.name || "---"}
+                {groupSign?.city?.country && <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>({groupSign.city.country})</span>}
+              </p>
+              {groupSign?.orders && groupSign.orders.length > 0 && (
+                <div style={{ marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid #f3f4f6" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: "0.75rem", rowGap: "0.25rem" }}>
+                    {groupSign.orders.map((order, idx) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: order.type === 1 ? "#dc2626" : "#16a34a" }}>{getOrderTypeText(order.type)}</span>
+                        <span style={{ fontSize: "9px", color: "#6b7280" }}>{order.action_date}</span>
+                        {idx < groupSign.orders.length - 1 && <span style={{ color: "#d1d5db", margin: "0 0.25rem" }}>•</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <h3 style={{ color: "#9ca3af", fontSize: "0.75rem", fontWeight: 900, textTransform: "uppercase", marginBottom: "0.75rem", letterSpacing: "0.1em" }}>المواصفات الفنية والمالية</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <DetailItem icon={<Maximize style={{ color: "#4f46e5" }} />} label="القياس" value={groupSign?.template?.size} />
+              <DetailItem icon={<FileText style={{ color: "#4f46e5" }} />} label="المساحة" value={groupSign?.template?.printing_space ? `${groupSign.template.printing_space} م²` : "---"} />
+              <DetailItem icon={<Hash style={{ color: "#4f46e5" }} />} label="النوع" value={groupSign?.template?.type} />
+              <DetailItem icon={<MapPin style={{ color: "#4f46e5" }} />} label="الاتجاه" value={groupSign?.directions} />
+              <div style={{ gridColumn: "span 2", padding: "0.75rem", backgroundColor: "#f9fafb", borderRadius: "0.75rem", border: "1px solid #f3f4f6" }}>
+                <p style={{ fontSize: "10px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", marginBottom: "0.25rem" }}>مكان التموضع</p>
+                <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "#374151", lineHeight: 1.625 }}>{groupSign?.place || "---"}</p>
+              </div>
             </div>
           </div>
         </div>
-        {/* ── END PAGE 1 ── */}
 
-        {/* ─────────────────────────────────────
-            PAGES 2 … n — Sign detail cards
-        ───────────────────────────────────── */}
-        {groupedSigns.map((group, groupIdx) => {
-          const groupSign = group.sign;
-          const signCount = group.count;
-          const signIds = group.signIds;
-          const primarySignId = signIds[0];
-          const groupImages = imagesPerSign[primarySignId] || [];
-
-          return (
-            <div key={groupIdx} className="print-full-card max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl overflow-hidden mb-8">
-
-              {/* Split header (print only) */}
-              <div className="hidden print:flex w-full h-24 z-10 shrink-0">
-                <div className="bg-[#1a1a1a] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-amber-500 relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/5 pointer-events-none" />
-                  <span className="text-white text-4xl font-extrabold tracking-widest drop-shadow-md relative z-10">الشركة</span>
-                </div>
-                <div className="bg-[#cc0000] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-amber-500 relative">
-                  <div className="absolute inset-0 bg-gradient-to-l from-transparent to-black/10 pointer-events-none" />
-                  <span className="text-white text-4xl font-extrabold tracking-widest drop-shadow-md relative z-10">السورية للإعلان</span>
-                </div>
-              </div>
-
-              {signCount > 1 && (
-                <div className="no-print bg-indigo-600 text-white px-4 py-2 text-center">
-                  <p className="text-sm font-bold">🖨️ {signCount} لوحات متطابقة - سيتم طباعة صفحة واحدة</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 grid-print-2x2 divide-x divide-y divide-gray-200 divide-x-reverse">
-
-                {/* Q1 – uploaded photo */}
-                <div className="section-print p-4 md:p-8 flex flex-col items-center justify-center min-h-[350px] bg-gray-50/50">
-                  <div className="w-full text-center no-print">
-                    <h3 className="text-sm md:text-base font-bold text-gray-400 mb-4 flex items-center justify-center gap-2 uppercase tracking-widest">
-                      <Plus size={18} /> إضافة صورة
-                    </h3>
-                    <div className="relative w-full h-40 md:h-52 lg:h-56 border-4 border-dashed border-gray-200 rounded-[2rem] flex flex-col items-center justify-center group hover:border-indigo-400 transition-all cursor-pointer mb-4 bg-white/50">
-                      <input type="file" accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setImagesPerSign((prev) => ({ ...prev, [primarySignId]: [reader.result] }));
-                              localStorage.setItem(`booking_images_${bookingId}_sign_${primarySignId}`, JSON.stringify([reader.result]));
-                              toast.success("تم حفظ الصورة محلياً");
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-                      <div className="bg-indigo-50 p-4 md:p-5 rounded-full text-indigo-600 group-hover:scale-110 transition-transform"><Plus size={28} /></div>
-                      <p className="mt-3 text-base md:text-lg text-gray-500 font-medium">اضغط لرفع الصورة</p>
-                      <p className="text-xs text-gray-400 mt-1">أو اسحب وأفلت الصورة هنا</p>
-                    </div>
-                  </div>
-
-                  {groupImages.length > 0 ? (
-                    <>
-                      <div className="w-full photos-grid-view no-print">
-                        <div className="w-full flex justify-center p-2">
-                          <div className="relative group w-full max-w-xl rounded-2xl overflow-hidden border-2 border-white shadow-lg hover:shadow-xl transition-shadow">
-                            <img src={groupImages[0]} className="w-full h-auto object-contain bg-gray-50" alt="uploaded" />
-                            <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleEditImage(primarySignId, 0, groupImages[0])} className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 shadow-lg"><Edit2 size={16} /></button>
-                              <button onClick={() => handleDeleteImage(primarySignId, 0)} className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-lg"><Trash2 size={16} /></button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="w-full photos-large-view print:block">
-                        <div className="added-photos-print w-full h-full flex items-center justify-center">
-                          <div className="w-full max-w-lg mx-auto">
-                            <img src={groupImages[0]} className="w-full h-auto rounded-2xl shadow-xl border border-gray-200 print:rounded-3xl print:max-h-[280px] print:object-contain print:mx-auto" alt="uploaded-photo" />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="w-full flex flex-col items-center justify-center py-12 md:py-14 print:py-16">
-                      <div className="bg-gray-100 p-5 md:p-6 rounded-full mb-3"><FileText size={40} className="text-gray-400" /></div>
-                      <p className="text-gray-400 italic hidden print:block print:not-italic print:font-medium">لم يتم إرفاق صورة</p>
-                      <p className="text-gray-400 text-base text-center no-print">لا توجد صورة مضافة</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Q2 – location photo */}
-                <div className="section-print p-8 flex items-center justify-center min-h-[350px]">
-                  <div className="w-full h-full max-h-[280px] rounded-3xl overflow-hidden shadow-sm border border-gray-100">
-                    <div className="relative w-full h-full">
-                      <img src={groupSign?.location_image1 || "/api/placeholder/400/300"} className="w-full h-full object-cover" alt="Location" />
-                      <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded">صورة الموقع</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Q3 – template image */}
-                <div className="section-print p-8 flex flex-col items-center justify-center min-h-[350px] bg-white">
-                  <h3 className="text-xs text-gray-400 font-black uppercase mb-4 tracking-widest text-center">شكل نموذج اللوحة</h3>
-                  <div className="w-full h-full max-h-[250px] rounded-2xl overflow-hidden border border-gray-100 shadow-inner">
-                    <img src={groupSign?.template?.image || "/api/placeholder/400/300"} className="w-full h-full object-contain bg-gray-50" alt="Template" />
-                  </div>
-                </div>
-
-                {/* Q4 – sign details */}
-                <div className="section-print p-8 bg-white min-h-[350px] flex flex-col justify-center">
-                  {signCount > 1 && (
-                    <div className="mb-4 p-3 bg-indigo-50 rounded-lg text-center border border-indigo-200">
-                      <div className="flex items-center justify-center gap-2">
-                        <Copy size={16} className="text-indigo-600" />
-                        <p className="text-sm font-bold text-indigo-600">{signCount} لوحات متطابقة</p>
-                      </div>
-                      <p className="text-xs text-indigo-500 mt-1">جميع المواصفات متطابقة</p>
-                    </div>
-                  )}
-                  <div className="border-b border-gray-100 pb-4 mb-4">
-                    <div className="flex flex-col mt-1">
-                      <div className="flex items-center gap-2">
-                        <Building size={16} className="text-gray-400" />
-                        <span className="text-base mt-1 font-bold text-gray-700">نموذج: {groupSign?.template?.model || "---"}</span>
-                      </div>
-                      <p className="flex items-center gap-2 text-gray-500 text-sm">
-                        <MapPin size={16} className="text-gray-400" />
-                        {groupSign?.city?.name || "---"} - {groupSign?.region?.name || "---"}
-                        {groupSign?.city?.country && <span className="text-xs text-gray-400">({groupSign.city.country})</span>}
-                      </p>
-                      {groupSign?.orders && groupSign.orders.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            {groupSign.orders.map((order, idx) => (
-                              <div key={idx} className="flex items-center gap-1">
-                                <span className={`text-[12px] font-bold ${order.type === 1 ? "text-red-600" : "text-green-600"}`}>{getOrderTypeText(order.type)}</span>
-                                <span className="text-[9px] text-gray-500">{order.action_date}</span>
-                                {idx < groupSign.orders.length - 1 && <span className="text-gray-300 mx-1">•</span>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-gray-400 text-xs font-black uppercase mb-3 tracking-widest">المواصفات الفنية والمالية</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <DetailItem icon={<Maximize className="text-indigo-600" />} label="القياس" value={groupSign?.template?.size} />
-                      <DetailItem icon={<FileText className="text-indigo-600" />} label="المساحة" value={groupSign?.template?.printing_space ? `${groupSign.template.printing_space} م²` : "---"} />
-                      <DetailItem icon={<Hash className="text-indigo-600" />} label="النوع" value={groupSign?.template?.type} />
-                      <DetailItem icon={<MapPin className="text-indigo-600" />} label="الاتجاه" value={groupSign?.directions} />
-                      <div className="col-span-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">مكان التموضع</p>
-                        <p className="text-xs font-bold text-gray-700 leading-relaxed">{groupSign?.place || "---"}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {signCount > 1 && (
-                <div className="no-print p-6 bg-gradient-to-r from-indigo-50 to-blue-50 border-t border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-bold text-gray-600">عدد اللوحات في هذه المجموعة:</h3>
-                    <span className="text-2xl font-bold text-indigo-600">{signCount}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
       </div>
 
-      {/* Screen-only summary */}
-      {groupedSigns.length > 1 && (
-        <div className="no-print max-w-6xl mx-auto mt-6 p-4 bg-white rounded-xl shadow-md border border-gray-200">
-          <h3 className="font-bold text-gray-700 mb-2">ملخص الحجز:</h3>
-          <p className="text-sm text-gray-600">📊 إجمالي اللوحات: {totalSigns} لوحة</p>
-          <p className="text-sm text-gray-600">📄 عدد صفحات PDF: {groupedSigns.length + 1} صفحة (صفحة إحصائيات + {groupedSigns.length} صفحة للوحات)</p>
+      {signCount > 1 && (
+        <div className="no-print" style={{ padding: "1.5rem", background: "linear-gradient(to right, #eef2ff, #eff6ff)", borderTop: "1px solid #e5e7eb" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontSize: "0.875rem", fontWeight: 700, color: "#4b5563" }}>عدد اللوحات في هذه المجموعة:</h3>
+            <span style={{ fontSize: "1.5rem", fontWeight: 700, color: "#4f46e5" }}>{signCount}</span>
+          </div>
         </div>
       )}
+    </div>
+  );
+})}
+</div>
     </div>
   );
 };
