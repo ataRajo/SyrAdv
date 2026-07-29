@@ -41,6 +41,8 @@ export const RoadSignColumns = [
     priority: 2,
     format: (value) => value || "---",
   },
+
+  /*
   {
   header: "اسم الشركة", // Changed from "اسم العميل" to "اسم الشركة"
   accessor: "bookings",
@@ -61,6 +63,9 @@ export const RoadSignColumns = [
     return "لا يوجد حجوزات";
   },
 },
+
+*/
+
   {
     header: "نموذج",
     accessor: "template.model",

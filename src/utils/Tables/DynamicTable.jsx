@@ -41,7 +41,9 @@ export const DynamicTable = ({
   hideDeleteIcon = false,
   showTemporaryBookingIcon = false,
   isOrdersTable = false,
-  onReceipt ,
+  onReceipt , 
+  onDesignChange , 
+
 }) => {
   const { hasPermission } = useAuth();
   const [confirmBooking, { isLoading: isConfirming }] = useConfirmBookingMutation();
@@ -86,6 +88,7 @@ export const DynamicTable = ({
                 onExtendBooking ||
                 onStatusChange ||
                 onReceipt || 
+                onDesignChange ||
                 showTemporaryBookingIcon) && (
                 <TableHead className="text-center min-w-[120px] sm:min-w-[150px]">
                   الإجراءات
@@ -116,6 +119,7 @@ export const DynamicTable = ({
                     onStatusChange ||
                     onReceipt ||
                     onEditBooking ||
+                    onDesignChange ||
                     showTemporaryBookingIcon) && (
                     <TableCell className="text-center">
                       <div className="flex justify-end gap-2">
@@ -134,6 +138,9 @@ export const DynamicTable = ({
                           <Skeleton className="h-8 w-8 rounded-md" />
                         )}
                         {onRoadSignAction && (
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        )}
+                                                {onDesignChange && (
                           <Skeleton className="h-8 w-8 rounded-md" />
                         )}
                         {onExchange && (
@@ -192,6 +199,7 @@ export const DynamicTable = ({
                     onExchange ||
                     onExtendBooking ||
                     onStatusChange ||
+                    onDesignChange ||
                     showTemporaryBookingIcon) && (
                     <TableCell className="py-2">
                       <div className="flex justify-end gap-2 items-center">
@@ -264,9 +272,9 @@ export const DynamicTable = ({
 
                         {(onConfirmOrder || onUnconfirmOrder) && (
                           <>
-                            {(row?.status === 0 || row?.is_received === 0) &&
-                              onConfirmOrder &&
-                              hasPermission(permissions?.confirm) && (
+                          {((row?.status === 0 || row?.is_received === 0) || isOrdersTable) &&
+  onConfirmOrder &&
+  hasPermission(permissions?.confirm) && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -281,10 +289,9 @@ export const DynamicTable = ({
                               )}
 
                             {/* Pause/Unconfirm Button - REMOVED only from booking table */}
-                            {/* Remove this button when showTemporaryBookingIcon is true (booking table) */}
-                            {!showTemporaryBookingIcon && (row.status === 1 || row?.status === 2) &&
-                              onUnconfirmOrder &&
-                              hasPermission(permissions?.unConfirm) && (
+                        {!showTemporaryBookingIcon && ((row.status === 1 || row?.status === 2) || (isOrdersTable && row?.orderIds)) &&
+  onUnconfirmOrder &&
+  hasPermission(permissions?.unConfirm) && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -325,6 +332,24 @@ export const DynamicTable = ({
     <Icon icon="mdi:calendar-edit" className="text-blue-600" />
   </Button>
 )}
+
+
+                        {/* Design Change Button - Booking table only */}
+                        {onDesignChange && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onDesignChange(row)}
+                            className="h-7 w-7 p-0 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800 dark:hover:bg-indigo-900/40"
+                            title="تغيير التصميم"
+                          >
+                            <Icon
+                              icon="mdi:palette"
+                              className="text-indigo-600 dark:text-indigo-400"
+                            />
+                          </Button>
+                        )}
+
 
                         {onDelete &&
                           !hideDeleteIcon &&
@@ -432,7 +457,9 @@ export const DynamicTable = ({
                       onRoadSignAction ||
                       onExchange ||
                       onExtendBooking ||
-                      onStatusChange ||
+                      onStatusChange || 
+                      onDesignChange ||
+
                       onReceipt ||
                       showTemporaryBookingIcon
                       ? 1

@@ -49,6 +49,8 @@ import { BrokerBookings } from "./Pages/Broker/BrokerBookings";
 import { Toaster } from "react-hot-toast";
 import WorkTypePage from "./Pages/WorkTypesPage/WorkTypesPage"
 import OffersPage from "./Pages/offers/OffersPage";
+import BookingDesignChange from "./Pages/Booking/BookingDesignChange";
+import SearchInput from "./Pages/SearchInput/SearchInput"
 function App() {
 
   axios.defaults.baseURL = "/api"; // goes through Vite proxy
@@ -90,6 +92,9 @@ function App() {
           <Route path="work-types" element={<WorkTypePage />} />
           <Route path="offers" element={<OffersPage />} />
 
+  <Route path="search" element={<SearchInput />} />
+
+
             <Route
               path="administration-page"
               element={<AdministrationPageLayout />}
@@ -106,7 +111,7 @@ function App() {
 
               */ }
 
-
+              
 
               <Route path="box" element={<Box />} />
               <Route path="brokers" element={<BrokersPage />} />
@@ -142,6 +147,8 @@ function App() {
             />
 
             <Route path="booking/:id" element={<ContractPage />} />
+            <Route path="booking/design/:id" element={<BookingDesignChange />} />
+            
             <Route path="brokers" element={<BrokersPage />} />
 
 

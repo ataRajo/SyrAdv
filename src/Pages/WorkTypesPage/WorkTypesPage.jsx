@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState,useEffect   } from "react";
 import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import HeaderComponent from "../../utils/HeaderComponent";
 import { DeleteDialog } from "../../utils/Dialogs/DeleteDialog/DeleteDialog";
 import { DialogAddWorkType } from "../../utils/Dialogs/DialogAddWorkType";
 import { DialogEditWorkType } from "../../utils/Dialogs/DialogEditWorkType";
+import DialogWorkTypeCustomers from "../../utils/Dialogs/Data/DynamicDialogConfiguration/DialogWorkTypeCustomers/DialogWorkTypeCustomers"; // ← import
 import { WorkTypesColumns } from "../../utils/Tables/ColumnsTable/WorkTypesColumns";
 import { useWorkTypes } from "../../hooks/useWorkTypes";
 import { Permissions } from "../../Static/StaticData";
@@ -25,6 +26,7 @@ const WorkTypesPage = () => {
     openDelete,
     setOpenDelete,
     selectedWorkType,
+    setSelectedWorkType, // ← make sure this is exported from hook
     searchQuery,
     setSearchQuery,
     handleAdd,
@@ -33,6 +35,27 @@ const WorkTypesPage = () => {
     handleDelete,
     handleConfirmDelete,
   } = useWorkTypes();
+
+  // ← NEW: state for customers dialog
+  const [openCustomers, setOpenCustomers] = useState(false);
+  const [selectedWorkTypeForCustomers, setSelectedWorkTypeForCustomers] = useState(null);
+
+  const handleViewCustomers = (workType) => {
+    setSelectedWorkTypeForCustomers(workType);
+    setOpenCustomers(true);
+  };
+
+  const handleCloseCustomers = () => {
+    setOpenCustomers(false);
+    setSelectedWorkTypeForCustomers(null);
+  };
+
+useEffect(() => {
+  const handler = (e) => handleViewCustomers(e.detail);
+  window.addEventListener('viewWorkTypeCustomers', handler);
+  return () => window.removeEventListener('viewWorkTypeCustomers', handler);
+}, []);
+
 
   if (isLoading) {
     return (
@@ -43,12 +66,15 @@ const WorkTypesPage = () => {
     );
   }
 
+
+
+
   return (
     <div className="p-4 sm:p-6 max-w-full mx-auto space-y-6">
       <HeaderComponent
         title={"أنواع الأعمال"}
         titleBtn={"إضافة نوع عمل"}
-     permission={Permissions.CreateBrokers}
+        permission={Permissions.CreateBrokers}
         setShow={setOpen}
       />
 
@@ -68,8 +94,8 @@ const WorkTypesPage = () => {
         data={workTypes}
         columns={WorkTypesColumns}
         isLoading={isFetching}
-        //onEdit={handleEdit}
         onDelete={handleDelete}
+        onViewCustomers={handleViewCustomers} // ← pass the handler
         permissions={{
           edit: Permissions.ViewRegions,
           delete: Permissions.DeleteBrokers,
@@ -99,6 +125,14 @@ const WorkTypesPage = () => {
         loading={isDeleting}
         title="حذف نوع العمل"
         description={`هل أنت متأكد من حذف "${selectedWorkType?.type}"؟`}
+      />
+
+      {/* ← NEW: Customers Dialog */}
+      <DialogWorkTypeCustomers
+        show={openCustomers}
+        handleClose={handleCloseCustomers}
+        workTypeId={selectedWorkTypeForCustomers?.id}
+        workTypeName={selectedWorkTypeForCustomers?.type}
       />
     </div>
   );

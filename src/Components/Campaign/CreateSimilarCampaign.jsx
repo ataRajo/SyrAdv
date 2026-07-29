@@ -8,10 +8,8 @@ import { productTypeOptions } from '../../Static/StaticData';
 import axios from 'axios';
 import { BASE_URL } from '../../Api/baseUrl';
 
-export const CreateSimilarCampaign = ({ booking }) => {
+export const CreateSimilarCampaign = ({ booking ,  printTypes ,loadingPrintTypes}) => {
   const [open, setOpen] = useState(false);
-  const [printTypes, setPrintTypes] = useState([]);
-  const [loadingPrintTypes, setLoadingPrintTypes] = useState(false);
   
   const {
     startDate,
@@ -37,33 +35,6 @@ export const CreateSimilarCampaign = ({ booking }) => {
     handleSubmit,
     handleReset,
   } = useSimilarCampaign(booking);
-  
-  // Fetch print types on component mount
-  useEffect(() => {
-    const fetchPrintTypes = async () => {
-      try {
-        setLoadingPrintTypes(true);
-        const token = localStorage.getItem("SuperAdminInfo");
-        const parsedToken = token ? JSON.parse(token) : null;
-        const authToken = parsedToken?.user?.token || parsedToken?.token;
-        
-        const response = await axios.get(`${BASE_URL}/printings`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Accept': 'application/json'
-          }
-        });
-        
-        setPrintTypes(response.data || []);
-      } catch (error) {
-        console.error("Error fetching print types:", error);
-      } finally {
-        setLoadingPrintTypes(false);
-      }
-    };
-    
-    fetchPrintTypes();
-  }, []);
   
   const handleDialogChange = (newOpen) => {
     setOpen(newOpen);
@@ -138,12 +109,12 @@ export const CreateSimilarCampaign = ({ booking }) => {
                   <User className="h-4 w-4 text-orange-500" />
                   اختيار العميل *
                 </label>
-                <select
-                  className="w-full border rounded-lg p-2 text-sm"
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  disabled={isLoadingCustomers}
-                >
+<select
+  className="w-full border rounded-lg p-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+  value={customerId}
+  onChange={(e) => setCustomerId(e.target.value)}
+  disabled={isLoadingCustomers}
+>
                   <option value="">-- اختر عميل --</option>
                   {customers.map(customer => (
                     <option key={customer.id} value={customer.id}>
@@ -159,11 +130,11 @@ export const CreateSimilarCampaign = ({ booking }) => {
                   <Package className="h-4 w-4 text-orange-500" />
                   نوع المنتج *
                 </label>
-                <select
-                  className="w-full border rounded-lg p-2 text-sm"
-                  value={productType}
-                  onChange={(e) => setProductType(e.target.value)}
-                >
+               <select
+  className="w-full border rounded-lg p-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+  value={productType}
+  onChange={(e) => setProductType(e.target.value)}
+>
                   <option value="">-- اختر نوع المنتج --</option>
                   {productTypeOptions.map(option => (
                     <option key={option.value} value={option.value}>
@@ -179,12 +150,12 @@ export const CreateSimilarCampaign = ({ booking }) => {
                   <Printer className="h-4 w-4 text-orange-500" />
                   نوع الطباعة *
                 </label>
-                <select
-                  className="w-full border rounded-lg p-2 text-sm"
-                  value={printingId}
-                  onChange={(e) => setPrintingId(e.target.value)}
-                  disabled={loadingPrintTypes}
-                >
+            <select
+  className="w-full border rounded-lg p-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+  value={printingId}
+  onChange={(e) => setPrintingId(e.target.value)}
+  disabled={loadingPrintTypes}
+>
                   <option value="">-- اختر نوع الطباعة --</option>
                   {printTypes.map(print => (
                     <option key={print.id} value={print.id}>

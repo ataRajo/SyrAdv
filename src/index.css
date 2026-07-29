@@ -60,7 +60,7 @@
   --popover-foreground: #111827;
 
   /* Primary Colors */
-  --primary: #3b82f6;                /* modern tailwind-blue */
+  --primary: #315fa8;                /* modern tailwind-blue */
   --primary-foreground: #ffffff;
 
   /* Secondary */
@@ -103,12 +103,12 @@
 
 .dark {
   --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
+  --foreground: oklch(98.77% 0.00605 138.548);
   --card: oklch(0.208 0.042 265.755);
   --card-foreground: oklch(0.984 0.003 247.858);
   --popover: oklch(0.208 0.042 265.755);
   --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
+  --primary: oklch(78.412% 0.14818 93.968 / 0.945);
   --primary-foreground: oklch(0.208 0.042 265.755);
   --secondary: oklch(0.279 0.041 260.031);
   --secondary-foreground: oklch(0.984 0.003 247.858);

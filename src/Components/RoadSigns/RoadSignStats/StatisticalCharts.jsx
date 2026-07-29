@@ -55,21 +55,7 @@ const StatisticalCharts = ({ roadSignId }) => {
             </PieChart>
           </ResponsiveContainer>
         </div>
-
-        {/* Booking Status Chart */}
-        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-          <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 text-center">حالة الحجوزات</h4>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={statusData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="status" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" fill="#8884d8" name="عدد الحجوزات" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      
       </div>
 
       {/* Monthly Bookings */}
@@ -108,7 +94,7 @@ const prepareCustomerData = (bookings) => {
 
 const getCustomerName = (customer) => {
   if (!customer) return 'غير محدد';
-  return customer.full_name || customer.company_name || 'غير محدد';
+  return customer.company_name || 'غير محدد';
 };
 
 const prepareMonthlyData = (bookings) => {

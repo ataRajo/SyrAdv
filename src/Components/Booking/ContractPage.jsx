@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo  } from "react";
 import html2pdf from "html2pdf.js";
 import logo from "../../assets/images/adv_syrian.png";
 import { useParams } from "react-router";
@@ -327,40 +327,57 @@ const CommonTableRows = () => {
 };
 
 
-  // ✅ COMMON PRINTING INFO
-  const CommonPrintingInfo = () => {
-    return (
-      <div style={{ margin: "20px 0" }}>
-        <strong>
-          - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
-        </strong>
-        {getBooking?.groupedTemplates?.map((tem, ind) => (
-          <div key={ind}>
-            <p>
-              العدد الكلي لنموذج {tem?.model} بعدد{" "}
-              <span>{tem?.total_faces} وجه إعلاني</span>
-            </p>
-          </div>
-        ))}
+const CommonPrintingInfo = () => {
+  const totalPrintingCost = useMemo(() => {
+    const totalPrice = parseFloat(getBooking?.total_price) || 0;
+    const addedPrice = parseFloat(getBooking?.added_price) || 0;
+    return totalPrice + addedPrice;
+  }, [getBooking?.total_price, getBooking?.added_price]);
 
-        <p>مدة الدورة الاعلانية الواحدة هي 14 يوم </p>
-
-        <div>
-          إجمالي الأمتار الطباعية : {getBooking?.total_printing_space} م²
+  return (
+    <div style={{ margin: "20px 0" }}>
+      <strong>
+        - السعر يشمل أجور الطباعة لمرة واحدة فقط و تكاليف الرسوم الإعلانية.
+      </strong>
+      {getBooking?.groupedTemplates?.map((tem, ind) => (
+        <div key={ind}>
+          <p>
+            العدد الكلي لنموذج {tem?.model} بعدد{" "}
+            <span>{tem?.total_faces} وجه إعلاني</span>
+          </p>
         </div>
-        
-        {/* ✅ نخبّي ملاحظة سعر الطباعة إذا كان printing_price > 0 */}
-        {showPrintingPrice && getBooking?.printing?.price && getBooking?.total_printing_space && (
-          <div style={{ marginTop: "10px", padding: "8px", backgroundColor: "#f0f8ff", border: "1px solid #d1e7ff" }}>
-            <small>
-              <strong>ملاحظة:</strong> سعر الطباعة محسوب كالتالي: 
-              {getBooking.printing_price}$ (سعر المتر) × {getBooking.total_printing_space} م² (إجمالي المساحة) = {printingTotalPrice}$
-            </small>
-          </div>
-        )}
+      ))}
+
+      <p>مدة الدورة الاعلانية الواحدة هي 14 يوم </p>
+
+      <div>
+        إجمالي الأمتار الطباعية : {getBooking?.total_printing_space} م²
       </div>
-    );
-  };
+      
+      {showPrintingPrice && getBooking?.printing?.price && getBooking?.total_printing_space && (
+        <div style={{ marginTop: "10px", padding: "8px", backgroundColor: "#f0f8ff", border: "1px solid #d1e7ff" }}>
+          <small>
+            <strong>ملاحظة:</strong> سعر الطباعة محسوب كالتالي: 
+            {getBooking.printing_price}$ (سعر المتر) × {getBooking.total_printing_space} م² (إجمالي المساحة) = {printingTotalPrice}$
+          </small>
+          
+          {/* ✅ Only show added price lines if added_price exists and is > 0 */}
+          {getBooking?.added_price && parseFloat(getBooking.added_price) > 0 && (
+            <>
+              <br/>
+              <small>كلفة تغيير التصميم هي: {getBooking.added_price}$</small>
+              <br/>
+              <small>
+                الكلفة الكلية هي= {totalPrintingCost}$ 
+                ({getBooking.total_price} + {getBooking.added_price})
+              </small>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
   // ✅ COMMON TABLE ROW FOR GROUPED ROADSIGNS - UPDATED TO INCLUDE REGION
   const GroupedRoadsignsTable = () => (

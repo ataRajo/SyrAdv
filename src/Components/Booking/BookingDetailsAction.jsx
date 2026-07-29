@@ -13,13 +13,16 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2, Info, ArrowRightLeft, Calendar, Package, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import { Clock } from "lucide-react"
 
 export const BookingDetailsAction = ({ booking }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedOldSign, setSelectedOldSign] = useState("");
   const [selectedTargetSign, setSelectedTargetSign] = useState("");
+  const [isTempMoving, setIsTempMoving] = useState(false);
+  const [tempEndDate, setTempEndDate] = useState("");
 
-  // Fetch current booking details
+
   const { data: fullDetails, isLoading: isFetching  } = useGetOneBookingsQuery(booking.id, {
     skip: !isOpen,
   });
@@ -28,6 +31,9 @@ export const BookingDetailsAction = ({ booking }) => {
     if (isOpen) {
       setSelectedOldSign("");
       setSelectedTargetSign("");
+            setIsTempMoving(false);
+      setTempEndDate("");
+
     }
   }, [isOpen]);
 
@@ -92,9 +98,27 @@ export const BookingDetailsAction = ({ booking }) => {
     });
   }, [allSignsWithSameTemplate, selectedOldSignDetails, selectedOldSign]);
 
-  const handleSwap = async () => {
+
+  // Validate temp end date against booking end date
+  const isTempEndDateValid = useMemo(() => {
+    if (!isTempMoving || !tempEndDate || !booking?.end_date) return true;
+    const bookingEnd = new Date(booking.end_date);
+    const tempEnd = new Date(tempEndDate);
+    return tempEnd <= bookingEnd;
+  }, [isTempMoving, tempEndDate, booking?.end_date]);
+
+
+   const handleSwap = async () => {
     if (!selectedOldSign || !selectedTargetSign) {
       toast.error("يرجى اختيار اللوحة القديمة واللوحة الجديدة");
+      return;
+    }
+    if (isTempMoving && !tempEndDate) {
+      toast.error("يرجى تحديد تاريخ نهاية النقل المؤقت");
+      return;
+    }
+    if (isTempMoving && !isTempEndDateValid) {
+      toast.error("تاريخ نهاية النقل المؤقت يجب أن لا يتجاوز تاريخ نهاية الحجز");
       return;
     }
 
@@ -103,6 +127,8 @@ export const BookingDetailsAction = ({ booking }) => {
         booking_id: booking.id,
         old_roadsign_id: selectedOldSign,
         new_roadsign_id: selectedTargetSign,
+        isTempMoving,                         
+        ...(isTempMoving && { end_date: tempEndDate }), 
       }).unwrap();
       
       toast.success("تم نقل الحجز بنجاح");
@@ -239,6 +265,83 @@ export const BookingDetailsAction = ({ booking }) => {
                   </div>
                 </div>
 
+                                {/* Temporary Moving Toggle */}
+                <div className={cn(
+                  "p-3 sm:p-4 rounded-lg border transition-all duration-200",
+                  isTempMoving
+                    ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700"
+                    : "bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700"
+                )}>
+                  <label className="flex items-center gap-2 sm:gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isTempMoving}
+                      onChange={(e) => {
+                        setIsTempMoving(e.target.checked);
+                        if (!e.target.checked) setTempEndDate("");
+                      }}
+                      className="h-4 w-4 sm:h-5 sm:w-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                    />
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Clock className={cn(
+                        "h-4 w-4 sm:h-5 sm:w-5",
+                        isTempMoving ? "text-amber-600 dark:text-amber-400" : "text-gray-500 dark:text-gray-400"
+                      )} />
+                      <div>
+                        <span className={cn(
+                          "text-xs sm:text-sm font-semibold block",
+                          isTempMoving ? "text-amber-700 dark:text-amber-300" : "text-gray-700 dark:text-gray-300"
+                        )}>
+                          نقل مؤقت
+                        </span>
+                        <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
+                          {isTempMoving
+                            ? "سيتم إرجاع اللوحة الأصلية تلقائياً بعد انتهاء المدة"
+                            : "انقر لتمكين النقل المؤقت مع تحديد تاريخ انتهاء"}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* End Date Input (only when temp moving) */}
+                  {isTempMoving && (
+                    <div className="mt-3 sm:mt-4 space-y-1.5 sm:space-y-2">
+                      <label className="text-[11px] sm:text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                        تاريخ نهاية النقل المؤقت
+                      </label>
+                                         <input
+                        type="date"
+                        value={tempEndDate}
+                        onChange={(e) => setTempEndDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        max={booking?.end_date || ""}
+                        className={cn(
+                          "w-full border rounded-lg p-2 sm:p-2.5 text-xs sm:text-sm",
+                          "bg-white dark:bg-gray-800",
+                          !isTempEndDateValid && tempEndDate
+                            ? "border-red-400 dark:border-red-600 focus:ring-red-500"
+                            : "border-amber-300 dark:border-amber-700 focus:ring-amber-500",
+                          "text-gray-900 dark:text-gray-100",
+                          "focus:ring-2 dark:focus:ring-amber-400",
+                          "focus:border-transparent transition-all duration-200"
+                        )}
+                      />
+                                          {!isTempEndDateValid && tempEndDate && (
+                        <p className="text-[10px] sm:text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          تاريخ النقل المؤقت يجب أن يكون قبل أو يساوي {booking.end_date}
+                        </p>
+                      )}
+                      <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
+                        ⚠️ بعد هذا التاريخ، ستعود اللوحة الأصلية ({selectedOldSignDetails.roadsign_code || `RS-${selectedOldSignDetails.id}`}) للحجز
+                      </p>
+                      
+                    </div>
+                  )}
+                </div>
+                
+
                 {/* Info Box */}
                 <div className={cn(
                   "p-3 sm:p-4 rounded-lg border",
@@ -374,16 +477,7 @@ export const BookingDetailsAction = ({ booking }) => {
               </Button>
               <Button 
                 onClick={handleSwap} 
-                disabled={isMoving || !selectedOldSign || !selectedTargetSign || availableTargetSigns.length === 0}
-                className={cn(
-                  "flex-1 bg-gradient-to-r from-orange-600 to-orange-500",
-                  "hover:from-orange-700 hover:to-orange-600",
-                  "dark:from-orange-500 dark:to-orange-600",
-                  "dark:hover:from-orange-600 dark:hover:to-orange-700",
-                  "text-white shadow-lg transition-all duration-200",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                  "text-xs sm:text-sm"
-                )}
+                               disabled={isMoving || !selectedOldSign || !selectedTargetSign || availableTargetSigns.length === 0 || (isTempMoving && !tempEndDate) || (isTempMoving && !isTempEndDateValid)}
               >
                 {isMoving ? (
                   <>
@@ -391,7 +485,7 @@ export const BookingDetailsAction = ({ booking }) => {
                     جاري التبديل...
                   </>
                 ) : (
-                  "تأكيد التبديل"
+                  isTempMoving ? "تأكيد النقل المؤقت" : "تأكيد التبديل"
                 )}
               </Button>
             </div>

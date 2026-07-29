@@ -72,8 +72,8 @@ const PaymentsContainer = () => {
   const [customerFilter, setCustomerFilter] = useState("all");
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-const [itemsPerPage, setItemsPerPage] = useState(20);
-const [customerSearch, setCustomerSearch] = useState("");
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [customerSearch, setCustomerSearch] = useState("");
 
   const { user } = useAuth(); 
   
@@ -243,7 +243,7 @@ const customers = useMemo(() => {
   }, [user]);
 
   const filteredNotReceivedPayments = useMemo(() => {
-    let filtered = paymentIsNotReceived || [];
+    let filtered = Array.isArray(paymentIsNotReceived) ? paymentIsNotReceived : [];
     if (customerFilter !== "all") {
       filtered = filtered.filter((p) => p.customer_id === parseInt(customerFilter));
     }
@@ -490,8 +490,8 @@ const downloadFile = (fileUrl, fileName) => {
     return customerOptions.find(opt => opt.value === customerFilter)?.customerData || null;
   }, [customerFilter, customerOptions]);
 
-  const filteredPayments = useMemo(() => {
-    let filtered = payments;
+   const filteredPayments = useMemo(() => {
+    let filtered = Array.isArray(payments) ? payments : [];
     
     if (statusFilter !== "all") {
       filtered = filtered.filter((p) => p.status === parseInt(statusFilter));
@@ -1283,30 +1283,6 @@ const handleExportWord = async () => {
                       </p>
                     </div>
                     <Icon icon="mdi:account-cash" className="w-5 h-5 sm:w-8 sm:h-8 text-white/80" />
-                  </div>
-                </div>
-                
-                <div className="bg-white/10 p-2 sm:p-4 rounded-lg backdrop-blur-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-blue-100 text-xs sm:text-sm">إجمالي المتبقي</p>
-                      <p className="text-lg sm:text-2xl font-bold mt-1">
-                        {statistics.totalOutstandingBalance.toFixed(2)} $
-                      </p>
-                    </div>
-                    <Icon icon="mdi:cash-multiple" className="w-5 h-5 sm:w-8 sm:h-8 text-white/80" />
-                  </div>
-                </div>
-                
-                <div className="bg-white/10 p-2 sm:p-4 rounded-lg backdrop-blur-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-blue-100 text-xs sm:text-sm">متوسط الرصيد</p>
-                      <p className="text-lg sm:text-2xl font-bold mt-1">
-                        {statistics.averageRemaining.toFixed(2)} $
-                      </p>
-                    </div>
-                    <Icon icon="mdi:chart-bar" className="w-5 h-5 sm:w-8 sm:h-8 text-white/80" />
                   </div>
                 </div>
               </div>

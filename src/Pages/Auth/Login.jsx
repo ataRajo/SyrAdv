@@ -46,7 +46,6 @@ export function Login({ className, ...props }) {
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
   const [imagesLoaded, setImagesLoaded] = useState(false);
 
-  // Preload images
   useEffect(() => {
     const loadImages = async () => {
       const promises = BACKGROUND_IMAGES.map((src) => {
@@ -63,7 +62,7 @@ export function Login({ className, ...props }) {
         setImagesLoaded(true);
       } catch (error) {
         console.error("Error loading background images:", error);
-        setImagesLoaded(true); // Still continue even if images fail to load
+        setImagesLoaded(true); 
       }
     };
 
@@ -136,7 +135,6 @@ export function Login({ className, ...props }) {
     if (oldToken && newToken && oldToken !== newToken) {
       console.log("⚠️ Token changed! Old vs New");
       showToast("info", "تم تحديث رمز الإشعارات");
-      // You could send the new token to backend here if needed
     }
   };
 

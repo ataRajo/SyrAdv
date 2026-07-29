@@ -37,7 +37,8 @@ import {
   Building,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Signpost,
 } from "lucide-react";
 import { RegionsCityContext } from "../../Context/RegionsCityContextApi";
 import { useAuth } from "../../Context/AuthProvider";
@@ -78,7 +79,6 @@ const RegionsTab = () => {
 
   // Handle opening dialog for adding new region
   const handleAddRegion = () => {
-    // Reset form and edit ID before opening dialog
     setRegionForm({ name: "", city_id: "", is_active: 1 });
     setEditRegionId(null);
     setIsRegionDialogOpen(true);
@@ -87,7 +87,6 @@ const RegionsTab = () => {
   // Handle dialog close
   const handleDialogClose = () => {
     setIsRegionDialogOpen(false);
-    // Reset form after animation
     setTimeout(() => {
       setRegionForm({ name: "", city_id: "", is_active: 1 });
       setEditRegionId(null);
@@ -132,7 +131,6 @@ const RegionsTab = () => {
                 </DialogTrigger>
 
                 <DialogContent className="sm:max-w-md" onInteractOutside={(e) => {
-                  // Prevent closing when clicking outside if loading
                   if (addRegionLoading) {
                     e.preventDefault();
                   }
@@ -408,6 +406,11 @@ const RegionsTab = () => {
                         </div>
                       </TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-gray-300">الحالة</TableHead>
+                      <TableHead className="font-bold text-gray-900 dark:text-gray-300">
+                        <div className="flex items-center gap-2">
+عدد اللوحات في المنطقة
+                        </div>
+                      </TableHead>
                       <TableHead className="font-bold text-gray-900 dark:text-gray-300 text-center">الإجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -460,6 +463,14 @@ const RegionsTab = () => {
                               </>
                             )}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Signpost className="h-4 w-4 text-orange-500" />
+                            <span className="font-medium text-gray-800 dark:text-gray-200">
+                              {region.roadsigns_count || 0}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">

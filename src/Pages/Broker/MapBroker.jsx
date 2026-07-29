@@ -74,6 +74,11 @@ import { useBrokerAuthentication } from "../../Hooks/useBrokerAuthentication";
 
 import axios from "axios";
 
+// Helper function for className
+function cn(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
+
 // Fix for default marker icons in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -93,14 +98,8 @@ const PRODUCT_TYPES = [
 ];
 
 // Simple working marker icon (Google Maps style)
-const createSimpleMarkerIcon = (status, isSelected = false) => {
-  const colors = {
-    available: { bg: "#4CAF50", border: "#388E3C" },
-    booked: { bg: "#F44336", border: "#D32F2F" },
-    partial: { bg: "#FF9800", border: "#F57C00" },
-  };
-
-  const color = colors[status] || colors.available;
+const createSimpleMarkerIcon = (isSelected = false) => {
+  const color = { bg: "#4CAF50", border: "#388E3C" };
   const borderColor = isSelected ? "#FF9800" : color.border;
   const bgColor = isSelected ? "#FF9800" : color.bg;
 
@@ -227,12 +226,12 @@ export function MapBroker() {
   const [mapReady, setMapReady] = useState(false);
   const [showWhatsAppForm, setShowWhatsAppForm] = useState(false);
   const { getBrokerUser } = useBrokerAuthentication();
-const [brokerLogId, setBrokerLogId] = useState(null);
-const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [brokerLogId, setBrokerLogId] = useState(null);
+  const [whatsappNumber, setWhatsappNumber] = useState("");
 
   // NEW: State for WhatsApp selection mode
   const [whatsAppSelectMode, setWhatsAppSelectMode] = useState(false);
-  
+
   const [bookingData, setBookingData] = useState({
     customerName: "",
     customerPhone: "",
@@ -272,7 +271,7 @@ const [whatsappNumber, setWhatsappNumber] = useState("");
 
   // API hooks
   const [calculateReservation] = useCalculateReservationMutation();
-const [submitBrokerActivity] = useSubmitBrokerActivityMutation(); // 👈 ADD THIS
+  const [submitBrokerActivity] = useSubmitBrokerActivityMutation();
 
   // Fetch cities
   const { data: cities = [], isLoading: citiesLoading } =
@@ -308,7 +307,7 @@ const [submitBrokerActivity] = useSubmitBrokerActivityMutation(); // 👈 ADD TH
     if (filters.template_size) params.template_size = filters.template_size;
     if (startDate) params.start_date = startDate.toISOString().split("T")[0];
     if (endDate) params.end_date = endDate.toISOString().split("T")[0];
-    
+
     return params;
   }, [filters, startDate, endDate]);
 
@@ -321,68 +320,38 @@ const [submitBrokerActivity] = useSubmitBrokerActivityMutation(); // 👈 ADD TH
     refetch,
   } = useGetRoadSignsQuery(queryParams);
 
+  // Extract road signs data from response
   const roadSignsData = roadSignsResponse?.data || [];
 
-  // Prepare markers data
+  // Prepare markers data — ONLY available (is_booked === false)
   const markers = useMemo(() => {
     if (!roadSignsData || roadSignsData.length === 0) return [];
 
     return roadSignsData
-      .filter((sign) => sign.latitudeX && sign.longitudeY)
-      .map((sign) => {
-        let status = "available";
-        if (sign.is_booked === true) {
-          status = "booked";
-        } else if (
-          sign.is_booked === "partial" ||
-          (sign.total_faces_on_date > 0 &&
-            sign.total_faces_on_date < sign.faces_number)
-        ) {
-          status = "partial";
-        }
-
-        return {
-          id: sign.id,
-          lat: parseFloat(sign.latitudeX),
-          lng: parseFloat(sign.longitudeY),
-          status: status,
-          roadsign_code: sign.roadsign_code,
-          place: sign.place,
-          directions: sign.directions,
-          panels_number: sign.panels_number,
-          faces_number: sign.faces_number,
-          image: sign.image,
-          location_image1: sign.location_image1,
-          template: sign.template,
-          city: sign.city,
-          region: sign.region,
-          bookings: sign.bookings || [],
-        };
-      });
+      .filter((sign) => sign.latitudeX && sign.longitudeY && sign.is_booked === false)
+      .map((sign) => ({
+        id: sign.id,
+        lat: parseFloat(sign.latitudeX),
+        lng: parseFloat(sign.longitudeY),
+        roadsign_code: sign.roadsign_code,
+        place: sign.place,
+        directions: sign.directions,
+        panels_number: sign.panels_number,
+        faces_number: sign.faces_number,
+        image: sign.image,
+        location_image1: sign.location_image1,
+        template: sign.template,
+        city: sign.city,
+        region: sign.region,
+        bookings: sign.bookings || [],
+      }));
   }, [roadSignsData]);
 
-  // Stats
+  // Stats — only available markers
   const stats = useMemo(() => {
     const total = markers.length;
-    const available = markers.filter((m) => m.status === "available").length;
-    const booked = markers.filter((m) => m.status === "booked").length;
-    const partial = markers.filter((m) => m.status === "partial").length;
-
-    return { total, available, booked, partial };
+    return { total, available: total };
   }, [markers]);
-
-  const getMarkerStatus = useCallback((status) => {
-    switch (status) {
-      case "available":
-        return { color: "#22c55e", label: "متاح", icon: "✓" };
-      case "booked":
-        return { color: "#ef4444", label: "محجوز", icon: "✗" };
-      case "partial":
-        return { color: "#f59e0b", label: "محجوز جزئياً", icon: "!" };
-      default:
-        return { color: "#6b7280", label: "غير معروف", icon: "?" };
-    }
-  }, []);
 
   const handleFilterChange = useCallback((key, value) => {
     setFilters((prev) => {
@@ -394,24 +363,23 @@ const [submitBrokerActivity] = useSubmitBrokerActivityMutation(); // 👈 ADD TH
     });
   }, []);
 
- const clearFilters = useCallback(() => {
-  setFilters({
-    city_id: "",
-    region_id: "",
-    direction: "",
-    template_size: "",
-  });
-  setStartDate(null);
-  setEndDate(null);
-  setSelectedSigns([]);
-  setTotalAmount(null);
-  setBrokerLogId(null); // Reset broker log ID
-  setWhatsappNumber(""); // Reset WhatsApp number
-  showToast("info", "تم مسح جميع الفلاتر");
-}, []);
+  const clearFilters = useCallback(() => {
+    setFilters({
+      city_id: "",
+      region_id: "",
+      direction: "",
+      template_size: "",
+    });
+    setStartDate(null);
+    setEndDate(null);
+    setSelectedSigns([]);
+    setTotalAmount(null);
+    setBrokerLogId(null);
+    setWhatsappNumber("");
+    showToast("info", "تم مسح جميع الفلاتر");
+  }, []);
 
-
-  // Modified: Handle marker click - now checks if WhatsApp selection mode is active
+  // Modified: Handle marker click — now checks if WhatsApp selection mode is active
   const handleMarkerClick = useCallback((sign) => {
     // If in WhatsApp select mode, add/remove from cart instead of showing modal
     if (whatsAppSelectMode) {
@@ -461,7 +429,7 @@ const [submitBrokerActivity] = useSubmitBrokerActivityMutation(); // 👈 ADD TH
     showToast("success", "تم مسح جميع اللوحات المختارة");
   }, [selectedSigns.length]);
 
-  // Handle quick select - adds/removes from cart without modal
+  // Handle quick select — adds/removes from cart without modal
   const handleQuickSelect = useCallback((sign) => {
     setSelectedSigns((prev) => {
       const exists = prev.some((s) => s.id === sign.id);
@@ -504,223 +472,218 @@ const [submitBrokerActivity] = useSubmitBrokerActivityMutation(); // 👈 ADD TH
     showToast("success", "تم تحديث البيانات");
   }, [refetch]);
 
+  // Calculate total price using the API
+  const handleCalculateTotal = useCallback(async () => {
+    if (selectedSigns.length === 0) {
+      showToast("error", "الرجاء اختيار لوحة إعلانية على الأقل");
+      return;
+    }
+    if (!startDate || !endDate) {
+      showToast("error", "الرجاء اختيار تاريخ البداية والنهاية");
+      return;
+    }
+    if (!selectedPrintingId) {
+      showToast("error", "الرجاء اختيار نوع الطباعة");
+      return;
+    }
+    if (!selectedProductType) {
+      showToast("error", "الرجاء اختيار نوع المنتج");
+      return;
+    }
 
-  //calculate
-// Calculate total price using the API
-const handleCalculateTotal = useCallback(async () => {
-  if (selectedSigns.length === 0) {
-    showToast("error", "الرجاء اختيار لوحة إعلانية على الأقل");
-    return;
-  }
-  if (!startDate || !endDate) {
-    showToast("error", "الرجاء اختيار تاريخ البداية والنهاية");
-    return;
-  }
-  if (!selectedPrintingId) {
-    showToast("error", "الرجاء اختيار نوع الطباعة");
-    return;
-  }
-  if (!selectedProductType) {
-    showToast("error", "الرجاء اختيار نوع المنتج");
-    return;
-  }
+    // Get the logged-in broker user
+    const brokerUser = getBrokerUser();
+    const brokerId = brokerUser?.id || null;
 
-  // Get the logged-in broker user
-  const brokerUser = getBrokerUser();
-  const brokerId = brokerUser?.id || null;
-
-  setIsCalculating(true);
-  try {
-    const payload = {
-      roadsigns: selectedSigns.map((sign) => ({
-        road_sign_id: sign.id,
-        booking_faces: sign.faces_number || 1,
+    setIsCalculating(true);
+    try {
+      const payload = {
+        roadsigns: selectedSigns.map((sign) => ({
+          road_sign_id: sign.id,
+          booking_faces: sign.faces_number || 1,
+          start_date: startDate.toISOString().split("T")[0],
+          end_date: endDate.toISOString().split("T")[0],
+          number_of_reserved_panels: sign.panels_number || 1,
+        })),
+        product_type: selectedProductType,
         start_date: startDate.toISOString().split("T")[0],
         end_date: endDate.toISOString().split("T")[0],
-        number_of_reserved_panels: sign.panels_number || 1,
-      })),
-      product_type: selectedProductType,
-      start_date: startDate.toISOString().split("T")[0],
-      end_date: endDate.toISOString().split("T")[0],
-      is_extend: 0,
-      printing_id: selectedPrintingId,
-      actor_id: brokerId,
-    };
+        is_extend: 0,
+        printing_id: selectedPrintingId,
+        actor_id: brokerId,
+      };
 
-const response = await calculateReservation(payload).unwrap();
+      const response = await calculateReservation(payload).unwrap();
 
-// ✅ Save the broker_log.id from response
-if (response.broker_log?.id) {
-  setBrokerLogId(response.broker_log.id);
-  console.log("Broker log ID saved:", response.broker_log.id);
-}
-
-// ✅ FIX: Set the total amount from response
-if (response.amount) {
-  setTotalAmount(response.amount.total_price);
-  showToast("success", `تم حساب السعر بنجاح: ${response.amount.total_price} $`);
-} else if (response.total_price_per_month) {
-  setTotalAmount(response.total_price_per_month);
-  showToast("success", `تم حساب السعر بنجاح: ${response.total_price_per_month} $`);
-} else if (response.total_price) {
-  setTotalAmount(response.total_price);
-  showToast("success", `تم حساب السعر بنجاح: ${response.total_price} $`);
-} else {
-  setTotalAmount(response.price_per_period || 0);
-  showToast("success", "تم حساب السعر بنجاح");
-}
-
-// ✅ FIX: Reset WhatsApp form visibility when new calculation is done
-setShowWhatsAppForm(false);
-
-    
-  } catch (err) {
-    console.error("Error calculating amount:", err);
-    showToast("error", err?.data?.message || "فشل في حساب السعر");
-    setTotalAmount(null);
-  } finally {
-    setIsCalculating(false);
-  }
-}, [
-  selectedSigns,
-  startDate,
-  endDate,
-  selectedPrintingId,
-  selectedProductType,
-  calculateReservation,
-  getBrokerUser,
-]);
-
-// Send to WhatsApp with API call using dynamic number
-const handleSendToWhatsApp = async () => {
-  if (!bookingData.customerName || !bookingData.customerPhone) {
-    showToast("error", "الرجاء إدخال الاسم ورقم الهاتف");
-    return;
-  }
-
-  if (!whatsappNumber) {
-    showToast("error", "الرجاء إدخال رقم واتساب المستلم");
-    return;
-  }
-
-  if (selectedSigns.length === 0) {
-    showToast("error", "الرجاء اختيار لوحة إعلانية على الأقل");
-    return;
-  }
-
-  // Check if we have the broker_log.id
-  if (!brokerLogId) {
-    showToast("error", "الرجاء حساب السعر أولاً");
-    return;
-  }
-
-  setIsSending(true);
-
-  try {
-    // Prepare customer information for the API
-    const customerInformations = {
-      username: bookingData.customerName,
-      company_name: bookingData.companyName || "",
-      phone_number: bookingData.customerPhone,
-    };
-
-    // Call the activities API with the broker_log.id
-    const apiResult = await submitBrokerActivity({
-      activityId: brokerLogId,
-      customerInformations: customerInformations,
-    }).unwrap();
-
-    if (apiResult.success) {
-      console.log("Activity submitted successfully:", apiResult);
-      
-      // Continue with WhatsApp message
-      const formattedStartDate = startDate
-        ? startDate.toISOString().split("T")[0]
-        : "";
-      const formattedEndDate = endDate
-        ? endDate.toISOString().split("T")[0]
-        : "";
-
-      const selectedPrinting = printings.find(
-        (p) => p.id === selectedPrintingId,
-      );
-      const printingName = selectedPrinting ? selectedPrinting.type : "";
-
-      const selectedProductTypeObj = PRODUCT_TYPES.find(
-        (p) => p.id === selectedProductType,
-      );
-      const productTypeName = selectedProductTypeObj
-        ? selectedProductTypeObj.name
-        : "";
-
-      let message = `*طلب حجز لوحات إعلانية*\n\n`;
-      message += `*بيانات العميل:*\n`;
-      message += `الاسم: ${bookingData.customerName}\n`;
-      message += `الهاتف: ${bookingData.customerPhone}\n`;
-      if (bookingData.customerEmail)
-        message += `البريد الإلكتروني: ${bookingData.customerEmail}\n`;
-      if (bookingData.companyName)
-        message += `الشركة: ${bookingData.companyName}\n`;
-      message += `\n*مدة الحجز:*\n`;
-      message += `من: ${formattedStartDate}\n`;
-      message += `إلى: ${formattedEndDate}\n`;
-      message += `\n*نوع الطباعة:* ${printingName}\n`;
-      message += `*نوع المنتج:* ${productTypeName}\n`;
-      message += `\n*اللوحات المختارة:*\n`;
-
-      selectedSigns.forEach((sign, index) => {
-        message += `${index + 1}. كود: ${sign.roadsign_code || sign.id}\n`;
-        message += `   الموقع: ${sign.place || ""}\n`;
-        message += `   المدينة: ${sign.city?.name || ""} - ${sign.region?.name || ""}\n`;
-        if (sign.template) {
-          message += `   القالب: ${sign.template.model} - ${sign.template.size}\n`;
-        }
-        message += `   عدد اللوحات: ${sign.panels_number || 1}\n`;
-        message += `   عدد الوجوه: ${sign.faces_number || 1}\n\n`;
-      });
-
-      if (totalAmount) {
-        message += `\n*تفاصيل السعر:*\n`;
-        message += `المبلغ الإجمالي: ${totalAmount} $\n`;
+      // Save the broker_log.id from response
+      if (response.broker_log?.id) {
+        setBrokerLogId(response.broker_log.id);
+        console.log("Broker log ID saved:", response.broker_log.id);
       }
 
-      if (bookingData.notes) {
-        message += `\n*ملاحظات:*\n${bookingData.notes}\n`;
+      // Set the total amount from response
+      if (response.amount) {
+        setTotalAmount(response.amount.total_price);
+        showToast("success", `تم حساب السعر بنجاح: ${response.amount.total_price} $`);
+      } else if (response.total_price_per_month) {
+        setTotalAmount(response.total_price_per_month);
+        showToast("success", `تم حساب السعر بنجاح: ${response.total_price_per_month} $`);
+      } else if (response.total_price) {
+        setTotalAmount(response.total_price);
+        showToast("success", `تم حساب السعر بنجاح: ${response.total_price} $`);
+      } else {
+        setTotalAmount(response.price_per_period || 0);
+        showToast("success", "تم حساب السعر بنجاح");
       }
 
-      message += `\n*تاريخ الطلب:* ${new Date().toLocaleDateString("ar-SY")}`;
-
-      const encodedMessage = encodeURIComponent(message);
-      // Clean the WhatsApp number (remove any non-digits)
-      const cleanNumber = whatsappNumber.replace(/\D/g, "");
-      const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
-
-      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-      showToast("success", "تم إرسال البيانات وفتح واتساب بنجاح");
-
-      // Reset form after sending
+      // Reset WhatsApp form visibility when new calculation is done
       setShowWhatsAppForm(false);
-      setWhatsAppSelectMode(false);
-      setWhatsappNumber(""); // Reset WhatsApp number
-      setBookingData({
-        customerName: "",
-        customerPhone: "",
-        customerEmail: "",
-        companyName: "",
-        notes: "",
-      });
-    } else {
-      showToast("error", apiResult.message || "فشل في إرسال البيانات");
+
+    } catch (err) {
+      console.error("Error calculating amount:", err);
+      showToast("error", err?.data?.message || "فشل في حساب السعر");
+      setTotalAmount(null);
+    } finally {
+      setIsCalculating(false);
     }
-  } catch (error) {
-    console.error("Error in handleSendToWhatsApp:", error);
-    showToast("error", error?.data?.message || "حدث خطأ في فتح واتساب");
-  } finally {
-    setIsSending(false);
-  }
-};
+  }, [
+    selectedSigns,
+    startDate,
+    endDate,
+    selectedPrintingId,
+    selectedProductType,
+    calculateReservation,
+    getBrokerUser,
+  ]);
 
+  // Send to WhatsApp with API call using dynamic number
+  const handleSendToWhatsApp = async () => {
+    if (!bookingData.customerName || !bookingData.customerPhone) {
+      showToast("error", "الرجاء إدخال الاسم ورقم الهاتف");
+      return;
+    }
 
+    if (!whatsappNumber) {
+      showToast("error", "الرجاء إدخال رقم واتساب المستلم");
+      return;
+    }
+
+    if (selectedSigns.length === 0) {
+      showToast("error", "الرجاء اختيار لوحة إعلانية على الأقل");
+      return;
+    }
+
+    // Check if we have the broker_log.id
+    if (!brokerLogId) {
+      showToast("error", "الرجاء حساب السعر أولاً");
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      // Prepare customer information for the API
+      const customerInformations = {
+        username: bookingData.customerName,
+        company_name: bookingData.companyName || "",
+        phone_number: bookingData.customerPhone,
+      };
+
+      // Call the activities API with the broker_log.id
+      const apiResult = await submitBrokerActivity({
+        activityId: brokerLogId,
+        customerInformations: customerInformations,
+      }).unwrap();
+
+      if (apiResult.success) {
+        console.log("Activity submitted successfully:", apiResult);
+
+        // Continue with WhatsApp message
+        const formattedStartDate = startDate
+          ? startDate.toISOString().split("T")[0]
+          : "";
+        const formattedEndDate = endDate
+          ? endDate.toISOString().split("T")[0]
+          : "";
+
+        const selectedPrinting = printings.find(
+          (p) => p.id === selectedPrintingId,
+        );
+        const printingName = selectedPrinting ? selectedPrinting.type : "";
+
+        const selectedProductTypeObj = PRODUCT_TYPES.find(
+          (p) => p.id === selectedProductType,
+        );
+        const productTypeName = selectedProductTypeObj
+          ? selectedProductTypeObj.name
+          : "";
+
+        let message = `*طلب حجز لوحات إعلانية*\n\n`;
+        message += `*بيانات العميل:*\n`;
+        message += `الاسم: ${bookingData.customerName}\n`;
+        message += `الهاتف: ${bookingData.customerPhone}\n`;
+        if (bookingData.customerEmail)
+          message += `البريد الإلكتروني: ${bookingData.customerEmail}\n`;
+        if (bookingData.companyName)
+          message += `الشركة: ${bookingData.companyName}\n`;
+        message += `\n*مدة الحجز:*\n`;
+        message += `من: ${formattedStartDate}\n`;
+        message += `إلى: ${formattedEndDate}\n`;
+        message += `\n*نوع الطباعة:* ${printingName}\n`;
+        message += `*نوع المنتج:* ${productTypeName}\n`;
+        message += `\n*اللوحات المختارة:*\n`;
+
+        selectedSigns.forEach((sign, index) => {
+          message += `${index + 1}. كود: ${sign.roadsign_code || sign.id}\n`;
+          message += `   الموقع: ${sign.place || ""}\n`;
+          message += `   المدينة: ${sign.city?.name || ""} - ${sign.region?.name || ""}\n`;
+          if (sign.template) {
+            message += `   القالب: ${sign.template.model} - ${sign.template.size}\n`;
+          }
+          message += `   عدد اللوحات: ${sign.panels_number || 1}\n`;
+          message += `   عدد الوجوه: ${sign.faces_number || 1}\n\n`;
+        });
+
+        if (totalAmount) {
+          message += `\n*تفاصيل السعر:*\n`;
+          message += `المبلغ الإجمالي: ${totalAmount} $\n`;
+        }
+
+        if (bookingData.notes) {
+          message += `\n*ملاحظات:*\n${bookingData.notes}\n`;
+        }
+
+        message += `\n*تاريخ الطلب:* ${new Date().toLocaleDateString("ar-SY")}`;
+
+        const encodedMessage = encodeURIComponent(message);
+        // Clean the WhatsApp number (remove any non-digits)
+        const cleanNumber = whatsappNumber.replace(/\D/g, "");
+        const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
+
+        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+        showToast("success", "تم إرسال البيانات وفتح واتساب بنجاح");
+
+        // Reset form after sending
+        setShowWhatsAppForm(false);
+        setWhatsAppSelectMode(false);
+        setWhatsappNumber("");
+        setBookingData({
+          customerName: "",
+          customerPhone: "",
+          customerEmail: "",
+          companyName: "",
+          notes: "",
+        });
+      } else {
+        showToast("error", apiResult.message || "فشل في إرسال البيانات");
+      }
+    } catch (error) {
+      console.error("Error in handleSendToWhatsApp:", error);
+      showToast("error", error?.data?.message || "حدث خطأ في فتح واتساب");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -785,23 +748,11 @@ const handleSendToWhatsApp = async () => {
           <div className="bg-white/5 backdrop-blur-lg border-b border-white/20 sticky top-16 z-40">
             <div className="container mx-auto px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex gap-4 flex-wrap">
+                <div className="flex gap-4 flex-wrap items-center">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500"></div>
                     <span className="text-white text-sm">
                       متاح: {stats.available}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <span className="text-white text-sm">
-                      محجوز: {stats.booked}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <span className="text-white text-sm">
-                      محجوز جزئياً: {stats.partial}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -813,7 +764,7 @@ const handleSendToWhatsApp = async () => {
                 </div>
 
                 <div className="flex gap-2 flex-wrap">
-                  {/* NEW: WhatsApp Select Mode Toggle Button */}
+                  {/* WhatsApp Select Mode Toggle */}
                   <Button
                     size="sm"
                     onClick={toggleWhatsAppSelectMode}
@@ -827,7 +778,6 @@ const handleSendToWhatsApp = async () => {
                     {whatsAppSelectMode ? "إلغاء الاختيار" : "اختر للواتساب"}
                   </Button>
 
-                  {/* NEW: Clear Selected Signs Button */}
                   {selectedSigns.length > 0 && (
                     <Button
                       size="sm"
@@ -982,7 +932,7 @@ const handleSendToWhatsApp = async () => {
                 </h3>
 
                 <span><p className="text-red-500 font-extrabold text-2xl">ملاحظة</p> 
-بعد تصفية تاريخ البداية والنهاية ... سيظهر لك اللوحات المتاحة فقط 
+بعد تصفية تاريخ البداية والنهاية ...      
                 </span>
               </div>
             </div>
@@ -1020,7 +970,7 @@ const handleSendToWhatsApp = async () => {
                   <span className="font-medium">وضع اختيار الواتساب نشط - اضغط على أي لوحة لإضافتها</span>
                 </div>
               )}
-              
+
               {/* FIX: Stable key to prevent re-mounting */}
               <MapContainer
                 key="broker-map-stable"
@@ -1046,10 +996,7 @@ const handleSendToWhatsApp = async () => {
                   const isSelected = selectedSigns.some(
                     (s) => s.id === marker.id,
                   );
-                  const customIcon = createSimpleMarkerIcon(
-                    marker.status,
-                    isSelected,
-                  );
+                  const customIcon = createSimpleMarkerIcon(isSelected);
 
                   return (
                     <Marker
@@ -1089,7 +1036,7 @@ const handleSendToWhatsApp = async () => {
                                 <span className="text-gray-500">
                                   📏 النموذج:
                                 </span>
-                                <span classالName="text-right flex-1">
+                                <span className="text-right flex-1">
                                   {marker.template.model} -{" "}
                                   {marker.template.size}
                                 </span>
@@ -1153,14 +1100,6 @@ const handleSendToWhatsApp = async () => {
                     <span className="text-white text-xs">متاح</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500 shrink-0"></div>
-                    <span className="text-white text-xs">محجوز</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-yellow-500 shrink-0"></div>
-                    <span className="text-white text-xs">محجوز جزئياً</span>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-orange-400 border-2 border-white shrink-0"></div>
                     <span className="text-white text-xs">مختار</span>
                   </div>
@@ -1200,17 +1139,8 @@ const handleSendToWhatsApp = async () => {
 
               <div className="space-y-4 mt-4">
                 <div className="flex justify-center">
-                  <Badge
-                    className={cn(
-                      "text-lg px-4 py-2",
-                      selectedSign.status === "available"
-                        ? "bg-green-600"
-                        : selectedSign.status === "booked"
-                          ? "bg-red-600"
-                          : "bg-yellow-600",
-                    )}
-                  >
-                    {getMarkerStatus(selectedSign.status)?.label || "غير معروف"}
+                  <Badge className="bg-green-600 text-lg px-4 py-2">
+                    متاح
                   </Badge>
                 </div>
 
@@ -1293,40 +1223,6 @@ const handleSendToWhatsApp = async () => {
                     </p>
                   </div>
                 </div>
-
-                {selectedSign.status !== "available" &&
-                  selectedSign.bookings?.length > 0 && (
-                    <div className="bg-yellow-600/20 border border-yellow-600/30 rounded-lg p-3">
-                      <Label className="text-yellow-400 text-xs flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        معلومات الحجوزات
-                      </Label>
-                      <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
-                        {selectedSign.bookings.map((booking, idx) => (
-                          <div
-                            key={idx}
-                            className="border-t border-yellow-600/30 pt-2 first:border-t-0 first:pt-0"
-                          >
-                            <p className="text-white text-sm">
-                              العميل: {booking.customer?.full_name || "—"}
-                            </p>
-                            <p className="text-white text-sm">
-                              الشركة: {booking.customer?.company_name || "—"}
-                            </p>
-                            <p className="text-white text-sm">
-                              من: {booking.pivot?.start_date || "—"}
-                            </p>
-                            <p className="text-white text-sm">
-                              إلى: {booking.pivot?.end_date || "—"}
-                            </p>
-                            <p className="text-white text-sm">
-                              المبلغ: {booking.pivot?.total_faces_price || 0} $
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <Button
@@ -1477,7 +1373,7 @@ const handleSendToWhatsApp = async () => {
                   </select>
                 </div>
               </div>
-              
+
               {/* Calculate Button */}
               <Button
                 onClick={handleCalculateTotal}
@@ -1532,22 +1428,22 @@ const handleSendToWhatsApp = async () => {
                     بيانات العميل
                   </h4>
                   <div>
-      <label className="block text-sm font-medium mb-1 text-gray-300">
-        رقم واتساب المستلم <span className="text-red-400">*</span>
-      </label>
-      <input
-        type="tel"
-        name="whatsappNumber"
-        value={whatsappNumber}
-        onChange={(e) => setWhatsappNumber(e.target.value)}
-        placeholder="مثال: 963912345678"
-        className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/30 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
-        dir="ltr"
-      />
-      <p className="text-xs text-gray-400 mt-1">
-        أدخل رقم الهاتف مع رمز الدولة (مثال: 963912345678)
-      </p>
-    </div>
+                    <label className="block text-sm font-medium mb-1 text-gray-300">
+                      رقم واتساب المستلم <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      name="whatsappNumber"
+                      value={whatsappNumber}
+                      onChange={(e) => setWhatsappNumber(e.target.value)}
+                      placeholder="مثال: 963912345678"
+                      className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/30 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                      dir="ltr"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      أدخل رقم الهاتف مع رمز الدولة (مثال: 963912345678)
+                    </p>
+                  </div>
 
                   <input
                     type="text"
@@ -1557,7 +1453,15 @@ const handleSendToWhatsApp = async () => {
                     placeholder="الاسم الكامل *"
                     className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/30 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                
+                  <input
+                    type="tel"
+                    name="customerPhone"
+                    value={bookingData.customerPhone}
+                    onChange={handleInputChange}
+                    placeholder="رقم الهاتف *"
+                    className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/30 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    dir="ltr"
+                  />
                   <input
                     type="email"
                     name="customerEmail"
@@ -1587,7 +1491,8 @@ const handleSendToWhatsApp = async () => {
                     disabled={
                       isSending ||
                       !bookingData.customerName ||
-                      !bookingData.customerPhone
+                      !bookingData.customerPhone ||
+                      !whatsappNumber
                     }
                     className="w-full bg-green-600 hover:bg-green-700 text-white h-12 disabled:opacity-50"
                   >
@@ -1611,9 +1516,4 @@ const handleSendToWhatsApp = async () => {
       )}
     </div>
   );
-}
-
-// Helper function for className
-function cn(...classes) {
-  return classes.filter(Boolean).join(" ");
 }

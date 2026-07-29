@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useDeleteRoadSignMutation } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import { DynamicTable } from "../../utils/Tables/DynamicTable";
 import HeaderComponent from "../../utils/HeaderComponent";
@@ -18,8 +18,18 @@ import { useParams } from "react-router";
 import { Permissions } from "../../Static/StaticData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useMoveBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi"; 
-import { Search, ChevronDown, X, Calendar, CalendarOff, ArrowRightLeft } from "lucide-react";
+import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import { Search, ChevronDown, Loader2, X, Calendar, CalendarOff, ArrowRightLeft } from "lucide-react";
+
+// ---- small debounce hook (kept local, no external deps) ----
+function useDebouncedValue(value, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 
 const TableRoadSigns = ({ isLoading }) => {
   const [openDelete, setOpenDelete] = useState(false);
@@ -30,20 +40,37 @@ const TableRoadSigns = ({ isLoading }) => {
   const [selectedRoadSign, setSelectedRoadSign] = useState(null);
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState("all");
+  const [customerPage, setCustomerPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [regionSearch, setRegionSearch] = useState("");
+  const [showRegionDropdown, setShowRegionDropdown] = useState(false);
+  const [directionSearch, setDirectionSearch] = useState("");
+  const [showDirectionDropdown, setShowDirectionDropdown] = useState(false);
 
   const [deleteRoadSign, { isLoading: isDeleting }] = useDeleteRoadSignMutation();
   const [moveBooking, { isLoading: isMoving }] = useMoveBookingMutation();
 
-  // Get customers for the dropdown
-  const { 
-    data: customersData, 
+  // debounce the text that actually drives the network request,
+  // so typing stays instant and we don't fire a request per keystroke
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, 350);
+
+  const {
+    data: customersData,
     isLoading: isCustomersLoading,
     error: customersError,
-  } = useGetCustomersQuery(undefined, {
-    refetchOnMountOrArgChange: false
-  });
+  } = useGetCustomersQuery(
+    {
+      page: customerPage,
+      per_page: 5,
+      search: debouncedCustomerSearch || undefined,
+    },
+    {
+      refetchOnMountOrArgChange: false,
+    }
+  );
 
-  // Get hook with ALL filter states including customer_id and direction
   const {
     cityId,
     regionId,
@@ -63,237 +90,163 @@ const TableRoadSigns = ({ isLoading }) => {
     setCustomerId,
   } = useGetRoadSignsByFilter();
 
-  // ✅ استخراج الاتجاهات الحقيقية من roadSigns
-  const getRealDirectionsFromRoadSigns = useCallback(() => {
-    if (!roadSigns || !Array.isArray(roadSigns) || roadSigns.length === 0) {
-      return [];
-    }
-    
-    let filteredRoadSigns = roadSigns;
-    if (regionId) {
-      filteredRoadSigns = roadSigns.filter(roadSign => 
-        String(roadSign.region_id) === String(regionId)
-      );
-    }
-    
-    if (filteredRoadSigns.length === 0) {
-      return [];
-    }
-    
-    const directionMap = new Map();
-    
-    filteredRoadSigns.forEach(roadSign => {
-      const directionValue = roadSign.directions;
-      
-      if (directionValue && typeof directionValue === 'string' && directionValue.trim() !== "") {
-        const trimmedValue = directionValue.trim();
-        if (!directionMap.has(trimmedValue)) {
-          directionMap.set(trimmedValue, {
-            value: trimmedValue,
-            label: trimmedValue,
-          });
-        }
-      }
-    });
-    
-    const directionsArray = Array.from(directionMap.values());
-    directionsArray.sort((a, b) => a.label.localeCompare(b.label));
-    
-    return directionsArray;
-  }, [roadSigns, regionId]);
+  const filteredRegions = useMemo(() => {
+    if (!regions) return [];
+    if (!regionSearch.trim()) return regions;
+
+    const searchTerm = regionSearch.toLowerCase();
+    return regions.filter((region) => region.name.toLowerCase().includes(searchTerm));
+  }, [regions, regionSearch]);
 
   useEffect(() => {
     setModel(id);
   }, [id]);
 
-  // ✅ إعادة تعيين الاتجاه عند تغيير المنطقة
+  const isRegionSelectionInternal = useRef(false);
+
+  // reset direction when region changes
   useEffect(() => {
-    if (regionId) {
-      setDirection("");
-      setDirectionSearch("");
-      setShowDirectionDropdown(false);
-    } else {
-      setDirection("");
-      setDirectionSearch("");
-    }
+    setDirection("");
+    setDirectionSearch("");
+    setShowDirectionDropdown(false);
   }, [regionId, setDirection]);
 
-  // ✅ === فلتر الاتجاه ===
-  const [directionSearch, setDirectionSearch] = useState("");
-  const [showDirectionDropdown, setShowDirectionDropdown] = useState(false);
-  
+  // ---- single pass: region-filtered road signs ----
+  // reused for direction extraction, booked/unbooked counts, and the final table data
+  const regionFilteredRoadSigns = useMemo(() => {
+    if (!roadSigns || !Array.isArray(roadSigns)) return [];
+    if (!regionId) return roadSigns;
+    return roadSigns.filter((rs) => String(rs.region_id) === String(regionId));
+  }, [roadSigns, regionId]);
+
+  const realDirectionsInRegion = useMemo(() => {
+    if (regionFilteredRoadSigns.length === 0) return [];
+
+    const directionMap = new Map();
+    for (const rs of regionFilteredRoadSigns) {
+      const val = rs.directions;
+      if (val && typeof val === "string" && val.trim() !== "") {
+        const trimmed = val.trim();
+        if (!directionMap.has(trimmed)) {
+          directionMap.set(trimmed, { value: trimmed, label: trimmed });
+        }
+      }
+    }
+    return Array.from(directionMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [regionFilteredRoadSigns]);
+
   const allRealDirections = useMemo(() => {
     if (!regionId) {
       return [{ value: "", label: "اختر منطقة أولاً", type: "placeholder" }];
     }
-    
+
     if (isRoadSignsFetching) {
       return [{ value: "", label: "جاري تحميل اللوحات والاتجاهات...", type: "loading" }];
     }
-    
-    const directionsFromRegion = getRealDirectionsFromRoadSigns();
-    const roadSignsInRegion = roadSigns?.filter(rs => String(rs.region_id) === String(regionId)) || [];
-    
-    if (roadSignsInRegion.length === 0) {
+
+    if (regionFilteredRoadSigns.length === 0) {
       return [{ value: "", label: "لا توجد لوحات في هذه المنطقة", type: "empty" }];
     }
-    
-    if (directionsFromRegion.length === 0) {
+
+    if (realDirectionsInRegion.length === 0) {
       return [{ value: "", label: "لا توجد اتجاهات محددة في هذه المنطقة", type: "no-directions" }];
     }
-    
-    const options = [{ value: "", label: "كل الاتجاهات", type: "all" }];
-    options.push(...directionsFromRegion.map(dir => ({
-      ...dir,
-      type: "real"
-    })));
-    
-    return options;
-  }, [regionId, roadSigns, getRealDirectionsFromRoadSigns, isRoadSignsFetching]);
+
+    return [
+      { value: "", label: "كل الاتجاهات", type: "all" },
+      ...realDirectionsInRegion.map((dir) => ({ ...dir, type: "real" })),
+    ];
+  }, [regionId, isRoadSignsFetching, regionFilteredRoadSigns, realDirectionsInRegion]);
 
   const filteredDirections = useMemo(() => {
-    if (!directionSearch.trim()) {
-      return allRealDirections;
-    }
-    
+    if (!directionSearch.trim()) return allRealDirections;
+
     const searchTerm = directionSearch.toLowerCase();
-    return allRealDirections.filter(option => 
-      option.label.toLowerCase().includes(searchTerm) ||
-      option.value.toLowerCase().includes(searchTerm)
+    return allRealDirections.filter(
+      (option) =>
+        option.label.toLowerCase().includes(searchTerm) ||
+        option.value.toLowerCase().includes(searchTerm)
     );
   }, [directionSearch, allRealDirections]);
 
-  // ✅ === فلتر العملاء ===
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  
+  // ---- customers: no setState inside useMemo anymore ----
   const allCustomers = useMemo(() => {
     if (!customersData) return [{ id: "", full_name: "جميع العملاء", company_name: "" }];
-    
-    let customersList = [];
-    
-    if (Array.isArray(customersData)) {
-      customersList = customersData;
-    } else if (customersData.data && Array.isArray(customersData.data)) {
-      customersList = customersData.data;
-    } else if (customersData.customers && Array.isArray(customersData.customers)) {
-      customersList = customersData.customers;
-    } else if (customersData.items && Array.isArray(customersData.items)) {
-      customersList = customersData.items;
+
+    const customersList = Array.isArray(customersData.data)
+      ? customersData.data
+      : Array.isArray(customersData)
+      ? customersData
+      : customersData.customers || customersData.items || [];
+
+    return [{ id: "", full_name: "جميع العملاء", company_name: "" }, ...customersList];
+  }, [customersData]);
+
+  useEffect(() => {
+    if (customersData?.data && Array.isArray(customersData.data)) {
+      setTotalPages(Math.ceil((customersData.total || 0) / (customersData.per_page || 10)));
+    } else {
+      setTotalPages(1);
     }
-    
-    return [
-      { id: "", full_name: "جميع العملاء", company_name: "" },
-      ...customersList
-    ];
   }, [customersData]);
 
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) {
-      return allCustomers;
-    }
-    
+    if (!customerSearch.trim()) return allCustomers;
+
     const searchTerm = customerSearch.toLowerCase();
-    return allCustomers.filter(customer => {
+    return allCustomers.filter((customer) => {
       const fullName = customer.full_name?.toLowerCase() || "";
       const companyName = customer.company_name?.toLowerCase() || "";
       const userName = customer.username?.toLowerCase() || "";
       const name = customer.name?.toLowerCase() || "";
-      
-      return fullName.includes(searchTerm) ||
-             companyName.includes(searchTerm) ||
-             userName.includes(searchTerm) ||
-             name.includes(searchTerm) ||
-             customer.id.toString().includes(searchTerm);
+
+      return (
+        fullName.includes(searchTerm) ||
+        companyName.includes(searchTerm) ||
+        userName.includes(searchTerm) ||
+        name.includes(searchTerm) ||
+        customer.id.toString().includes(searchTerm)
+      );
     });
   }, [customerSearch, allCustomers]);
 
+  // ---- single pass filtering: region -> direction -> customer ----
+  const baseFilteredRoadSigns = useMemo(() => {
+    let result = regionFilteredRoadSigns;
 
-// ✅ فلترة اللوحات النهائية
-const filteredRoadSigns = useMemo(() => {
-  if (!roadSigns || !Array.isArray(roadSigns)) return [];
-  
-  let result = [...roadSigns];
-  
-  if (regionId) {
-    result = result.filter(roadSign => 
-      String(roadSign.region_id) === String(regionId)
-    );
-  }
-  
-  if (direction && direction.trim() !== "") {
-    result = result.filter(roadSign => {
-      const roadSignDirection = roadSign.directions;
-      return roadSignDirection && 
-             roadSignDirection.toString().trim() === direction.trim();
-    });
-  }
-  
-  if (customerId && customerId !== "") {
-    result = result.filter(roadSign => {
-      if (!roadSign.bookings || !Array.isArray(roadSign.bookings)) {
-        return false;
-      }
-      
-      return roadSign.bookings.some(booking => 
-        String(booking.customer_id) === String(customerId)
+    if (direction && direction.trim() !== "") {
+      const d = direction.trim();
+      result = result.filter((rs) => rs.directions && rs.directions.toString().trim() === d);
+    }
+
+    if (customerId && customerId !== "") {
+      result = result.filter(
+        (rs) =>
+          Array.isArray(rs.bookings) &&
+          rs.bookings.some((b) => String(b.customer_id) === String(customerId))
       );
-    });
-  }
-  
-  // ✅ FIXED: Use is_booked property directly
-  if (activeTab === "booked") {
-    result = result.filter(roadSign => roadSign.is_booked === true);
-  } else if (activeTab === "unbooked") {
-    result = result.filter(roadSign => roadSign.is_booked === false);
-  }
-  
-  return result;
-}, [roadSigns, regionId, direction, customerId, activeTab]);
+    }
 
-  // ✅ === CALCULATE BOOKED AND UNBOOKED COUNTS ===
-const { bookedCount, unbookedCount } = useMemo(() => {
-  if (!roadSigns || !Array.isArray(roadSigns)) {
-    return { bookedCount: 0, unbookedCount: 0 };
-  }
-  
-  let result = [...roadSigns];
-  
-  if (regionId) {
-    result = result.filter(roadSign => 
-      String(roadSign.region_id) === String(regionId)
-    );
-  }
-  
-  if (direction && direction.trim() !== "") {
-    result = result.filter(roadSign => {
-      const roadSignDirection = roadSign.directions;
-      return roadSignDirection && 
-             roadSignDirection.toString().trim() === direction.trim();
-    });
-  }
-  
-  if (customerId && customerId !== "") {
-    result = result.filter(roadSign => {
-      if (!roadSign.bookings || !Array.isArray(roadSign.bookings)) {
-        return false;
-      }
-      
-      return roadSign.bookings.some(booking => 
-        String(booking.customer_id) === String(customerId)
-      );
-    });
-  }
-  
-  // ✅ FIXED: Count using is_booked property
-  let booked = result.filter(roadSign => roadSign.is_booked === true).length;
-  let unbooked = result.filter(roadSign => roadSign.is_booked === false).length;
-  
-  return { bookedCount: booked, unbookedCount: unbooked };
-}, [roadSigns, regionId, direction, customerId]);
+    return result;
+  }, [regionFilteredRoadSigns, direction, customerId]);
 
+  const filteredRoadSigns = useMemo(() => {
+    if (activeTab === "booked") return baseFilteredRoadSigns.filter((rs) => rs.is_booked === true);
+    if (activeTab === "unbooked") return baseFilteredRoadSigns.filter((rs) => rs.is_booked === false);
+    return baseFilteredRoadSigns;
+  }, [baseFilteredRoadSigns, activeTab]);
 
-  // ✅ === معالجة الأحداث ===
+  const { bookedCount, unbookedCount } = useMemo(() => {
+    let booked = 0;
+    let unbooked = 0;
+    for (const rs of baseFilteredRoadSigns) {
+      if (rs.is_booked === true) booked++;
+      else if (rs.is_booked === false) unbooked++;
+    }
+    return { bookedCount: booked, unbookedCount: unbooked };
+  }, [baseFilteredRoadSigns]);
+
+  // ---- event handlers ----
   const handleEdit = useCallback((roadSign) => {
     setSelectedRoadSign(roadSign);
     setOpenEdit(true);
@@ -310,7 +263,7 @@ const { bookedCount, unbookedCount } = useMemo(() => {
   }, []);
 
   const handleRoadSignAction = useCallback((roadSign) => {
-    console.log('Road Sign action triggered:', roadSign);
+    console.log("Road Sign action triggered:", roadSign);
   }, []);
 
   const handleExchange = useCallback((roadSign) => {
@@ -330,37 +283,44 @@ const { bookedCount, unbookedCount } = useMemo(() => {
     }
   };
 
-  const handleDirectionSelect = useCallback((value) => {
-    setDirection(value);
-    setDirectionSearch(value || "");
-    setShowDirectionDropdown(false);
-  }, [setDirection]);
+  const handleDirectionSelect = useCallback(
+    (value) => {
+      setDirection(value);
+      setDirectionSearch(value || "");
+      setShowDirectionDropdown(false);
+    },
+    [setDirection]
+  );
 
-  const handleCustomerSelect = useCallback((value) => {
-    setCustomerId(value);
-    
-    const selectedCustomer = allCustomers.find(c => c.id == value);
-    if (selectedCustomer) {
-      const displayName = selectedCustomer.full_name || 
-                         selectedCustomer.name || 
-                         selectedCustomer.username || 
-                         `العميل #${selectedCustomer.id}`;
-      setCustomerSearch(displayName);
-    } else {
-      setCustomerSearch("جميع العملاء");
-    }
-    
-    setShowCustomerDropdown(false);
-  }, [setCustomerId, allCustomers]);
+  const handleCustomerSelect = useCallback(
+    (value) => {
+      setCustomerId(value);
 
-  const handleRegionChangeWithDirections = useCallback((e) => {
-    const newRegionId = e.target.value;
-    handleRegionChange(e);
-    
-    setDirection("");
-    setDirectionSearch("");
-    setShowDirectionDropdown(false);
-  }, [handleRegionChange, setDirection]);
+      const selectedCustomer = allCustomers.find((c) => c.id == value);
+      if (selectedCustomer) {
+        const displayName =
+          selectedCustomer.full_name ||
+          selectedCustomer.name ||
+          selectedCustomer.username ||
+          `العميل #${selectedCustomer.id}`;
+        setCustomerSearch(displayName);
+      } else {
+        setCustomerSearch("جميع العملاء");
+      }
+
+      setShowCustomerDropdown(false);
+    },
+    [setCustomerId, allCustomers]
+  );
+
+  const handleClearRegion = useCallback(() => {
+    isRegionSelectionInternal.current = true;
+    setRegionSearch("");
+    handleRegionChange({ target: { value: "" } });
+    setTimeout(() => {
+      isRegionSelectionInternal.current = false;
+    }, 100);
+  }, [handleRegionChange]);
 
   const handleResetFilters = useCallback(() => {
     handleCityChange({ target: { value: "" } });
@@ -369,62 +329,74 @@ const { bookedCount, unbookedCount } = useMemo(() => {
     setDirection("");
     setDirectionSearch("");
     setCustomerSearch("");
+    setRegionSearch("");
+    setCustomerPage(1);
     setShowDirectionDropdown(false);
     setShowCustomerDropdown(false);
+    setShowRegionDropdown(false);
     setActiveTab("all");
   }, [handleCityChange, handleRegionChange, setCustomerId, setDirection]);
 
   useEffect(() => {
+    if (!isRegionSelectionInternal.current) {
+      if (regionId && regions) {
+        const selectedRegion = regions.find((r) => String(r.id) === String(regionId));
+        if (selectedRegion) {
+          setRegionSearch(selectedRegion.name);
+        }
+      } else if (!regionId) {
+        setRegionSearch("");
+      }
+    }
+  }, [regionId, regions]);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
-      if (!event.target.closest('.direction-dropdown-container')) {
+      if (!event.target.closest(".direction-dropdown-container")) {
         setShowDirectionDropdown(false);
       }
-      if (!event.target.closest('.customer-dropdown-container')) {
+      if (!event.target.closest(".customer-dropdown-container")) {
         setShowCustomerDropdown(false);
       }
     };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-
-
-  const permissions = {
-    delete: Permissions.DeleteRoadSigns,
-    show: Permissions.ViewRegions,
-    edit: Permissions.EditRoadSigns,
-    exchange: Permissions.EditRoadSigns,
-  };
+  const permissions = useMemo(
+    () => ({
+      delete: Permissions.DeleteRoadSigns,
+      show: Permissions.ViewRegions,
+      edit: Permissions.EditRoadSigns,
+      exchange: Permissions.EditRoadSigns,
+    }),
+    []
+  );
 
   const getSelectedCustomerName = useCallback(() => {
     if (!customerId || customerId === "") return "جميع العملاء";
-    
-    const selectedCustomer = allCustomers.find(c => c.id == customerId);
+
+    const selectedCustomer = allCustomers.find((c) => c.id == customerId);
     if (!selectedCustomer) return `العميل #${customerId}`;
-    
-    return selectedCustomer.full_name || 
-           selectedCustomer.name || 
-           selectedCustomer.username || 
-           `العميل #${customerId}`;
+
+    return (
+      selectedCustomer.full_name ||
+      selectedCustomer.name ||
+      selectedCustomer.username ||
+      `العميل #${customerId}`
+    );
   }, [customerId, allCustomers]);
 
   const getSelectedRegionName = useCallback(() => {
     if (!regionId) return "";
-    const region = regions?.find(r => r.id == regionId);
+    const region = regions?.find((r) => r.id == regionId);
     return region?.name || "";
   }, [regionId, regions]);
 
   return (
     <div dir="rtl" className="p-4 sm:p-6 w-full mx-auto space-y-6 overflow-x-auto">
-      {/* Filter Section */}
-    {isError && (
-      <div className="text-center p-4 text-red-500">
-        حدث خطأ أثناء جلب البيانات
-      </div>
-    )}
-
-
+      {isError && <div className="text-center p-4 text-red-500">حدث خطأ أثناء جلب البيانات</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div>
@@ -448,32 +420,90 @@ const { bookedCount, unbookedCount } = useMemo(() => {
           </select>
         </div>
 
-        <div>
+        <div className="relative">
           <Label htmlFor="region" className="block text-sm font-medium text-gray-700 mb-1">
             المنطقة
           </Label>
-          <select
-            id="region"
-            value={regionId || ""}
-            onChange={handleRegionChangeWithDirections}
-            disabled={isRegionsLoading || !cityId}
-            className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">اختر منطقة</option>
-            {isRegionsLoading && <option>جاري تحميل المناطق ...</option>}
-            {regions?.map((region) => (
-              <option key={region.id} value={region.id}>
-                {region.name}
-              </option>
-            ))}
-          </select>
+
+          <div className="relative">
+            <Input
+              type="text"
+              value={regionSearch || (regionId ? getSelectedRegionName() : "")}
+              onChange={(e) => {
+                setRegionSearch(e.target.value);
+                setShowRegionDropdown(true);
+              }}
+              onFocus={() => {
+                if (cityId) {
+                  setShowRegionDropdown(true);
+                } else {
+                  alert("⚠️ الرجاء اختيار مدينة أولاً");
+                }
+              }}
+              placeholder={cityId ? "ابحث عن منطقة..." : "اختر مدينة أولاً"}
+              className={`w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 ${
+                !cityId ? "bg-gray-100 dark:bg-gray-700 cursor-not-allowed" : ""
+              }`}
+              disabled={!cityId || isRegionsLoading}
+            />
+
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+              {isRegionsLoading ? (
+                <span className="text-gray-400 animate-pulse">...</span>
+              ) : (
+                <ChevronDown
+                  className={`w-4 h-4 ${
+                    cityId ? "text-gray-400 cursor-pointer" : "text-gray-300 cursor-not-allowed"
+                  }`}
+                  onClick={() => cityId && setShowRegionDropdown(!showRegionDropdown)}
+                />
+              )}
+            </div>
+
+            {regionSearch && cityId && (
+              <button
+                type="button"
+                onClick={handleClearRegion}
+                className="absolute left-8 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {showRegionDropdown && cityId && filteredRegions.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+              {filteredRegions.map((region) => (
+                <div
+                  key={region.id}
+                  className={`px-3 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm ${
+                    regionId == region.id ? "bg-blue-50 dark:bg-blue-900/30" : ""
+                  }`}
+                  onClick={() => {
+                    isRegionSelectionInternal.current = true;
+                    handleRegionChange({ target: { value: String(region.id) } });
+                    setRegionSearch(region.name);
+                    setShowRegionDropdown(false);
+                    setTimeout(() => {
+                      isRegionSelectionInternal.current = false;
+                    }, 100);
+                  }}
+                >
+                  <div className="flex justify-between items-center">
+                    <span>{region.name}</span>
+                    {regionId == region.id && <span className="text-blue-500">✓</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="customer-dropdown-container relative">
           <Label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
             العميل
           </Label>
-          
+
           <div className="relative">
             <div className="relative">
               <Input
@@ -481,31 +511,32 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 value={customerSearch}
                 onChange={(e) => {
                   setCustomerSearch(e.target.value);
+                  setCustomerPage(1);
                   if (!showCustomerDropdown) setShowCustomerDropdown(true);
                 }}
                 onFocus={() => setShowCustomerDropdown(true)}
                 placeholder="ابحث عن عميل..."
                 className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-                disabled={isCustomersLoading}
               />
-              
+
               <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
                 {isCustomersLoading ? (
                   <span className="text-gray-400 animate-pulse">...</span>
                 ) : (
-                  <ChevronDown 
+                  <ChevronDown
                     className="w-4 h-4 text-gray-400 cursor-pointer"
                     onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
                   />
                 )}
               </div>
-              
+
               {customerSearch && (
                 <button
                   type="button"
                   onClick={() => {
                     setCustomerSearch("");
                     setCustomerId("");
+                    setCustomerPage(1);
                   }}
                   className="absolute left-8 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
@@ -513,34 +544,71 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 </button>
               )}
             </div>
-            
-            {showCustomerDropdown && filteredCustomers.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                {filteredCustomers.map((customer) => (
-                  <div
-                    key={customer.id || "all"}
-                    className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      customerId == customer.id ? 'bg-blue-50 dark:bg-blue-900/30' : ''
-                    } ${customer.id === "" ? 'border-b border-gray-200 dark:border-gray-700 font-semibold' : ''}`}
-                    onClick={() => handleCustomerSelect(customer.id)}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium">
-                          {customer.full_name || customer.name || customer.username || `العميل #${customer.id}`}
-                        </div>
-                        {customer.company_name && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            {customer.company_name}
-                          </div>
-                        )}
-                      </div>
-                      {customerId == customer.id && (
-                        <span className="text-blue-500">✓</span>
-                      )}
-                    </div>
+
+            {showCustomerDropdown && (
+              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                {isCustomersLoading ? (
+                  <div className="px-3 py-4 text-center text-gray-500">
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                    جاري تحميل العملاء...
                   </div>
-                ))}
+                ) : filteredCustomers.length > 0 ? (
+                  <>
+                    {filteredCustomers.map((customer) => (
+                      <div
+                        key={customer.id || "all"}
+                        className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                          customerId == customer.id ? "bg-blue-50 dark:bg-blue-900/30" : ""
+                        } ${
+                          customer.id === ""
+                            ? "border-b border-gray-200 dark:border-gray-700 font-semibold"
+                            : ""
+                        }`}
+                        onClick={() => handleCustomerSelect(customer.id)}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-medium">
+                              {customer.full_name || customer.name || customer.username || `العميل #${customer.id}`}
+                            </div>
+                            {customer.company_name && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {customer.company_name}
+                              </div>
+                            )}
+                          </div>
+                          {customerId == customer.id && <span className="text-blue-500">✓</span>}
+                        </div>
+                      </div>
+                    ))}
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                        <button
+                          onClick={() => setCustomerPage((prev) => Math.max(1, prev - 1))}
+                          disabled={customerPage === 1}
+                          className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          السابق
+                        </button>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                          صفحة {customerPage} من {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setCustomerPage((prev) => Math.min(totalPages, prev + 1))}
+                          disabled={customerPage === totalPages}
+                          className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          التالي
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="px-3 py-4 text-center text-gray-500 text-sm">
+                    {customerSearch ? "لا توجد نتائج" : "ابدأ بالبحث عن عميل"}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -550,7 +618,7 @@ const { bookedCount, unbookedCount } = useMemo(() => {
           <Label htmlFor="direction" className="block text-sm font-medium text-gray-700 mb-1">
             الاتجاه
           </Label>
-          
+
           <div className="relative">
             <div className="relative">
               <Input
@@ -569,24 +637,24 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 }}
                 placeholder={regionId ? "ابحث في اتجاهات المنطقة..." : "اختر منطقة أولاً"}
                 className={`w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 ${
-                  !regionId ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed' : ''
+                  !regionId ? "bg-gray-100 dark:bg-gray-700 cursor-not-allowed" : ""
                 }`}
                 disabled={!regionId || isRoadSignsFetching}
               />
-              
+
               <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
                 {isRoadSignsFetching ? (
                   <span className="text-gray-400 animate-pulse">...</span>
                 ) : (
-                  <ChevronDown 
+                  <ChevronDown
                     className={`w-4 h-4 ${
-                      regionId ? 'text-gray-400 cursor-pointer' : 'text-gray-300 cursor-not-allowed'
+                      regionId ? "text-gray-400 cursor-pointer" : "text-gray-300 cursor-not-allowed"
                     }`}
                     onClick={() => regionId && setShowDirectionDropdown(!showDirectionDropdown)}
                   />
                 )}
               </div>
-              
+
               {directionSearch && regionId && (
                 <button
                   type="button"
@@ -600,30 +668,28 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 </button>
               )}
             </div>
-            
+
             {showDirectionDropdown && regionId && filteredDirections.length > 0 && (
               <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
                 {filteredDirections.map((option, index) => (
                   <div
                     key={index}
                     className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      direction === option.value ? 'bg-blue-50 dark:bg-blue-900/30' : ''
-                    } ${option.value === "" ? 'border-b border-gray-200 dark:border-gray-700 font-semibold' : ''}`}
+                      direction === option.value ? "bg-blue-50 dark:bg-blue-900/30" : ""
+                    } ${
+                      option.value === "" ? "border-b border-gray-200 dark:border-gray-700 font-semibold" : ""
+                    }`}
                     onClick={() => {
-                      if (option.type === 'real' || option.type === 'all') {
+                      if (option.type === "real" || option.type === "all") {
                         handleDirectionSelect(option.value);
-                      } else if (option.type === 'placeholder') {
+                      } else if (option.type === "placeholder") {
                         alert("⚠️ اختر منطقة أولاً");
                       }
                     }}
                   >
                     <div className="flex justify-between items-center">
-                      <span className={option.value === "" ? 'font-semibold' : ''}>
-                        {option.label}
-                      </span>
-                      {direction === option.value && (
-                        <span className="text-blue-500">✓</span>
-                      )}
+                      <span className={option.value === "" ? "font-semibold" : ""}>{option.label}</span>
+                      {direction === option.value && <span className="text-blue-500">✓</span>}
                     </div>
                   </div>
                 ))}
@@ -644,7 +710,6 @@ const { bookedCount, unbookedCount } = useMemo(() => {
         </div>
       </div>
 
-      {/* Tabs Section */}
       <div className="mb-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-3 w-full max-w-md">
@@ -673,14 +738,11 @@ const { bookedCount, unbookedCount } = useMemo(() => {
         </Tabs>
       </div>
 
-      {/* Active Filters Display */}
       {(direction || customerId || regionId || activeTab !== "all") && (
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-              فلاتر نشطة:
-            </span>
-            
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">فلاتر نشطة:</span>
+
             {activeTab !== "all" && (
               <div className="flex items-center gap-1 bg-purple-100 dark:bg-purple-800 px-3 py-1.5 rounded">
                 <span className="text-sm text-purple-700 dark:text-purple-400">
@@ -695,12 +757,10 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 </button>
               </div>
             )}
-            
+
             {direction && (
               <div className="flex items-center gap-1 bg-blue-100 dark:bg-blue-800 px-3 py-1.5 rounded">
-                <span className="text-sm text-blue-700 dark:text-blue-400">
-                  الاتجاه: {direction}
-                </span>
+                <span className="text-sm text-blue-700 dark:text-blue-400">الاتجاه: {direction}</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -713,7 +773,7 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 </button>
               </div>
             )}
-            
+
             {customerId && customerId !== "" && (
               <div className="flex items-center gap-1 bg-green-100 dark:bg-green-800 px-3 py-1.5 rounded">
                 <span className="text-sm text-green-700 dark:text-green-400">
@@ -731,7 +791,7 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 </button>
               </div>
             )}
-            
+
             {regionId && (
               <div className="flex items-center gap-1 bg-orange-100 dark:bg-orange-800 px-3 py-1.5 rounded">
                 <span className="text-sm text-orange-700 dark:text-orange-400">
@@ -739,7 +799,7 @@ const { bookedCount, unbookedCount } = useMemo(() => {
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleRegionChange({ target: { value: "" } })}
+                  onClick={handleClearRegion}
                   className="text-orange-500 hover:text-orange-700 text-xs"
                 >
                   <X className="w-3 h-3" />
@@ -750,25 +810,6 @@ const { bookedCount, unbookedCount } = useMemo(() => {
         </div>
       )}
 
-
-    {/*
-      <Button
-        onClick={() => {
-          const { generatePDF } = RoadSignsPdf({ roadSigns: filteredRoadSigns || [] });
-          generatePDF();
-        }}
-        className="mb-6 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-        disabled={isRoadSignsFetching || !filteredRoadSigns?.length}
-      >
-        تحميل ملف تموضع اللوحات ({filteredRoadSigns?.length || 0})
-      </Button>
-    
-    
-    */}
-
-
-    
-
       <HeaderComponent
         title={"اللوحات الطرقية"}
         titleBtn={"إضافة لوحة"}
@@ -776,21 +817,20 @@ const { bookedCount, unbookedCount } = useMemo(() => {
         permission={Permissions.CreateRoadSigns}
       />
 
-      {/* Road Signs Count */}
       <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <span className="font-medium">عدد اللوحات المصفاة:</span> {filteredRoadSigns?.length || 0}
             <span className="mr-4 ml-4">
-              <span className="font-medium"> | المحجوزة:</span> 
+              <span className="font-medium"> | المحجوزة:</span>
               <span className="text-green-600 dark:text-green-400 mx-1">{bookedCount}</span>
             </span>
             <span className="mr-4">
-              <span className="font-medium"> | غير المحجوزة:</span> 
+              <span className="font-medium"> | غير المحجوزة:</span>
               <span className="text-blue-600 dark:text-blue-400 mx-1">{unbookedCount}</span>
             </span>
           </div>
-          
+
           <div className="text-xs text-gray-500 dark:text-gray-400">
             إجمالي اللوحات: {roadSigns?.length || 0}
           </div>
@@ -807,10 +847,9 @@ const { bookedCount, unbookedCount } = useMemo(() => {
         onShow={handleShow}
         onExchange={handleExchange}
         permissions={permissions}
-        hideDeleteIcon={false} // props for delete icon visibility
+        hideDeleteIcon={false}
       />
 
-      {/* Dialogs */}
       <ExchangeDialog
         open={openExchange}
         onClose={() => setOpenExchange(false)}
@@ -820,16 +859,9 @@ const { bookedCount, unbookedCount } = useMemo(() => {
         isMoving={isMoving}
       />
 
-      <DialogEditRoadSign
-        show={openEdit}
-        handleClose={() => setOpenEdit(false)}
-        initData={selectedRoadSign}
-      />
+      <DialogEditRoadSign show={openEdit} handleClose={() => setOpenEdit(false)} initData={selectedRoadSign} />
 
-      <DialogAddRoadSign
-        show={open}
-        handleClose={() => setOpen(false)}
-      />
+      <DialogAddRoadSign show={open} handleClose={() => setOpen(false)} />
 
       <DeleteDialog
         open={openDelete}
@@ -853,68 +885,58 @@ const { bookedCount, unbookedCount } = useMemo(() => {
 };
 
 const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isMoving }) => {
-  const [selectedTargetSign, setSelectedTargetSign] = useState('');
+  const [selectedTargetSign, setSelectedTargetSign] = useState("");
   const [availableTargetSigns, setAvailableTargetSigns] = useState([]);
 
-  // Check if road sign has active bookings
   const hasActiveBookings = useMemo(() => {
-    return roadSign?.bookings && 
-           roadSign.bookings.some(booking => booking.status === 1);
+    return roadSign?.bookings && roadSign.bookings.some((booking) => booking.status === 1);
   }, [roadSign]);
 
-  // Get the first active booking
   const firstActiveBooking = useMemo(() => {
-    return roadSign?.bookings?.find(booking => booking.status === 1);
+    return roadSign?.bookings?.find((booking) => booking.status === 1);
   }, [roadSign]);
 
-  // Calculate available target signs (only unbooked)
   useEffect(() => {
     if (open && roadSign && roadSigns) {
-      const compatibleSigns = roadSigns.filter(sign => {
-        
-        // Don't include the same road sign
+      const compatibleSigns = roadSigns.filter((sign) => {
         if (sign.id === roadSign.id) return false;
-        
-        // Filter by unbooked status (MOST IMPORTANT)
-        const hasBookings = sign.bookings && 
-                           Array.isArray(sign.bookings) && 
-                           sign.bookings.some(b => b.status === 1);
-        
-        const hasPivotBookings = sign.pivot && 
-                                sign.pivot.booking_faces && 
-                                sign.pivot.booking_faces > 0;
-        
+
+        const hasBookings =
+          sign.bookings && Array.isArray(sign.bookings) && sign.bookings.some((b) => b.status === 1);
+
+        const hasPivotBookings = sign.pivot && sign.pivot.booking_faces && sign.pivot.booking_faces > 0;
+
         if (hasBookings || hasPivotBookings) {
           return false;
         }
-        
+
         return true;
       });
-      
+
       setAvailableTargetSigns(compatibleSigns);
-      setSelectedTargetSign('');
+      setSelectedTargetSign("");
     }
   }, [open, roadSign, roadSigns]);
 
   const handleExchange = async () => {
     if (!selectedTargetSign || !firstActiveBooking) {
-      alert('يرجى اختيار لوحة جديدة للتبديل');
+      alert("يرجى اختيار لوحة جديدة للتبديل");
       return;
     }
 
     try {
-      const result = await onMoveBooking({
+      await onMoveBooking({
         booking_id: firstActiveBooking.id,
         old_roadsign_id: roadSign.id,
-        new_roadsign_id: selectedTargetSign
+        new_roadsign_id: selectedTargetSign,
       }).unwrap();
-      
-      alert('تم تبديل الموقع بنجاح!');
+
+      alert("تم تبديل الموقع بنجاح!");
       onClose();
       window.location.reload();
     } catch (error) {
-      console.error('Exchange failed:', error);
-      alert('فشل تبديل الموقع: ' + (error.data?.message || 'حدث خطأ'));
+      console.error("Exchange failed:", error);
+      alert("فشل تبديل الموقع: " + (error.data?.message || "حدث خطأ"));
     }
   };
 
@@ -929,33 +951,35 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
             تبديل موقع اللوحة
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-6">
-          {/* Current Road Sign Info */}
           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-            <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-3">
-              معلومات اللوحة الحالية
-            </h4>
+            <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-3">معلومات اللوحة الحالية</h4>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoField label="اسم اللوحة" value={roadSign.name || `اللوحة #${roadSign.id}`} />
-              <InfoField label="كود اللوحة" value={roadSign.roadsign_code || 'غير محدد'} />
-              <InfoField label="المدينة" value={roadSign.city?.name || 'غير محدد'} />
-              <InfoField label="المنطقة" value={roadSign.region?.name || 'غير محدد'} />
-              <InfoField label="القالب" value={roadSign.template?.model || 'غير محدد'} />
-              <InfoField label="الأبعاد" value={
-                roadSign.width && roadSign.height ? 
-                  `${roadSign.width} × ${roadSign.height}` : 'غير محدد'
-              } />
-              <InfoField label="الاتجاه" value={roadSign.directions || roadSign.direction || roadSign.direction_code || 'غير محدد'} />
-              <InfoField label="الحجوزات النشطة" value={
-                <span className={`font-semibold ${hasActiveBookings ? 'text-green-600' : 'text-red-600'}`}>
-                  {roadSign.bookings?.filter(b => b.status === 1).length || 0}
-                </span>
-              } />
+              <InfoField label="كود اللوحة" value={roadSign.roadsign_code || "غير محدد"} />
+              <InfoField label="المدينة" value={roadSign.city?.name || "غير محدد"} />
+              <InfoField label="المنطقة" value={roadSign.region?.name || "غير محدد"} />
+              <InfoField label="القالب" value={roadSign.template?.model || "غير محدد"} />
+              <InfoField
+                label="الأبعاد"
+                value={roadSign.width && roadSign.height ? `${roadSign.width} × ${roadSign.height}` : "غير محدد"}
+              />
+              <InfoField
+                label="الاتجاه"
+                value={roadSign.directions || roadSign.direction || roadSign.direction_code || "غير محدد"}
+              />
+              <InfoField
+                label="الحجوزات النشطة"
+                value={
+                  <span className={`font-semibold ${hasActiveBookings ? "text-green-600" : "text-red-600"}`}>
+                    {roadSign.bookings?.filter((b) => b.status === 1).length || 0}
+                  </span>
+                }
+              />
             </div>
           </div>
 
-          {/* Booking Status */}
           {!hasActiveBookings ? (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
               <div className="flex items-center gap-3">
@@ -975,18 +999,15 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
               <div className="flex items-center gap-3">
                 <span className="text-2xl">✅</span>
                 <div>
-                  <p className="text-sm text-green-800 dark:text-green-300 font-semibold">
-                    اللوحة مؤهلة للتبديل
-                  </p>
+                  <p className="text-sm text-green-800 dark:text-green-300 font-semibold">اللوحة مؤهلة للتبديل</p>
                   <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    يوجد {roadSign.bookings.filter(b => b.status === 1).length} حجز نشط
+                    يوجد {roadSign.bookings.filter((b) => b.status === 1).length} حجز نشط
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Available Signs Dropdown */}
           {hasActiveBookings && availableTargetSigns.length > 0 && (
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -998,38 +1019,35 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
                 className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
                 <option value="">-- اختر لوحة بديلة --</option>
-                {availableTargetSigns.map(sign => (
+                {availableTargetSigns.map((sign) => (
                   <option key={sign.id} value={sign.id}>
-                    كود: {sign.roadsign_code || `RS-${sign.id}`} | 
-                    المدينة: {sign.city?.name || 'غير محدد'} | 
-                    المنطقة: {sign.region?.name || 'غير محدد'} | 
-                    القالب: {sign.template?.model || 'غير محدد'} | 
-                    الأبعاد: {sign.width && sign.height ? `${sign.width} × ${sign.height}` : 'غير محدد'} | 
-                    الاتجاه: {sign.directions || sign.direction || sign.direction_code || 'غير محدد'}
+                    كود: {sign.roadsign_code || `RS-${sign.id}`} | المدينة: {sign.city?.name || "غير محدد"} | المنطقة:{" "}
+                    {sign.region?.name || "غير محدد"} | القالب: {sign.template?.model || "غير محدد"} | الأبعاد:{" "}
+                    {sign.width && sign.height ? `${sign.width} × ${sign.height}` : "غير محدد"} | الاتجاه:{" "}
+                    {sign.directions || sign.direction || sign.direction_code || "غير محدد"}
                   </option>
                 ))}
               </select>
-              
+
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 متاح {availableTargetSigns.length} لوحة غير محجوزة
               </div>
-              
-              {/* Selected Sign Info */}
+
               {selectedTargetSign && (
                 <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
                   <div className="text-sm text-purple-700 dark:text-purple-300">
                     <span className="font-semibold">اللوحة المختارة:</span>
                     <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
                       {(() => {
-                        const selected = availableTargetSigns.find(s => s.id == selectedTargetSign);
+                        const selected = availableTargetSigns.find((s) => s.id == selectedTargetSign);
                         if (!selected) return null;
-                        
+
                         return (
                           <>
                             <div>الكود: {selected.roadsign_code || `RS-${selected.id}`}</div>
-                            <div>المدينة: {selected.city?.name || 'غير محدد'}</div>
-                            <div>المنطقة: {selected.region?.name || 'غير محدد'}</div>
-                            <div>القالب: {selected.template?.model || 'غير محدد'}</div>
+                            <div>المدينة: {selected.city?.name || "غير محدد"}</div>
+                            <div>المنطقة: {selected.region?.name || "غير محدد"}</div>
+                            <div>القالب: {selected.template?.model || "غير محدد"}</div>
                           </>
                         );
                       })()}
@@ -1042,23 +1060,16 @@ const ExchangeDialog = ({ open, onClose, roadSign, roadSigns, onMoveBooking, isM
 
           {hasActiveBookings && availableTargetSigns.length === 0 && (
             <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                ⚠️ لا توجد لوحات غير محجوزة متاحة للتبديل
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">⚠️ لا توجد لوحات غير محجوزة متاحة للتبديل</p>
             </div>
           )}
         </div>
 
         <DialogFooter className="flex gap-3 mt-6">
-          <Button 
-            variant="outline" 
-            onClick={onClose} 
-            disabled={isMoving}
-            className="flex-1"
-          >
+          <Button variant="outline" onClick={onClose} disabled={isMoving} className="flex-1">
             إلغاء
           </Button>
-          <Button 
+          <Button
             onClick={handleExchange}
             disabled={!hasActiveBookings || !selectedTargetSign || isMoving || availableTargetSigns.length === 0}
             className="flex-1 bg-purple-600 hover:bg-purple-700"

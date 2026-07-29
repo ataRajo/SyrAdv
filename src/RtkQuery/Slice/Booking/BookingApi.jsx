@@ -79,20 +79,32 @@ export const BookingSlice = createApi({
 
  //==================== ADD MOVE BOOKING API ==============
 
-   moveBooking: builder.mutation({
-      query: ({ booking_id, old_roadsign_id, new_roadsign_id }) => ({
-        url: "/customer/move-booking",
-        method: "POST",
-        body: {
-          booking_id,
-          old_roadsign_id, 
-          new_roadsign_id
-        },
-      }),
-invalidatesTags: (result, error, { booking_id }) => [
-        { type: "bookings", id: "LIST" },
-        { type: "bookings", id: booking_id },
-      ],    }),
+  // BookingApi.js
+moveBooking: builder.mutation({
+  query: ({ booking_id, old_roadsign_id, new_roadsign_id, isTempMoving = false, end_date }) => {
+    const body = {
+      booking_id,
+      old_roadsign_id,
+      new_roadsign_id,
+      isTempMoving,
+    };
+
+    // Only include end_date if isTempMoving is true
+    if (isTempMoving === true) {
+      body.end_date = end_date;
+    }
+
+    return {
+      url: "/customer/move-booking",
+      method: "POST",
+      body,
+    };
+  },
+  invalidatesTags: (result, error, { booking_id }) => [
+    { type: "bookings", id: "LIST" },
+    { type: "bookings", id: booking_id },
+  ],
+}),
 
     // ✅ Update status (with reject reason if needed)
     
@@ -137,6 +149,18 @@ uploadBookingPdf: builder.mutation({
   invalidatesTags: (result, error, { id }) => [{ type: "bookings", id }],
 }),
 
+    changeAdvertisementDesign: builder.mutation({
+      query: ({ id, roadsignIds }) => ({
+        url: `bookings/${id}/changeAdvertisementDesign`,
+        method: "POST",
+        body: { roadsignIds },
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "bookings", id },
+        { type: "bookings", id: "LIST" },
+      ],
+    }),
+
 
     confirmBooking: builder.mutation({
   query: (id) => ({
@@ -149,6 +173,31 @@ uploadBookingPdf: builder.mutation({
     { type: "bookings", id: "LIST" },
   ],
 }),
+
+    getNotifications: builder.query({
+      query: ({ page, per_page } = {}) => {
+        const params = new URLSearchParams();
+        if (page) params.append("page", page);
+        if (per_page) params.append("per_page", per_page);
+        const queryString = params.toString();
+        return `/notifications${queryString ? `?${queryString}` : ""}`;
+      },
+      providesTags: ["notifications"],
+    }),
+
+        // ✅ Add discount to booking
+    addDiscount: builder.mutation({
+      query: ({ id, discount_type, value }) => ({
+        url: `bookings/${id}/add_discount`,
+        method: "POST",
+        body: { discount_type, value },
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "bookings", id },
+        { type: "bookings", id: "LIST" },
+      ],
+    }),
+
   }),
   
 
@@ -169,5 +218,8 @@ export const {
   useExtendBookingMutation,
   useConfirmBookingMutation,
   useUploadBookingPdfMutation,
+  useChangeAdvertisementDesignMutation,
+    useGetNotificationsQuery,
+useAddDiscountMutation
   //useCalculateExtendedPriceMutation
 } = BookingSlice;

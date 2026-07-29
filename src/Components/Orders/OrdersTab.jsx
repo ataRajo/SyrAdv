@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, FileText, Printer, Eye } from "lucide-react";
-import { DynamicTable } from "../../utils/Tables/DynamicTable";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, ChevronDown, ChevronUp, Eye, ShoppingCart } from "lucide-react";
 import { DialogEditOrders } from "../../utils/Dialogs/EditAddDialog/Edit/DialogEditOrders";
 import DialogShow from "../../utils/Dialogs/DialogShow/DialogShow";
 import { DeleteDialog } from "../../utils/Dialogs/DeleteDialog/DeleteDialog";
@@ -12,79 +13,204 @@ import OrdersHeader from "./OrdersHeader";
 import ExportService from "./OrderExportService";
 import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
 import useMangeOrders from "../../hooks/useMangeOrders";
-import { createEnhancedOrdersColumns } from "../../utils/Tables/ColumnsTable/OrdersColumns";
 
-const MemoizedDynamicTable = React.memo(({ data, columns, ...props }) => {
-  const memoizedData = useMemo(() => data, [JSON.stringify(data)]);
-  const memoizedColumns = useMemo(() => columns, [JSON.stringify(columns)]);
-  
+// ==================== SUB-COMPONENTS ====================
+
+// Individual Template/Order Row (inside expanded section)
+const TemplateRow = ({ order, onConfirm, isConfirmed }) => {
   return (
-    <DynamicTable
-      data={memoizedData}
-      columns={memoizedColumns}
-      {...props}
-    />
+    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+      <div className="flex items-center gap-3">
+        {/* Color indicator from template */}
+        <div 
+          className="w-8 h-8 rounded-md border border-gray-200" 
+          style={{ backgroundColor: order.road_sign?.template?.color || '#ccc' }} 
+        />
+        <div>
+          <div className="font-medium text-sm">
+            {order.road_sign?.template?.model} - {order.road_sign?.template?.size}
+          </div>
+          <div className="text-xs text-gray-500">{order.road_sign?.place}</div>
+          <div className="text-xs text-gray-400 font-mono">{order.road_sign?.roadsign_code}</div>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-gray-500">{order.action_date}</span>
+        {isConfirmed ? (
+          <Badge className="bg-green-100 text-green-800 border-green-200">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            تم التأكيد
+          </Badge>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onConfirm(order.id)}
+            className="h-8 px-3 border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700"
+          >
+            <CheckCircle className="w-4 h-4 mr-1" />
+            تأكيد
+          </Button>
+        )}
+      </div>
+    </div>
   );
-});
+};
 
-// Create a memoized OrdersHeader
-const MemoizedOrdersHeader = React.memo(({ 
-  unreadOrdersCount, 
-  sortedDataLength, 
-  exportToWord, 
-  generatePDFViaPrint, 
-  markAllOrdersAsRead 
-}) => (
-  <OrdersHeader 
-    unreadOrdersCount={unreadOrdersCount}
-    sortedDataLength={sortedDataLength}
-    exportToWord={exportToWord}
-    generatePDFViaPrint={generatePDFViaPrint}
-    markAllOrdersAsRead={markAllOrdersAsRead}
-  />
-));
+// فك or تركيب Expandable Section
+const OrderTypeSection = ({ 
+  type, 
+  label, 
+  colorClass, 
+  orders, 
+  expanded, 
+  onToggle, 
+  onConfirmTemplate,
+  onConfirmAll 
+}) => {
+  if (!orders || orders.length === 0) return null;
 
-// Create a memoized OrderFilters
-const MemoizedOrderFilters = React.memo(({
-  selectedCustomerId,
-  setSelectedCustomerId,
-  orderType,
-  setOrderType,
-  selectedDate,
-  setSelectedDate,
-  cityId,
-  setCityId,
-  regionId,
-  setRegionId,
-  customersList,
-  isLoadingCustomers,
-  cities,
-  regions,
-  isCitiesLoading,
-  sortedDataLength // Changed from sortedData to sortedDataLength
-}) => (
-  <OrderFilters 
-    selectedCustomerId={selectedCustomerId}
-    setSelectedCustomerId={setSelectedCustomerId}
-    orderType={orderType}
-    setOrderType={setOrderType}
-    selectedDate={selectedDate}
-    setSelectedDate={setSelectedDate}
-    cityId={cityId}
-    setCityId={setCityId}
-    regionId={regionId}
-    setRegionId={setRegionId}
-    customersList={customersList}
-    isLoadingCustomers={isLoadingCustomers}
-    cities={cities}
-    regions={regions}
-    isCitiesLoading={isCitiesLoading}
-    sortedDataLength={sortedDataLength}
-  />
-));
+  const allConfirmed = orders.every(o => o.status === 1);
+  const pendingCount = orders.filter(o => o.status === 0).length;
+
+  return (
+    <div className={`border rounded-lg overflow-hidden ${colorClass.border}`}>
+      {/* Section Header */}
+      <button
+        onClick={onToggle}
+        className={`w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${colorClass.bg}`}
+      >
+        <div className="flex items-center gap-3">
+          <span className={`font-bold ${colorClass.text}`}>{label}</span>
+          <Badge variant="outline" className="text-xs">
+            {orders.length} لوحة
+          </Badge>
+          {allConfirmed ? (
+            <Badge className="bg-green-100 text-green-800 text-xs">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              تم التأكيد
+            </Badge>
+          ) : pendingCount > 0 ? (
+            <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+              {pendingCount} بانتظار التأكيد
+            </Badge>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {!allConfirmed && onConfirmAll && (
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfirmAll(orders.filter(o => o.status === 0).map(o => o.id));
+              }}
+              className="h-7 px-2 bg-green-600 hover:bg-green-700 text-white text-xs"
+            >
+              <CheckCircle className="w-3 h-3 mr-1" />
+              تأكيد الكل
+            </Button>
+          )}
+          {expanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </div>
+      </button>
+
+      {/* Expanded Content */}
+      {expanded && (
+        <div className="p-3 space-y-2 bg-white dark:bg-gray-900">
+          {orders.map((order) => (
+            <TemplateRow
+              key={order.id}
+              order={order}
+              onConfirm={onConfirmTemplate}
+              isConfirmed={order.status === 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Booking Card (Level 1)
+const BookingCard = ({ booking, onConfirmTemplate, onConfirmAllBatch }) => {
+  const [expandedType, setExpandedType] = useState(null); // 'release' | 'installation' | null
+
+  const toggleType = (type) => {
+    setExpandedType(expandedType === type ? null : type);
+  };
+
+  const releaseOrders = booking.releases || [];
+  const installationOrders = booking.installations || [];
+  const totalOrders = releaseOrders.length + installationOrders.length;
+  const confirmedCount = [...releaseOrders, ...installationOrders].filter(o => o.status === 1).length;
+
+  return (
+    <Card className="mb-4 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Badge className="bg-blue-100 text-blue-800 font-mono">Booking #{booking.bookingId}</Badge>
+            <span className="font-bold text-lg">{booking.customer?.company_name || "عميل غير معروف"}</span>
+            {booking.customerNew?.company_name && (
+              <span className="text-xs text-green-600">← {booking.customerNew.company_name}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">
+              {confirmedCount}/{totalOrders} مؤكد
+            </span>
+            {confirmedCount === totalOrders && (
+              <Badge className="bg-green-100 text-green-800">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                مكتمل
+              </Badge>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-3 pt-4">
+        {/* فك Section */}
+        <OrderTypeSection
+          type="release"
+          label="فك"
+          colorClass={{
+            border: "border-red-200 dark:border-red-900",
+            bg: "bg-red-50/50 dark:bg-red-900/10",
+            text: "text-red-700 dark:text-red-400"
+          }}
+          orders={releaseOrders}
+          expanded={expandedType === 'release'}
+          onToggle={() => toggleType('release')}
+          onConfirmTemplate={onConfirmTemplate}
+          onConfirmAll={(ids) => onConfirmAllBatch(ids, 1)}
+        />
+
+        {/* تركيب Section */}
+        <OrderTypeSection
+          type="installation"
+          label="تركيب"
+          colorClass={{
+            border: "border-green-200 dark:border-green-900",
+            bg: "bg-green-50/50 dark:bg-green-900/10",
+            text: "text-green-700 dark:text-green-400"
+          }}
+          orders={installationOrders}
+          expanded={expandedType === 'installation'}
+          onToggle={() => toggleType('installation')}
+          onConfirmTemplate={onConfirmTemplate}
+          onConfirmAll={(ids) => onConfirmAllBatch(ids, 2)}
+        />
+      </CardContent>
+    </Card>
+  );
+};
+
+// ==================== MAIN COMPONENT ====================
 
 const OrdersTab = ({ data, permission }) => {
-  const {
+ const {
     orderType,
     setOrderType,
     cityId,
@@ -107,6 +233,7 @@ const OrdersTab = ({ data, permission }) => {
     handleShow,
     handleConfirmOrUnconfirm,
     onConfirmOrder,
+    confirmOrder,       
     cities,
     regions,
   } = useMangeOrders();
@@ -118,38 +245,77 @@ const OrdersTab = ({ data, permission }) => {
   const [unreadOrdersCount, setUnreadOrdersCount] = useState(0);
   const [viewedOrderIds, setViewedOrderIds] = useState(new Set());
 
-  // Memoize the export service
   const exportService = useMemo(() => new ExportService(), []);
 
-  // Optimize sortedData calculation - MUST BE DEFINED BEFORE ANY FUNCTIONS THAT USE IT
-  const sortedData = useMemo(() => {
+  // ==================== GROUP DATA BY BOOKING_ID ====================
+  const bookingGroups = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
+
+    const groups = {};
+
+    data.forEach((order) => {
+      const bookingId = order.booking_id;
+      if (!groups[bookingId]) {
+        groups[bookingId] = {
+          bookingId,
+          customer: order.customer,
+          customerNew: order.customer_new,
+          releases: [],      // type 1 = فك
+          installations: [], // type 2 = تركيب
+        };
+      }
+
+      if (order.type === 1) {
+        groups[bookingId].releases.push(order);
+      } else if (order.type === 2) {
+        groups[bookingId].installations.push(order);
+      }
+    });
+
+    return Object.values(groups);
+  }, [data]);
+
+  // ==================== FILTER & SORT ====================
+  const filteredGroups = useMemo(() => {
+    let result = [...bookingGroups];
     const today = new Date();
-    let filteredData = Array.isArray(data) ? data.filter((order) => order.status == 0) : [];
-    
-    // Early return if no data
-    if (filteredData.length === 0) return [];
-    
+
+    // Filter by order type (show bookings that have this type)
+    if (orderType) {
+      if (orderType === "release") {
+        result = result.filter(b => b.releases.length > 0);
+      } else if (orderType === "installation") {
+        result = result.filter(b => b.installations.length > 0);
+      }
+    }
+
     // Filter by customer
     if (selectedCustomerId) {
       const customerIdStr = selectedCustomerId.toString();
-      filteredData = filteredData.filter(order => {
-        return (
-          (order.customer_id && order.customer_id.toString() === customerIdStr) ||
-          (order.customer?.id && order.customer.id.toString() === customerIdStr) ||
-          (order.customer_new?.id && order.customer_new.id.toString() === customerIdStr)
-        );
-      });
+      result = result.filter(b => 
+        b.customer?.id?.toString() === customerIdStr ||
+        b.customerNew?.id?.toString() === customerIdStr
+      );
     }
-    
-    // Filter by order type
-    if (orderType) {
-      if (orderType === "release") {
-        filteredData = filteredData.filter(order => order.type === 1);
-      } else if (orderType === "installation") {
-        filteredData = filteredData.filter(order => order.type === 2);
-      }
+
+    // Filter by city
+    if (cityId) {
+      const cityIdStr = cityId.toString();
+      result = result.filter(b => 
+        b.releases.some(o => o.road_sign?.city?.id?.toString() === cityIdStr) ||
+        b.installations.some(o => o.road_sign?.city?.id?.toString() === cityIdStr)
+      );
     }
-    
+
+    // Filter by region
+    if (regionId) {
+      const regionIdStr = regionId.toString();
+      result = result.filter(b => 
+        b.releases.some(o => o.road_sign?.region?.id?.toString() === regionIdStr) ||
+        b.installations.some(o => o.road_sign?.region?.id?.toString() === regionIdStr)
+      );
+    }
+
     // Filter by date
     if (selectedDate) {
       const selected = new Date(selectedDate);
@@ -157,106 +323,105 @@ const OrdersTab = ({ data, permission }) => {
       const selectedMonth = selected.getMonth();
       const selectedDay = selected.getDate();
       
-      filteredData = filteredData.filter(order => {
-        const orderDate = new Date(order.action_date);
-        return (
-          orderDate.getFullYear() === selectedYear &&
-          orderDate.getMonth() === selectedMonth &&
-          orderDate.getDate() === selectedDay
-        );
+      result = result.filter(b => {
+        const allOrders = [...b.releases, ...b.installations];
+        return allOrders.some(order => {
+          const orderDate = new Date(order.action_date);
+          return (
+            orderDate.getFullYear() === selectedYear &&
+            orderDate.getMonth() === selectedMonth &&
+            orderDate.getDate() === selectedDay
+          );
+        });
       });
     }
-    
-    // Filter by city
-    if (cityId) {
-      const cityIdStr = cityId.toString();
-      filteredData = filteredData.filter(order => 
-        (order.road_sign?.city?.id?.toString() === cityIdStr) ||
-        (order.city_id?.toString() === cityIdStr)
-      );
-    }
-    
-    // Filter by region
-    if (regionId) {
-      const regionIdStr = regionId.toString();
-      filteredData = filteredData.filter(order => 
-        (order.road_sign?.region?.id?.toString() === regionIdStr) ||
-        (order.region_id?.toString() === regionIdStr)
-      );
-    }
-    
-    // Sort by closest date to today
-    return [...filteredData].sort((a, b) => {
-      const dateA = new Date(a.action_date);
-      const dateB = new Date(b.action_date);
-      const diffA = Math.abs(dateA - today);
-      const diffB = Math.abs(dateB - today);
-      return diffA - diffB;
+
+    // Sort by closest action date to today
+    return result.sort((a, b) => {
+      const getMinDiff = (booking) => {
+        const allDates = [...booking.releases, ...b.installations].map(o => new Date(o.action_date));
+        const diffs = allDates.map(d => Math.abs(d - today));
+        return Math.min(...diffs);
+      };
+      return getMinDiff(a) - getMinDiff(b);
     });
-  }, [data, selectedCustomerId, selectedDate, cityId, regionId, orderType]);
+  }, [bookingGroups, orderType, selectedCustomerId, cityId, regionId, selectedDate]);
 
-  // Now define functions that use sortedData
-  const exportToWord = useCallback(async () => {
-    if (sortedData.length === 0) {
-      toast.error("لا توجد بيانات للتصدير");
-      return;
-    }
-
-    const selectedCustomerName = selectedCustomerId 
-      ? customersList.find(c => c.id.toString() === selectedCustomerId.toString())?.company_name || 'عميل'
-      : 'جميع العملاء';
-
-    await exportService.exportToWord(sortedData, selectedCustomerName, customersList, toast);
-  }, [sortedData, selectedCustomerId, customersList, exportService]);
-
-  const generatePDFViaPrint = useCallback(async () => {
-    if (sortedData.length === 0) {
-      toast.error("لا توجد بيانات للتصدير");
-      return;
-    }
-
-    const selectedCustomerName = selectedCustomerId 
-      ? customersList.find(c => c.id.toString() === selectedCustomerId.toString())?.company_name || 'عميل'
-      : 'جميع العملاء';
-
-    await exportService.generatePDFViaPrint(sortedData, selectedCustomerName, customersList, toast);
-  }, [sortedData, selectedCustomerId, customersList, exportService]);
-
-  // Optimize the unread orders calculation
+  // ==================== UNREAD COUNT ====================
   useEffect(() => {
     if (data && Array.isArray(data)) {
-      const activeOrders = data.filter(order => order.status == 0);
-      const unreadCount = activeOrders.filter(order => !viewedOrderIds.has(order.id)).length;
+      const unreadCount = data.filter(order => order.status === 0 && !viewedOrderIds.has(order.id)).length;
       setUnreadOrdersCount(unreadCount);
     }
   }, [data, viewedOrderIds]);
 
-  // Memoize event handlers
-  const handleViewDetails = useCallback((order) => {
-    if (!viewedOrderIds.has(order.id)) {
-      setViewedOrderIds(prev => new Set([...prev, order.id]));
-      setUnreadOrdersCount(prev => Math.max(0, prev - 1));
+  // ==================== HANDLERS ====================
+  
+const handleConfirmTemplate = useCallback(async (orderId) => {
+    try {
+      await confirmOrder({ status: 1, id: [orderId] }).unwrap();
+      toast.success("تم تأكيد الطلب بنجاح");
+    } catch (err) {
+      toast.error(err.data?.message || "خطأ في التأكيد");
     }
+  }, [confirmOrder]);
+
+
+  const handleConfirmAllBatch = useCallback(async (orderIds, type) => {
+    if (!orderIds || orderIds.length === 0) return;
+    try {
+      await confirmOrder({ status: 1, id: orderIds }).unwrap();
+      toast.success(`تم تأكيد ${orderIds.length} طلب بنجاح`);
+    } catch (err) {
+      toast.error(err.data?.message || "خطأ في التأكيد الدفعة");
+    }
+  }, [confirmOrder]);
+
+  const exportToWord = useCallback(async () => {
+    if (filteredGroups.length === 0) {
+      toast.error("لا توجد بيانات للتصدير");
+      return;
+    }
+    const selectedCustomerName = selectedCustomerId 
+      ? customersList.find(c => c.id.toString() === selectedCustomerId.toString())?.company_name || 'عميل'
+      : 'جميع العملاء';
     
-    setSelectedOrder(order);
-    setOpenShow(true);
-  }, [viewedOrderIds, setSelectedOrder, setOpenShow]);
-
-  const handleDownloadIndividualPDF = useCallback(async (order) => {
-    await exportService.downloadIndividualPDF(order, toast);
-  }, [exportService]);
-
+    // ✅ Flatten grouped data back to individual orders
+    const flatOrders = filteredGroups.flatMap(group => [
+      ...group.releases,
+      ...group.installations
+    ]);
+    
+    await exportService.exportToWord(flatOrders, selectedCustomerName, customersList, toast);
+  }, [filteredGroups, selectedCustomerId, customersList, exportService]);
+  const generatePDFViaPrint = useCallback(async () => {
+    if (filteredGroups.length === 0) {
+      toast.error("لا توجد بيانات للتصدير");
+      return;
+    }
+    const selectedCustomerName = selectedCustomerId 
+      ? customersList.find(c => c.id.toString() === selectedCustomerId.toString())?.company_name || 'عميل'
+      : 'جميع العملاء';
+    
+    // ✅ Flatten grouped data back to individual orders
+    const flatOrders = filteredGroups.flatMap(group => [
+      ...group.releases,
+      ...group.installations
+    ]);
+    
+    await exportService.generatePDFViaPrint(flatOrders, selectedCustomerName, customersList, toast);
+  }, [filteredGroups, selectedCustomerId, customersList, exportService]);
   const markAllOrdersAsRead = useCallback(() => {
     if (data && Array.isArray(data)) {
-      const activeOrders = data.filter(order => order.status == 0);
-      const allOrderIds = new Set(activeOrders.map(order => order.id));
+      const allOrderIds = new Set(data.map(order => order.id));
       setViewedOrderIds(allOrderIds);
       setUnreadOrdersCount(0);
       toast.success("تم تعليم جميع الطلبات كمقروءة");
     }
   }, [data]);
 
-  // Optimize order type filter display
+  // ==================== RENDER ====================
+
   const shouldShowOrderTypeFilter = useMemo(() => {
     return orderType && orderType !== "";
   }, [orderType]);
@@ -267,51 +432,19 @@ const OrdersTab = ({ data, permission }) => {
     return "";
   }, [orderType]);
 
-  // Optimize columns creation
-  const columns = useMemo(() => 
-    createEnhancedOrdersColumns(viewedOrderIds, handleViewDetails, handleDownloadIndividualPDF), 
-    [viewedOrderIds, handleViewDetails, handleDownloadIndividualPDF]
-  );
-
-  // Memoize Dialog components props
-  const dialogEditProps = useMemo(() => ({
-    show: openEdit,
-    handleClose: () => setOpenEdit(false),
-    initData: selectedOrder
-  }), [openEdit, selectedOrder]);
-
-  const dialogShowProps = useMemo(() => ({
-    show: openShow,
-    handleClose: () => {
-      setOpenShow(false);
-      setSelectedOrder(null);
-    },
-    data: selectedOrder,
-    fields: OrderFieldsShow
-  }), [openShow, selectedOrder]);
-
-  const deleteDialogProps = useMemo(() => ({
-    open: openConfirm,
-    onClose: () => setOpenConfirm(false),
-    title: isConfirmAction ? "عملية تأكيد الطلب" : "عملية إلغاء تأكيد الطلب",
-    description: `هل تريد ${isConfirmAction ? "تأكيد" : "إلغاء تأكيد"} هذا الطلب؟`,
-    confirmText: "نعم",
-    onConfirm: handleConfirmOrUnconfirm,
-    loading: iLoadingConfirm,
-    titleLoading: `${isConfirmAction ? "جاري التأكيد " : "جاري إلغاء تأكيد"}`
-  }), [openConfirm, isConfirmAction, iLoadingConfirm, handleConfirmOrUnconfirm]);
-
   return (
     <div className="p-4 sm:p-6 max-w-full mx-auto space-y-6 bg-background rounded-lg shadow-sm dark:shadow-gray-800">
-      <MemoizedOrdersHeader 
+      {/* Header */}
+      <OrdersHeader 
         unreadOrdersCount={unreadOrdersCount}
-        sortedDataLength={sortedData.length}
+        sortedDataLength={filteredGroups.length}
         exportToWord={exportToWord}
         generatePDFViaPrint={generatePDFViaPrint}
         markAllOrdersAsRead={markAllOrdersAsRead}
       />
       
-      <MemoizedOrderFilters 
+      {/* Filters */}
+      <OrderFilters 
         selectedCustomerId={selectedCustomerId}
         setSelectedCustomerId={setSelectedCustomerId}
         orderType={orderType}
@@ -327,70 +460,91 @@ const OrdersTab = ({ data, permission }) => {
         cities={cities}
         regions={regions}
         isCitiesLoading={isCitiesLoading}
-        sortedDataLength={sortedData.length} // Pass length instead of full array
+        sortedDataLength={filteredGroups.length}
       />
       
+      {/* Active Filter Badge */}
       {shouldShowOrderTypeFilter && (
-        <div className="mb-4 p-4 bg-gradient-to-r from-rose-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 border border-rose-200 dark:border-gray-700 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md">
+        <div className="mb-4 p-4 bg-gradient-to-r from-rose-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 border border-rose-200 dark:border-gray-700 rounded-lg shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-rose-100 dark:bg-opacity-30 rounded-lg">
                 <ShoppingCart className="w-5 h-5 text-rose-600 dark:text-rose-400" />
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                    التصفية حسب نوع الطلب:
-                  </span>
-                  <span className={`px-3 py-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-md ${
-                    orderType === "release" ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"
-                  } font-semibold text-sm`}>
-                    {getOrderTypeDisplayValue}
-                  </span>
-                </div>
-                {sortedData.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-blue-500/10 dark:bg-blue-500/20 rounded-full text-blue-700 dark:text-blue-300 font-medium text-sm flex items-center gap-1">
-                      <ShoppingCart className="w-4 h-4" />
-                      {sortedData.length} طلب
-                    </span>
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  التصفية حسب نوع الطلب:
+                </span>
+                <span className={`px-3 py-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-md ${
+                  orderType === "release" ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"
+                } font-semibold text-sm`}>
+                  {getOrderTypeDisplayValue}
+                </span>
               </div>
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setOrderType("")}
-              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 group"
+              className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 border border-red-200 px-3 py-2 rounded-lg"
             >
-              <svg className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
               إزالة التصفية
             </Button>
           </div>
         </div>
       )}
       
-      <MemoizedDynamicTable
-        data={sortedData}
-        columns={columns}
-        isLoading={isFetching}
-        onEdit={handleEdit}
-        onShow={handleShow}
-        onConfirmOrder={onConfirmOrder}
-        permissions={permission}
-        className="bg-card rounded-lg shadow-sm border border-border w-full"
+      {/* Booking Cards List */}
+      {isFetching ? (
+        <div className="text-center py-12">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-500">جاري التحميل...</p>
+        </div>
+      ) : filteredGroups.length > 0 ? (
+        <div className="space-y-4">
+          {filteredGroups.map((booking) => (
+            <BookingCard
+              key={booking.bookingId}
+              booking={booking}
+              onConfirmTemplate={handleConfirmTemplate}
+              onConfirmAllBatch={handleConfirmAllBatch}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12 text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          لا يوجد طلبات متوفرة
+        </div>
+      )}
+      
+      {/* Dialogs */}
+      <DialogEditOrders 
+        show={openEdit}
+        handleClose={() => setOpenEdit(false)}
+        initData={selectedOrder}
       />
       
-      <DialogEditOrders {...dialogEditProps} />
+      <DialogShow 
+        show={openShow}
+        handleClose={() => {
+          setOpenShow(false);
+          setSelectedOrder(null);
+        }}
+        data={selectedOrder}
+        fields={OrderFieldsShow}
+      />
       
-      <DialogShow {...dialogShowProps} />
-      
-      <DeleteDialog {...deleteDialogProps} />
+      <DeleteDialog 
+        open={openConfirm}
+        onClose={() => setOpenConfirm(false)}
+        title={isConfirmAction ? "عملية تأكيد الطلب" : "عملية إلغاء تأكيد الطلب"}
+        description={`هل تريد ${isConfirmAction ? "تأكيد" : "إلغاء تأكيد"} هذا الطلب؟`}
+        confirmText="نعم"
+        onConfirm={handleConfirmOrUnconfirm}
+        loading={iLoadingConfirm}
+        titleLoading={`${isConfirmAction ? "جاري التأكيد " : "جاري إلغاء تأكيد"}`}
+      />
     </div>
   );
 };
-
 export default React.memo(OrdersTab);

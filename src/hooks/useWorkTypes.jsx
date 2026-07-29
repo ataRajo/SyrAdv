@@ -103,6 +103,7 @@ export const useWorkTypes = () => {
     searchQuery,
     setSearchQuery,
     handleAdd,
+    setSelectedWorkType,
     handleEdit,
     handleUpdate,
     handleDelete,

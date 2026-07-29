@@ -10,6 +10,10 @@ export const OrdersSlice = createApi({
     getOrders: builder.query({
       query: (params) => {
         const queryParams = new URLSearchParams();
+        
+        // ✅ Only append status ONCE
+        queryParams.append("status", params?.status ?? false);
+
         if (params?.type) {
           params.type.forEach((type, index) => {
             queryParams.append(`type[${index}]`, type);
@@ -24,23 +28,32 @@ export const OrdersSlice = createApi({
         if (params?.action_date) {
           queryParams.append("action_date", params.action_date);
         }
-        if (params?.status) {
-          queryParams.append("status", params.status);
-        }
+        // ❌ REMOVED: duplicate status append
+        // if (params?.status) {
+        //   queryParams.append("status", params.status);
+        // }
+        
         return `/orders?${queryParams.toString()}`;
       },
       providesTags: ["orders"],
     }),
-    confirmOneOrder: builder.mutation({
-      query: (data) => {
-        return {
-          url: `update-status-order/${data.id}`,
-          method: "POST",
-          body: data,
-        };
+    
+   
+  // OrdersApi.jsx
+confirmOneOrder: builder.mutation({
+  query: (data) => {
+    return {
+      url: `update-status-order`,
+      method: "POST",
+      body: {
+        ids: Array.isArray(data.id) ? data.id : [data.id], // Support single or array
+        status: data.status,
       },
-      invalidatesTags: ["orders"],
-    }),
+    };
+  },
+  invalidatesTags: ["orders"],
+}),
+    
     updateOrder: builder.mutation({
       query: (data) => {
         return {

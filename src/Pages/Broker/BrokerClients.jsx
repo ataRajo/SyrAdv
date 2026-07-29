@@ -4,12 +4,15 @@ import {
   Search, 
   UserPlus, 
   MoreVertical, 
-  Eye, 
-  MessageCircle,
+  Eye,
   Calendar,
   DollarSign,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Phone,
+  MapPin,
+  Building2,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -171,12 +174,13 @@ export function BrokerClients() {
                     <thead className="border-b border-white/20">
                       <tr className="text-right text-gray-300">
                         <th className="pb-3 font-medium">العميل</th>
-                        <th className="pb-3 font-medium">البريد الإلكتروني</th>
+                        <th className="pb-3 font-medium">الشركة</th>
                         <th className="pb-3 font-medium">رقم الهاتف</th>
-                        <th className="pb-3 font-medium">الحجوزات</th>
-                        <th className="pb-3 font-medium">المدفوعات</th>
+                        <th className="pb-3 font-medium">السجل التجاري</th>
+                        <th className="pb-3 font-medium">العنوان</th>
+                        <th className="pb-3 font-medium">المتبقي</th>
                         <th className="pb-3 font-medium">الحالة</th>
-                        <th className="pb-3 font-medium">الإجراءات</th>
+                        <th className="pb-3 font-medium"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -190,23 +194,39 @@ export function BrokerClients() {
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-                                <p className="text-white font-medium">{client.name || client.username}</p>
+                                <p className="text-white font-medium">{client.full_name || client.name || client.username}</p>
                                 <p className="text-gray-400 text-sm">ID: {client.id}</p>
                               </div>
                             </div>
                           </td>
-                          <td className="py-4 text-gray-300">{client.email || "—"}</td>
-                          <td className="py-4 text-gray-300">{client.phone_number || "—"}</td>
                           <td className="py-4">
                             <div className="flex items-center gap-1 text-gray-300">
-                              <Calendar className="h-4 w-4" />
-                              <span>{client.total_bookings || 0}</span>
+                              <Building2 className="h-4 w-4 text-blue-400" />
+                              <span>{client.company_name || "—"}</span>
                             </div>
                           </td>
                           <td className="py-4">
                             <div className="flex items-center gap-1 text-gray-300">
-                              <DollarSign className="h-4 w-4" />
-                              <span>{client.total_payments || 0}</span>
+                              <Phone className="h-4 w-4 text-green-400" />
+                              <span dir="ltr">{client.phone_number || "—"}</span>
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center gap-1 text-gray-300">
+                              <FileText className="h-4 w-4 text-yellow-400" />
+                              <span>{client.commercial_registration_number || "—"}</span>
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center gap-1 text-gray-300">
+                              <MapPin className="h-4 w-4 text-red-400" />
+                              <span>{client.address || "—"}</span>
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center gap-1 text-gray-300">
+                              <DollarSign className="h-4 w-4 text-emerald-400" />
+                              <span>{client.remaining ?? 0}</span>
                             </div>
                           </td>
                           <td className="py-4">
@@ -225,10 +245,6 @@ export function BrokerClients() {
                                 <DropdownMenuItem onClick={() => navigate(`/broker/clients/${client.id}`)}>
                                   <Eye className="h-4 w-4 ml-2" />
                                   عرض التفاصيل
-                                </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <MessageCircle className="h-4 w-4 ml-2" />
-                                  إرسال رسالة
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

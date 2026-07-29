@@ -1,3 +1,6 @@
+import { Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
 export const WorkTypesColumns = [
   {
     header: "ID",
@@ -35,5 +38,25 @@ export const WorkTypesColumns = [
         day: "numeric",
       });
     },
+  },
+  // ← FIXED: unique accessor, no onViewCustomers prop needed
+  {
+    header: "الزبائن",
+    accessor: "customers_count", // ← changed from "id" to unique value
+    className: "min-w-[80px]",
+    cell: ({ row }) => (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-blue-600 hover:text-blue-800"
+        onClick={() => {
+          // Dispatch custom event instead of using prop
+          window.dispatchEvent(new CustomEvent('viewWorkTypeCustomers', { detail: row }));
+        }}
+        title="عرض الزبائن"
+      >
+        <Eye className="h-4 w-4" />
+      </Button>
+    ),
   },
 ];

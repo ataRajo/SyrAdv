@@ -19,6 +19,8 @@ import {
   useGetBookingQuery,
 } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { CreateSimilarCampaign } from "../../components/Campaign/CreateSimilarCampaign";
+import axios from "axios";
+import { BASE_URL } from "../../Api/baseUrl";
 
 export default function CampaignsPage() {
   // Pagination state
@@ -27,6 +29,36 @@ export default function CampaignsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("start_date");
   const [sortDirection, setSortDirection] = useState("desc");
+const [printTypes, setPrintTypes] = useState([]);
+const [loadingPrintTypes, setLoadingPrintTypes] = useState(false);
+
+
+useEffect(() => {
+  const fetchPrintTypes = async () => {
+    try {
+      setLoadingPrintTypes(true);
+      const token = localStorage.getItem("SuperAdminInfo");
+      const parsedToken = token ? JSON.parse(token) : null;
+      const authToken = parsedToken?.user?.token || parsedToken?.token;
+
+      const response = await axios.get(`${BASE_URL}/printings`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      setPrintTypes(response.data || []);
+    } catch (error) {
+      console.error("Error fetching print types:", error);
+    } finally {
+      setLoadingPrintTypes(false);
+    }
+  };
+
+  fetchPrintTypes();
+}, []);
+
 
   // Fetch data with pagination
   const { 
@@ -299,7 +331,11 @@ export default function CampaignsPage() {
                         <Eye className="h-3 w-3" />
                         عرض الخريطة
                       </Button>
-                      <CreateSimilarCampaign booking={campaign} />
+                      <CreateSimilarCampaign 
+                      booking={campaign} 
+                    printTypes={printTypes}
+                    loadingPrintTypes={loadingPrintTypes}
+                      />
                     </div>
                   </td>
                 </tr>

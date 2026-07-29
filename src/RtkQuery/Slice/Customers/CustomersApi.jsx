@@ -69,6 +69,18 @@ export const CustomersSlice = createApi({
       invalidatesTags: ["customers"],
     }),
 
+    getCustomersByWorkType: builder.query({
+  query: (workTypeId) => `customers?work_type_id=${workTypeId}`,
+  providesTags: (result) =>
+    result?.data
+      ? [
+          ...result.data.map(({ id }) => ({ type: "Customers", id })),
+          { type: "Customers", id: "LIST" },
+        ]
+      : [{ type: "Customers", id: "LIST" }],
+}),
+
+
     // 🆕  endpoint for updating status
    updateCustomerStatus: builder.mutation({
   query: ({ id, status }) => ({
@@ -90,5 +102,6 @@ export const {
   useDeleteCustomerMutation,
   useUpdateCustomerMutation,
   useAddDiscountMutation,
+  useGetCustomersByWorkTypeQuery, // ← add this
   useUpdateCustomerStatusMutation, // <-- 🆕 Export hook here
 } = CustomersSlice;

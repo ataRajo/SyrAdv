@@ -58,19 +58,14 @@ export default function DigitalScreens() {
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-slate-950 dark:via-indigo-950 dark:to-black flex items-center justify-center p-4 md:p-6 font-mono" dir="rtl">
       
-      {/* Main Digital Screen Container */}
       <div className="max-w-6xl w-full">
         
-        {/* DIGITAL SCREEN DISPLAY WITH ANIMATION */}
         <div className="relative mb-8 rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(0,255,255,0.3)] border border-cyan-500/40 bg-white/80 dark:bg-black/60 backdrop-blur-sm">
-          {/* Glowing scanline effect */}
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-cyan-500/5 to-transparent animate-pulse"></div>
           <div className="absolute top-0 left-0 w-full h-1 bg-cyan-400 shadow-lg animate-pulse"></div>
           
-          {/* Main screen content with neon flicker */}
           <div className="p-6 md:p-8">
             <div className="flex flex-col items-center justify-center space-y-4">
-              {/* Futuristic LED badge */}
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-400/50 text-cyan-600 dark:text-cyan-300 text-xs tracking-widest">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
@@ -79,21 +74,18 @@ export default function DigitalScreens() {
                 مباشر • إشارة رقمية
               </div>
               
-              {/* Loading indicator */}
               {isLoading && (
                 <div className="text-cyan-600 dark:text-cyan-400 text-sm animate-pulse">
                   ⚡ جاري تحميل الشاشات الرقمية...
                 </div>
               )}
               
-              {/* Animated scrolling marquee text */}
               <div className="w-full overflow-hidden bg-gray-100 dark:bg-black/80 border-y border-cyan-500/30 py-3 px-2 rounded-lg">
                 <div className="whitespace-nowrap animate-marquee font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 dark:from-cyan-300 dark:via-blue-400 dark:to-purple-400 text-xl md:text-2xl tracking-wider">
                   {displayMessage} &nbsp;&nbsp;✦&nbsp;&nbsp; {displayMessage} &nbsp;&nbsp;✦&nbsp;&nbsp;
                 </div>
               </div>
               
-              {/* Digital screen stats */}
               <div className="grid grid-cols-3 gap-2 w-full max-w-md mt-4">
                 <div className="flex flex-col items-center bg-cyan-50 dark:bg-cyan-950/40 rounded-lg p-2 border border-cyan-200 dark:border-cyan-400/30">
                   <span className="text-cyan-600 dark:text-cyan-400 text-xs">إجمالي الشاشات</span>
@@ -115,11 +107,9 @@ export default function DigitalScreens() {
             </div>
           </div>
           
-          {/* bottom neon line */}
           <div className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent"></div>
         </div>
         
-        {/* DIGITAL SCREENS GRID */}
         <div className="bg-white/80 dark:bg-black/50 backdrop-blur-md rounded-2xl border border-gray-200 dark:border-indigo-500/40 p-5 md:p-6 shadow-xl dark:shadow-2xl">
           <div className="flex justify-between items-center flex-wrap gap-3 mb-6 border-b border-gray-200 dark:border-indigo-500/30 pb-3">
             <div className="flex items-center gap-3">
@@ -133,7 +123,6 @@ export default function DigitalScreens() {
             </div>
           </div>
           
-          {/* Digital Screens Grid */}
           {digitalScreens.length === 0 && !isLoading ? (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
               <span className="text-4xl">📡</span>
@@ -155,7 +144,6 @@ export default function DigitalScreens() {
                     border backdrop-blur-sm
                   `}
                 >
-                  {/* Status indicator */}
                   <div className="absolute top-3 left-3 z-20">
                     <span className={`
                       inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold
@@ -169,17 +157,12 @@ export default function DigitalScreens() {
                     </span>
                   </div>
                   
-                  {/* Digital Billboard Image - Static Street Billboard */}
                   <div className="w-full h-40 mb-3 rounded-lg overflow-hidden bg-gradient-to-b from-gray-300 to-gray-400 dark:from-gray-800 dark:to-gray-900 border border-gray-300 dark:border-gray-700 relative">
-                    {/* City Background */}
                     <div className="absolute inset-0 bg-gradient-to-b from-blue-300/40 dark:from-blue-900/40 via-gray-300/60 dark:via-gray-900/60 to-gray-300 dark:to-gray-900">
-                      {/* Sky */}
                       <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-blue-400/60 dark:from-blue-900/60 to-orange-300/20 dark:to-orange-900/20"></div>
                       
-                      {/* Sun/Moon glow */}
                       <div className="absolute top-3 right-6 w-6 h-6 rounded-full bg-yellow-400/40 dark:bg-yellow-400/20 blur-sm"></div>
                       
-                      {/* Buildings silhouette */}
                       <div className="absolute bottom-0 left-0 right-0 flex items-end justify-around px-1">
                         <div className="w-3 h-8 bg-gray-400/80 dark:bg-gray-800/80 rounded-t-sm"></div>
                         <div className="w-4 h-12 bg-gray-400/80 dark:bg-gray-800/80 rounded-t-sm"></div>
@@ -190,7 +173,6 @@ export default function DigitalScreens() {
                         <div className="w-3 h-11 bg-gray-400/80 dark:bg-gray-800/80 rounded-t-sm"></div>
                       </div>
                       
-                      {/* Street lights */}
                       <div className="absolute bottom-0 left-1/4 w-0.5 h-16 bg-gray-500/50 dark:bg-gray-600/50">
                         <div className="absolute -top-1 -left-1 w-2 h-2 rounded-full bg-yellow-400/50 dark:bg-yellow-400/30 blur-[1px]"></div>
                       </div>
@@ -199,9 +181,7 @@ export default function DigitalScreens() {
                       </div>
                     </div>
                     
-                    {/* Digital Billboard Structure */}
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-                      {/* Poles */}
                       <div className="flex gap-6">
                         <div className="w-1 h-12 bg-gradient-to-r from-gray-500 to-gray-400 dark:from-gray-600 dark:to-gray-500"></div>
                         <div className="w-1 h-12 bg-gradient-to-r from-gray-500 to-gray-400 dark:from-gray-600 dark:to-gray-500"></div>
@@ -270,19 +250,16 @@ export default function DigitalScreens() {
           )}
         </div>
         
-        {/* digital screen footer */}
         <div className="mt-5 text-center text-[11px] text-cyan-500/80 dark:text-cyan-700/80 flex justify-center gap-4">
           <span>◈ نظام الشاشات الرقمية v1.0 ◈</span>
           <span>⎯ اضغط على أي شاشة للتفاصيل ⎯</span>
         </div>
       </div>
       
-      {/* MODAL - Screen Details */}
       {isModalOpen && selectedScreen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-cyan-500/40 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl dark:shadow-[0_0_30px_rgba(0,255,255,0.2)]">
             
-            {/* Modal Header */}
             <div className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-cyan-500/30 p-6 rounded-t-2xl z-10">
               <div className="flex justify-between items-start">
                 <div>
@@ -302,10 +279,8 @@ export default function DigitalScreens() {
               </div>
             </div>
             
-            {/* Modal Content */}
             <div className="p-6 space-y-6">
               
-              {/* Status Badge */}
               <div className="flex justify-center">
                 <span className={`
                   inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold
@@ -319,7 +294,6 @@ export default function DigitalScreens() {
                 </span>
               </div>
               
-              {/* Image */}
               {selectedScreen.image && (
                 <div className="w-full h-48 md:h-64 rounded-xl overflow-hidden bg-gray-100 dark:bg-black/40">
                   <img 
@@ -330,7 +304,6 @@ export default function DigitalScreens() {
                 </div>
               )}
               
-              {/* Location Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-gray-50 dark:bg-black/40 rounded-xl p-4 border border-gray-200 dark:border-cyan-500/20">
                   <h3 className="text-cyan-600 dark:text-cyan-400 font-semibold mb-3 flex items-center gap-2">
@@ -397,7 +370,6 @@ export default function DigitalScreens() {
                 </div>
               </div>
               
-              {/* Bookings Section */}
               <div className="bg-gray-50 dark:bg-black/40 rounded-xl p-4 border border-gray-200 dark:border-cyan-500/20">
                 <h3 className="text-cyan-600 dark:text-cyan-400 font-semibold mb-4 flex items-center gap-2">
                   <span>📋</span> الحجوزات ({selectedScreen.bookings?.length || 0})
@@ -454,7 +426,6 @@ export default function DigitalScreens() {
                 )}
               </div>
               
-              {/* Available Date Ranges */}
               {selectedScreen.available_date_ranges && selectedScreen.available_date_ranges.length > 0 && (
                 <div className="bg-gray-50 dark:bg-black/40 rounded-xl p-4 border border-green-300 dark:border-green-500/20">
                   <h3 className="text-green-600 dark:text-green-400 font-semibold mb-3 flex items-center gap-2">
@@ -473,7 +444,6 @@ export default function DigitalScreens() {
               )}
             </div>
             
-            {/* Modal Footer */}
             <div className="sticky bottom-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-cyan-500/30 p-4 rounded-b-2xl">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-500">
@@ -491,7 +461,6 @@ export default function DigitalScreens() {
         </div>
       )}
       
-      {/* Tailwind custom animation: marquee */}
       <style>{`
         @keyframes marquee {
           0% { transform: translateX(0%); }

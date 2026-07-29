@@ -30,6 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import BookingFilter from "./BookingFilter";
 
 const approvementStatusMap = {
   "1": "انتظار",
@@ -129,7 +130,8 @@ const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // Temporary Bookings Dialog state
   const [openTemporaryDialog, setOpenTemporaryDialog] = useState(false);
-
+const [dateStartFilter, setDateStartFilter] = useState("");
+const [dateEndFilter, setDateEndDateFilter] = useState("");
   // RTK Query mutation for updating booking status
   const [updateBookingStatus] = useUpdateBookingStatusMutation();
 
@@ -181,10 +183,9 @@ const [itemsPerPage, setItemsPerPage] = useState(20);
     });
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
   setCurrentPage(1);
-}, [statusFilter, archiveFilter, customerNameFilter]);
-
+}, [statusFilter, archiveFilter, customerNameFilter, dateStartFilter, dateEndFilter]);
 
   // Calculate remaining days
   const calculateRemainingDays = useCallback((endDate) => {
@@ -209,20 +210,18 @@ const [itemsPerPage, setItemsPerPage] = useState(20);
 
   */
 
-  const handleConfirmBooking = async (bookingId) => {
+    const handleConfirmBooking = async (bookingId) => {
     if (isConfirming) return;
     
-    // Optional: Add confirmation dialog
     const userConfirmed = window.confirm(`هل تريد تأكيد الحجز رقم ${bookingId}؟`);
     if (!userConfirmed) return;
     
     try {
       await confirmBooking(bookingId).unwrap();
-      toast.success(`تم تأكيد الحجز رقم ${bookingId} بنجاح`);
-      // The table will automatically refresh due to invalidated tags
+      alert(`تم تأكيد الحجز رقم ${bookingId} بنجاح`);
     } catch (error) {
-      console.error("Error confirming booking:", error);
-      toast.error(error?.data?.message || "فشل في تأكيد الحجز");
+      const message = error?.data?.message || "فشل في تأكيد الحجز";
+      alert(message);
     }
   }
   
@@ -391,46 +390,77 @@ const [itemsPerPage, setItemsPerPage] = useState(20);
     setPauseValidationError("");
   };
 
-// ✅ Filtered data with BOTH statusFilter and archiveFilter
 const filteredData = useMemo(() => {
   if (!data || !Array.isArray(data)) return [];
   
   let filtered = [...data];
   
-  // 1. Apply archive filter
+  // Helper: check if booking is deferred (start_date > today)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const isDeferred = (booking) => {
+    if (!booking.start_date) return false;
+    const startDate = new Date(booking.start_date);
+    startDate.setHours(0, 0, 0, 0);
+    return startDate > today;
+  };
+  
+  // 1. Apply archive/deferred filter
   if (archiveFilter === "active") {
-    filtered = filtered.filter(booking => booking.is_archived === 0);
+    // Active = not archived AND not deferred (start_date <= today)
+    filtered = filtered.filter(booking => booking.is_archived === 0 && !isDeferred(booking));
   } else if (archiveFilter === "archived") {
     filtered = filtered.filter(booking => booking.is_archived === 1);
+  } else if (archiveFilter === "deferred") {
+    // Deferred = start_date > today (regardless of archive status, or add: && booking.is_archived === 0)
+    filtered = filtered.filter(booking => isDeferred(booking));
   }
+  // "all" shows everything including deferred
   
-  // 2. Apply status filter (if selected)
+  // 2. Apply status filter
   if (statusFilter) {
     filtered = filtered.filter((booking) => String(booking.approvement_status) === statusFilter);
   }
   
-  // 3. Apply customer name filter (if entered)
+  // 3. Apply customer name filter
   if (customerNameFilter.trim()) {
     const searchTerm = customerNameFilter.toLowerCase().trim();
     filtered = filtered.filter((booking) => {
       const customer = booking.customer;
       if (!customer) return false;
-      
-      // Search in both full_name and company_name
       const fullName = customer.full_name?.toLowerCase() || '';
       const companyName = customer.company_name?.toLowerCase() || '';
       const phone = customer.phone_number?.toLowerCase() || '';
-      
       return fullName.includes(searchTerm) || 
              companyName.includes(searchTerm) || 
              phone.includes(searchTerm);
     });
   }
+
+  // 4. Apply date range filter
+  if (dateStartFilter) {
+    const filterStart = new Date(dateStartFilter);
+    filterStart.setHours(0, 0, 0, 0);
+    filtered = filtered.filter((booking) => {
+      const bookingStart = new Date(booking.start_date);
+      bookingStart.setHours(0, 0, 0, 0);
+      return bookingStart >= filterStart;
+    });
+  }
+
+  if (dateEndFilter) {
+    const filterEnd = new Date(dateEndFilter);
+    filterEnd.setHours(23, 59, 59, 999);
+    filtered = filtered.filter((booking) => {
+      const bookingStart = new Date(booking.start_date);
+      bookingStart.setHours(0, 0, 0, 0);
+      return bookingStart <= filterEnd;
+    });
+  }
   
   return filtered;
-}, [data, statusFilter, archiveFilter, customerNameFilter]); // ← Add customerNameFilter to dependencies
-
-
+}, [data, statusFilter, archiveFilter, customerNameFilter, dateStartFilter, dateEndFilter]);
   return (
     <div className="p-4 sm:p-6 w-full mx-auto space-y-6 overflow-x-auto">
       {/* HEADER WITH TEMPORARY BOOKINGS ICON */}
@@ -521,22 +551,36 @@ const filteredData = useMemo(() => {
       onChange={(e) => setCustomerNameFilter(e.target.value)}
       className="pr-8"
     />
-   {customerNameFilter && (
-  <div className="flex items-center gap-2 mt-2">
-    <Icon icon="mdi:account" className="text-purple-500" />
-    <span className="text-sm text-purple-600 dark:text-purple-400">
-      تصفية حسب العميل: "{customerNameFilter}"
-    </span>
-    <button
-      onClick={() => setCustomerNameFilter("")}
-      className="text-purple-400 hover:text-purple-600"
-    >
-      <Icon icon="mdi:close" className="w-4 h-4" />
-    </button>
-  </div>
-)}
+    {customerNameFilter && (
+      <div className="flex items-center gap-2 mt-2">
+        <Icon icon="mdi:account" className="text-purple-500" />
+        <span className="text-sm text-purple-600 dark:text-purple-400">
+          تصفية حسب العميل: "{customerNameFilter}"
+        </span>
+        <button
+          onClick={() => setCustomerNameFilter("")}
+          className="text-purple-400 hover:text-purple-600"
+        >
+          <Icon icon="mdi:close" className="w-4 h-4" />
+        </button>
+      </div>
+    )}
   </div>
 </div>
+
+{/* Date Range Filter - MUST be outside the customer filter div */}
+<BookingFilter
+  startDate={dateStartFilter}
+  endDate={dateEndFilter}
+  onStartDateChange={setDateStartFilter}
+  onEndDateChange={setDateEndDateFilter}
+  onClear={() => {
+    setDateStartFilter("");
+    setDateEndDateFilter("");
+  }}
+/>
+
+
 
 
       {/* ✅ FILTERS SECTION */}
@@ -574,11 +618,23 @@ const filteredData = useMemo(() => {
               <Icon icon="mdi:view-list" className="ml-1" />
               الكل
             </Button>
+
+            <Button
+  variant={archiveFilter === "deferred" ? "default" : "outline"}
+  size="sm"
+  onClick={() => setArchiveFilter("deferred")}
+  className={`px-3 ${archiveFilter === "deferred" ? "bg-amber-600 text-white" : ""}`}
+>
+  <Icon icon="mdi:clock-outline" className="ml-1" />
+  مؤجل
+</Button>
+
+
           </div>
         </div>
         
         {/* Approval Status Filter */}
-        {archiveFilter !== "archived" && (
+        {archiveFilter !== "archived" && archiveFilter !== "deferred" && (
           <div className="flex items-center gap-2">
             <label className="font-medium dark:text-gray-300">حالة الموافقة:</label>
             <select
@@ -598,23 +654,23 @@ const filteredData = useMemo(() => {
       </div>
 
       {/* ✅ Active Filters Info */}
+           {/* ✅ Active Filters Info */}
       {archiveFilter !== "all" && (
         <div className={`mb-4 p-3 rounded-lg ${
           archiveFilter === "active" 
             ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800" 
+            : archiveFilter === "deferred"
+            ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
             : "bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700"
         }`}>
           <div className="flex items-center gap-2">
             <Icon 
-              icon={archiveFilter === "active" ? "mdi:check-circle" : "mdi:archive"} 
-              className={archiveFilter === "active" ? "text-blue-500" : "text-gray-500"} 
+              icon={archiveFilter === "active" ? "mdi:check-circle" : archiveFilter === "deferred" ? "mdi:clock-outline" : "mdi:archive"} 
+              className={archiveFilter === "active" ? "text-blue-500" : archiveFilter === "deferred" ? "text-amber-500" : "text-gray-500"} 
             />
             <div>
               <span className="font-medium">
-                {archiveFilter === "active" ? "عرض الحجوزات النشطة" : "عرض الحجوزات المؤرشفة"}
-              </span>
-              <span className="mr-2 text-sm text-gray-600 dark:text-gray-400">
-                ({filteredData?.length || 0} حجز)
+                {archiveFilter === "active" ? "عرض الحجوزات النشطة" : archiveFilter === "deferred" ? "عرض الحجوزات المؤجلة" : "عرض الحجوزات المؤرشفة"}
               </span>
             </div>
           </div>
@@ -626,12 +682,19 @@ const filteredData = useMemo(() => {
         columns={EnhancedBookingColumns}
         isLoading={isLoading}
         onShow={(row) => navigate(`/dashboard/booking/${row.id}`)}
-        onEditBooking={(row) => {
-          if (row.is_archived === 1 || archiveFilter === "all") {
+         onEditBooking={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all" || archiveFilter === "deferred") {
             toast.warning("لا يمكن تعديل هذا الحجز");
             return;
           }
           navigate(`/dashboard/booking/edit/${row.id}`);
+        }}
+                 onDesignChange={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all" || archiveFilter === "deferred") {
+            toast.warning("لا يمكن تغيير تصميم هذا الحجز");
+            return;
+          }
+          navigate(`/dashboard/booking/design/${row.id}`);
         }}
       onDeleteBooking={(row) => {
   handleDelete(row);
@@ -646,15 +709,17 @@ const filteredData = useMemo(() => {
           handlePauseBooking(row);
         }}
           */
-        onStatusChange={(row) => {
-          if (row.is_archived === 1 || archiveFilter === "all") {
+                onStatusChange={(row) => {
+          if (row.is_archived === 1 || archiveFilter === "all" || archiveFilter === "deferred") {
             toast.warning("لا يمكن تغيير حالة هذا الحجز");
             return;
           }
           handleStatusChange(row);
         }}
+
+        
         onExtendBooking={(row) => {
-          if (row.is_archived === 1 || archiveFilter === "all") {
+          if (row.is_archived === 1 || archiveFilter === "all" || archiveFilter === "deferred") {
             toast.warning("لا يمكن تمديد هذا الحجز");
             return;
           }
