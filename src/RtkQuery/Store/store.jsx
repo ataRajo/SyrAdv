@@ -15,6 +15,9 @@ import { MediatorSlice } from "../Slice/mediatorapis/MediatorApi"; // ADDED
 import {WorkTypesSlice} from "../Slice/WorkTypesApi/WorkTypesApi"
 import {offersApiSlice} from "../Slice/Offers/offersApiSlice"
 import { SearchSlice } from "../Slice/SearchApi/SearchApi";
+import {accountingApi} from "../Slice/Accounting/AccountingApi"
+import {bookingDocumentsApi} from "../Slice/Bookings/BookingDocumentsApi"
+
 const store = configureStore({
   reducer: {
     [AuthSlice.reducerPath]: AuthSlice.reducer,
@@ -33,6 +36,9 @@ const store = configureStore({
     [WorkTypesSlice.reducerPath] :WorkTypesSlice.reducer , 
     [offersApiSlice.reducerPath] :offersApiSlice.reducer ,
     [SearchSlice.reducerPath]: SearchSlice.reducer,
+    [accountingApi.reducerPath] :accountingApi.reducer ,
+    [bookingDocumentsApi.reducerPath]:bookingDocumentsApi.reducer
+
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -52,7 +58,8 @@ const store = configureStore({
       WorkTypesSlice.middleware , 
       offersApiSlice.middleware ,
       SearchSlice.middleware,
-
+      accountingApi.middleware, 
+      bookingDocumentsApi.middleware
     ),
 });
 

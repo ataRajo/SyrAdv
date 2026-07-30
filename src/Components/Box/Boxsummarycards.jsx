@@ -17,7 +17,7 @@ const StatCard = ({ label, value, icon, accent, sublabel }) => (
         <span className="text-2xl font-bold tabular-nums text-foreground">
           {formatCurrency(value)}
           <span className="ms-1 text-sm font-normal text-muted-foreground">
-            د.ل
+           $ 
           </span>
         </span>
         {sublabel && (

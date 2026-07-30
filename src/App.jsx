@@ -22,6 +22,7 @@ import ReportsPage from "./Pages/Reports/ReportsPage";
 import BookingForm from "./Pages/Booking/BookingForm";
 import TableRoadSigns from "./Components/RoadSigns/TableRoadSigns";
 import Box from "./Pages/Payments/Box";
+import AccountingPanel from "./Components/Accounting/AccountingPanel";
 import RoadSignsReport from "./Components/Report/RoadSignsReport";
 import BrokerInfo from "./Components/Brokers/BrokerInfo";
 import RoadSignStats from "./Components/RoadSigns/RoadSignStats/RoadSignStats";
@@ -114,6 +115,7 @@ function App() {
               
 
               <Route path="box" element={<Box />} />
+              <Route path="accounting" element={<AccountingPanel />} />
               <Route path="brokers" element={<BrokersPage />} />
               <Route path="brokers/:id" element={<BrokerInfo />} />
 

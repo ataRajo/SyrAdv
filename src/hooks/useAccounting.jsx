@@ -1,0 +1,662 @@
+import { useCallback, useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { BASE_URL } from "../Api/baseUrl";
+import {
+  useGetAccountsQuery,
+  useGetAccountsTreeQuery,
+  useGetAccountStatementQuery,
+  useAddAccountMutation,
+  useUpdateAccountMutation,
+  useDeleteAccountMutation,
+  useGetTransactionsQuery,
+  useRecordIncomingMutation,
+  useRecordOutgoingMutation,
+  useTransferFundsMutation,
+  useReverseTransactionMutation,
+  useGetCustomerStatementQuery,
+  useSendCustomerStatementMutation,
+  useGetCompanyStatementQuery,
+  useGetTrialBalanceQuery,
+  useLazyPreviewCashClosingQuery,
+  useCloseCashRegisterMutation,
+  useGetCashClosingsQuery,
+  useConfirmCashClosingMutation,
+  useGetPayrollEmployeesQuery,
+  useSetEmployeeSalaryMutation,
+  usePayEmployeeSalaryMutation,
+  useLazyGetPayrollHistoryQuery,
+  useLazyGetIncomeStatementQuery,
+  useLazyGetBalanceSheetQuery,
+} from "../RtkQuery/Slice/Accounting/AccountingApi";
+
+/**
+ * The same token lookup used everywhere else in the app
+ * (see PaymentsContainer.jsx's getToken()).
+ */
+const getToken = () => {
+  try {
+    const raw = localStorage.getItem("SuperAdminInfo");
+    const info = raw ? JSON.parse(raw) : null;
+    return info?.user?.token || info?.token || localStorage.getItem("token");
+  } catch (error) {
+    return localStorage.getItem("token");
+  }
+};
+
+/**
+ * Everything the Accounting UI needs, in one place: Chart of Accounts
+ * management, transaction posting (incoming/outgoing/transfer/reverse),
+ * customer/company statements, the trial balance, and exporting a
+ * transaction's سند قبض / سند صرف voucher for printing.
+ */
+export const useAccounting = () => {
+  // ---- Chart of Accounts -------------------------------------------------
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [deleteAccountTarget, setDeleteAccountTarget] = useState(null);
+
+  const { data: accountsTree = [], isFetching: isFetchingAccountsTree } =
+    useGetAccountsTreeQuery();
+  const { data: accountsFlat = [], isFetching: isFetchingAccounts } =
+    useGetAccountsQuery({});
+
+  const [addAccount, { isLoading: isAddingAccount }] = useAddAccountMutation();
+  const [updateAccount, { isLoading: isUpdatingAccount }] =
+    useUpdateAccountMutation();
+  const [deleteAccount, { isLoading: isDeletingAccount }] =
+    useDeleteAccountMutation();
+
+  // Cash/bank accounts only - used to populate the "from/to" selects for
+  // incoming/outgoing/transfer forms.
+  const cashAccounts = useMemo(
+    () => accountsFlat.filter((a) => a.is_cash_account),
+    [accountsFlat]
+  );
+  // Postable (non-header) accounts - valid targets for an outgoing entry.
+  const postableAccounts = useMemo(
+    () => accountsFlat.filter((a) => a.is_transactional),
+    [accountsFlat]
+  );
+
+  const openCreateAccount = useCallback(() => {
+    setEditingAccount(null);
+    setAccountDialogOpen(true);
+  }, []);
+
+  const openEditAccount = useCallback((account) => {
+    setEditingAccount(account);
+    setAccountDialogOpen(true);
+  }, []);
+
+  const handleSaveAccount = useCallback(
+    async (data) => {
+      try {
+        if (editingAccount) {
+          await updateAccount({ id: editingAccount.id, ...data }).unwrap();
+          toast.success("تم تحديث الحساب بنجاح");
+        } else {
+          await addAccount(data).unwrap();
+          toast.success("تم إنشاء الحساب بنجاح");
+        }
+        setAccountDialogOpen(false);
+        setEditingAccount(null);
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل في حفظ الحساب");
+        return false;
+      }
+    },
+    [editingAccount, addAccount, updateAccount]
+  );
+
+  const handleDeleteAccount = useCallback(async () => {
+    if (!deleteAccountTarget) return;
+    try {
+      await deleteAccount(deleteAccountTarget.id).unwrap();
+      toast.success("تم حذف الحساب بنجاح");
+      setDeleteAccountTarget(null);
+      return true;
+    } catch (error) {
+      toast.error(error?.data?.message || "تعذر حذف الحساب");
+      return false;
+    }
+  }, [deleteAccountTarget, deleteAccount]);
+
+  // A single account's own statement (e.g. viewing the Bank's ledger).
+  const [inspectedAccountId, setInspectedAccountId] = useState(null);
+  const [accountStatementFilters, setAccountStatementFilters] = useState({
+    from_date: "",
+    to_date: "",
+  });
+  const { data: accountStatement, isFetching: isFetchingAccountStatement } =
+    useGetAccountStatementQuery(
+      inspectedAccountId
+        ? { id: inspectedAccountId, ...accountStatementFilters }
+        : undefined,
+      { skip: !inspectedAccountId }
+    );
+
+  // ---- Transactions -------------------------------------------------------
+  const [transactionFilters, setTransactionFilters] = useState({
+    per_page: 20,
+    page: 1,
+  });
+  const { data: transactionsResponse, isFetching: isFetchingTransactions } =
+    useGetTransactionsQuery(transactionFilters);
+
+const transactions = Array.isArray(transactionsResponse?.data) 
+  ? transactionsResponse.data 
+  : Array.isArray(transactionsResponse) 
+    ? transactionsResponse 
+    : [];
+    
+ const transactionsMeta = transactionsResponse?.meta ?? {
+  total: 0,
+  per_page: 20,
+  current_page: 1,
+  total_pages: 1,
+};
+  const [incomingDialogOpen, setIncomingDialogOpen] = useState(false);
+  const [outgoingDialogOpen, setOutgoingDialogOpen] = useState(false);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [reverseTarget, setReverseTarget] = useState(null);
+
+  const [recordIncoming, { isLoading: isRecordingIncoming }] =
+    useRecordIncomingMutation();
+  const [recordOutgoing, { isLoading: isRecordingOutgoing }] =
+    useRecordOutgoingMutation();
+  const [transferFunds, { isLoading: isTransferring }] =
+    useTransferFundsMutation();
+  const [reverseTransaction, { isLoading: isReversing }] =
+    useReverseTransactionMutation();
+
+  const handleRecordIncoming = useCallback(
+    async (data) => {
+      try {
+        await recordIncoming(data).unwrap();
+        toast.success("تم تسجيل قيد القبض بنجاح");
+        setIncomingDialogOpen(false);
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل في تسجيل قيد القبض");
+        return false;
+      }
+    },
+    [recordIncoming]
+  );
+
+  const handleRecordOutgoing = useCallback(
+    async (data) => {
+      try {
+        await recordOutgoing(data).unwrap();
+        toast.success("تم تسجيل قيد الصرف بنجاح");
+        setOutgoingDialogOpen(false);
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل في تسجيل قيد الصرف");
+        return false;
+      }
+    },
+    [recordOutgoing]
+  );
+
+  const handleTransfer = useCallback(
+    async (data) => {
+      try {
+        await transferFunds(data).unwrap();
+        toast.success("تم تسجيل التحويل بنجاح");
+        setTransferDialogOpen(false);
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل في تسجيل التحويل");
+        return false;
+      }
+    },
+    [transferFunds]
+  );
+
+  const handleReverse = useCallback(
+    async (reason) => {
+      if (!reverseTarget) return false;
+      try {
+        await reverseTransaction({ id: reverseTarget.id, reason }).unwrap();
+        toast.success("تم عكس القيد بنجاح");
+        setReverseTarget(null);
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل في عكس القيد");
+        return false;
+      }
+    },
+    [reverseTarget, reverseTransaction]
+  );
+
+  /**
+   * Opens the printable سند قبض / سند صرف for a transaction in a new tab.
+   * The endpoint returns full HTML (see resources/views/receipt.blade.php),
+   * so - exactly like the existing handleReceipt() flow for old Payment
+   * receipts in PaymentsContainer.jsx - we fetch it with the auth header
+   * manually (a plain <a href> can't carry a Bearer token) and hand the
+   * browser a blob URL to open/print.
+   */
+  const handleOpenVoucher = useCallback(async (journalEntryId) => {
+    if (!journalEntryId) {
+      toast.error("رقم القيد مطلوب لعرض السند");
+      return;
+    }
+    try {
+      const token = getToken();
+      const response = await fetch(
+        `${BASE_URL}/accounting/transactions/${journalEntryId}/voucher`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "text/html",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        let message = `تعذر عرض السند (${response.status})`;
+        try {
+          const data = await response.clone().json();
+          message = data?.message || message;
+        } catch {
+          // response wasn't JSON - keep the generic message
+        }
+        throw new Error(message);
+      }
+
+      const html = await response.text();
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank");
+      if (!win) {
+        toast.error("الرجاء السماح للنوافذ المنبثقة لعرض السند");
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      toast.error(error.message || "تعذر عرض السند");
+    }
+  }, []);
+
+  // ---- Customer statement ---------------------------------------------------
+  const [statementCustomerId, setStatementCustomerId] = useState(null);
+  const [customerStatementFilters, setCustomerStatementFilters] = useState({
+    from_date: "",
+    to_date: "",
+  });
+  const { data: customerStatement, isFetching: isFetchingCustomerStatement } =
+    useGetCustomerStatementQuery(
+      statementCustomerId
+        ? { customerId: statementCustomerId, ...customerStatementFilters }
+        : undefined,
+      { skip: !statementCustomerId }
+    );
+
+  const [sendCustomerStatementMutation, { isLoading: isSendingStatement }] =
+    useSendCustomerStatementMutation();
+
+  /**
+   * Opens the professional كشف حساب (print preview) for a customer in a
+   * new tab - same manual-fetch-with-auth-header + blob-URL pattern as
+   * handleOpenVoucher, since this is a normal permission-gated API route,
+   * not a signed link.
+   */
+  const printCustomerStatementDocument = useCallback(async (customerId, filters = {}) => {
+    if (!customerId) {
+      toast.error("رقم العميل مطلوب");
+      return;
+    }
+    try {
+      const token = getToken();
+      const params = new URLSearchParams(filters).toString();
+      const response = await fetch(
+        `${BASE_URL}/accounting/customers/${customerId}/statement/print${params ? `?${params}` : ""}`,
+        { headers: { Accept: "text/html", Authorization: `Bearer ${token}` } }
+      );
+      if (!response.ok) throw new Error(`تعذر عرض كشف الحساب (${response.status})`);
+      const html = await response.text();
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      toast.error(error.message || "تعذر عرض كشف الحساب");
+    }
+  }, []);
+
+  /**
+   * Downloads the actual PDF (dompdf, server-side) - same auth-header
+   * fetch, but triggers a real file download via a temporary <a>.
+   */
+  const downloadCustomerStatementDocument = useCallback(async (customerId, filters = {}) => {
+    if (!customerId) {
+      toast.error("رقم العميل مطلوب");
+      return;
+    }
+    try {
+      const token = getToken();
+      const params = new URLSearchParams(filters).toString();
+      const response = await fetch(
+        `${BASE_URL}/accounting/customers/${customerId}/statement/pdf${params ? `?${params}` : ""}`,
+        { headers: { Accept: "application/pdf", Authorization: `Bearer ${token}` } }
+      );
+      if (!response.ok) throw new Error(`تعذر تحميل كشف الحساب (${response.status})`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kashf-hesab-${customerId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      toast.error(error.message || "تعذر تحميل كشف الحساب");
+    }
+  }, []);
+
+  const sendCustomerStatementDocument = useCallback(
+    async (customerId, { email, message, from_date, to_date } = {}) => {
+      if (!customerId) {
+        toast.error("رقم العميل مطلوب");
+        return false;
+      }
+      try {
+        await sendCustomerStatementMutation({
+          customerId,
+          ...(email ? { email } : {}),
+          ...(message ? { message } : {}),
+          ...(from_date ? { from_date } : {}),
+          ...(to_date ? { to_date } : {}),
+        }).unwrap();
+        toast.success("تم إرسال كشف الحساب بالبريد الإلكتروني بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل إرسال كشف الحساب");
+        return false;
+      }
+    },
+    [sendCustomerStatementMutation]
+  );
+
+  // ---- Company statement (general ledger of the cashbox/bank) --------------
+  const [companyAccountId, setCompanyAccountId] = useState(null);
+  const [companyStatementFilters, setCompanyStatementFilters] = useState({
+    from_date: "",
+    to_date: "",
+  });
+  const { data: companyStatement, isFetching: isFetchingCompanyStatement } =
+    useGetCompanyStatementQuery({
+      ...(companyAccountId ? { account_id: companyAccountId } : {}),
+      ...companyStatementFilters,
+    });
+
+  // ---- Trial balance ---------------------------------------------------------
+  const { data: trialBalance, isFetching: isFetchingTrialBalance } =
+    useGetTrialBalanceQuery();
+
+  // ---- Cash register closing (تقفيل الصندوق اليومي) --------------------------
+  const [cashClosingFilters, setCashClosingFilters] = useState({ status: "pending" });
+  const { data: cashClosings = [], isFetching: isFetchingCashClosings } =
+    useGetCashClosingsQuery(cashClosingFilters);
+
+  const [previewCashClosingTrigger, { data: cashClosingPreview, isFetching: isPreviewingCashClosing }] =
+    useLazyPreviewCashClosingQuery();
+
+  const [closeCashRegisterMutation, { isLoading: isClosingCashRegister }] =
+    useCloseCashRegisterMutation();
+  const [confirmCashClosingMutation, { isLoading: isConfirmingCashClosing }] =
+    useConfirmCashClosingMutation();
+
+  const previewCashClosing = useCallback(
+    (accountId, date, employeeId) => {
+      if (!accountId || !date) {
+        toast.error("الحساب والتاريخ مطلوبان لمعاينة التقفيل");
+        return;
+      }
+      previewCashClosingTrigger({
+        account_id: accountId,
+        date,
+        ...(employeeId ? { employee_id: employeeId } : {}),
+      });
+    },
+    [previewCashClosingTrigger]
+  );
+
+  const closeCashRegister = useCallback(
+    async (data) => {
+      try {
+        await closeCashRegisterMutation(data).unwrap();
+        toast.success("تم إغلاق الصندوق - بانتظار تأكيد المشرف");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل إغلاق الصندوق");
+        return false;
+      }
+    },
+    [closeCashRegisterMutation]
+  );
+
+  const confirmCashClosing = useCallback(
+    async (id, countedAmount, notes) => {
+      try {
+        await confirmCashClosingMutation({ id, counted_amount: countedAmount, notes }).unwrap();
+        toast.success("تم تأكيد التقفيل بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تأكيد التقفيل");
+        return false;
+      }
+    },
+    [confirmCashClosingMutation]
+  );
+
+  /**
+   * Opens the printable handover slip - same manual-fetch-with-auth-header
+   * + blob-URL pattern as handleOpenVoucher/printCustomerStatementDocument,
+   * since this is a normal permission-gated API route, not a signed link.
+   */
+  const printCashClosing = useCallback(async (closingId) => {
+    if (!closingId) return;
+    try {
+      const token = getToken();
+      const response = await fetch(`${BASE_URL}/accounting/cash-closings/${closingId}/print`, {
+        headers: { Accept: "text/html", Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`تعذر عرض سند التقفيل (${response.status})`);
+      const html = await response.text();
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      toast.error(error.message || "تعذر عرض سند التقفيل");
+    }
+  }, []);
+
+  // ---- Payroll (الرواتب والأجور) ----------------------------------------
+  const { data: payrollEmployees = [], isFetching: isFetchingPayrollEmployees } =
+    useGetPayrollEmployeesQuery();
+
+  const [setEmployeeSalaryMutation, { isLoading: isSavingSalary }] =
+    useSetEmployeeSalaryMutation();
+  const [payEmployeeSalaryMutation, { isLoading: isPayingSalary }] =
+    usePayEmployeeSalaryMutation();
+    
+    const [fetchPayrollHistory, { data: payrollHistory = [], isFetching: isFetchingPayrollHistory }] =
+    useLazyGetPayrollHistoryQuery();
+
+
+
+  const setEmployeeSalary = useCallback(
+    async (userId, data) => {
+      try {
+        await setEmployeeSalaryMutation({ userId, ...data }).unwrap();
+        toast.success("تم تحديد راتب الموظف بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تحديد الراتب");
+        return false;
+      }
+    },
+    [setEmployeeSalaryMutation]
+  );
+
+  const payEmployeeSalary = useCallback(
+    async (data) => {
+      try {
+        await payEmployeeSalaryMutation(data).unwrap();
+        toast.success("تم تسجيل صرف الراتب بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل صرف الراتب");
+        return false;
+      }
+    },
+    [payEmployeeSalaryMutation]
+  );
+
+  const loadPayrollHistory = useCallback(
+    (filters = {}) => {
+      fetchPayrollHistory(filters);
+    },
+    [fetchPayrollHistory]
+  );
+
+
+  // ---- Financial statements (قائمة الدخل، الميزانية العمومية) --------------
+  const [fetchIncomeStatement, { data: incomeStatement, isFetching: isFetchingIncomeStatement }] =
+    useLazyGetIncomeStatementQuery();
+  const [fetchBalanceSheet, { data: balanceSheet, isFetching: isFetchingBalanceSheet }] =
+    useLazyGetBalanceSheetQuery();
+
+  const loadIncomeStatement = useCallback(
+    (fromDate, toDate) => {
+      if (!fromDate || !toDate) {
+        toast.error("التاريخ من وإلى مطلوبان");
+        return;
+      }
+      fetchIncomeStatement({ from_date: fromDate, to_date: toDate });
+    },
+    [fetchIncomeStatement]
+  );
+
+  const loadBalanceSheet = useCallback(
+    (asOfDate) => {
+      fetchBalanceSheet(asOfDate ? { as_of_date: asOfDate } : {});
+    },
+    [fetchBalanceSheet]
+  );
+
+  return {
+    // Chart of accounts
+    accountsTree,
+    accountsFlat,
+    cashAccounts,
+    postableAccounts,
+    isFetchingAccounts: isFetchingAccounts || isFetchingAccountsTree,
+    accountDialogOpen,
+    setAccountDialogOpen,
+    editingAccount,
+    openCreateAccount,
+    openEditAccount,
+    handleSaveAccount,
+    isSavingAccount: isAddingAccount || isUpdatingAccount,
+    deleteAccountTarget,
+    setDeleteAccountTarget,
+    handleDeleteAccount,
+    isDeletingAccount,
+    inspectedAccountId,
+    setInspectedAccountId,
+    accountStatementFilters,
+    setAccountStatementFilters,
+    accountStatement,
+    isFetchingAccountStatement,
+
+    // Transactions
+    transactions,
+    transactionsMeta,
+    isFetchingTransactions,
+    transactionFilters,
+    setTransactionFilters,
+    incomingDialogOpen,
+    setIncomingDialogOpen,
+    outgoingDialogOpen,
+    setOutgoingDialogOpen,
+    transferDialogOpen,
+    setTransferDialogOpen,
+    reverseTarget,
+    setReverseTarget,
+    handleRecordIncoming,
+    isRecordingIncoming,
+    handleRecordOutgoing,
+    isRecordingOutgoing,
+    handleTransfer,
+    isTransferring,
+    handleReverse,
+    isReversing,
+    handleOpenVoucher,
+
+    // Customer statement
+    statementCustomerId,
+    setStatementCustomerId,
+    customerStatementFilters,
+    setCustomerStatementFilters,
+    customerStatement,
+    isFetchingCustomerStatement,
+    printCustomerStatementDocument,
+    downloadCustomerStatementDocument,
+    sendCustomerStatementDocument,
+    isSendingStatement,
+
+    // Company statement
+    companyAccountId,
+    setCompanyAccountId,
+    companyStatementFilters,
+    setCompanyStatementFilters,
+    companyStatement,
+    isFetchingCompanyStatement,
+
+    // Trial balance
+    trialBalance,
+    isFetchingTrialBalance,
+
+    // Cash register closing
+    cashClosingFilters,
+    setCashClosingFilters,
+    cashClosings,
+    isFetchingCashClosings,
+    cashClosingPreview,
+    isPreviewingCashClosing,
+    previewCashClosing,
+    closeCashRegister,
+    isClosingCashRegister,
+    confirmCashClosing,
+    isConfirmingCashClosing,
+    printCashClosing,
+
+    // Payroll
+    payrollEmployees,
+    isFetchingPayrollEmployees,
+    setEmployeeSalary,
+    isSavingSalary,
+    payEmployeeSalary,
+    isPayingSalary,
+    payrollHistory,
+    isFetchingPayrollHistory,
+    loadPayrollHistory,
+
+    // Financial statements
+    incomeStatement,
+    isFetchingIncomeStatement,
+    loadIncomeStatement,
+    balanceSheet,
+    isFetchingBalanceSheet,
+    loadBalanceSheet,
+  };
+};
+
+export default useAccounting;

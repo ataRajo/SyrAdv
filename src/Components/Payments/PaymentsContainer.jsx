@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "../../Context/AuthProvider";
 import Logo from "../../assets/images/adv_syrian.png"
 import { BASE_URL } from "../../Api/baseUrl";
+import AccountingPanel from "../../Components/Accounting/AccountingPanel";
 
 const STATUS_FILTER_OPTIONS = [
   { label: "الكل", value: "all" },
@@ -234,13 +235,38 @@ const customers = useMemo(() => {
     allNotifications,
     calculateBookingNotifications,
   } = useMangePayments();
-
   const showPaymentTabs = useMemo(() => {
     if (!user) return true;
     const restrictedRoles = ["super_admin", "admin", "administrator"];
     const userRole = user.role?.toLowerCase() || user.roles?.[0]?.name?.toLowerCase() || "";
     return !restrictedRoles.includes(userRole);
   }, [user]);
+
+  // Accounting/cashbox tab - fixed to handle "super admin" role properly
+  const showAccountingTab = useMemo(() => {
+    if (!user) return false;
+    
+    // Get the user's role from various possible locations
+    const userRole = user.role?.toLowerCase() || 
+                    user.roles?.[0]?.name?.toLowerCase() || 
+                    "";
+    
+    // Allowed roles (handle both "super admin" and "super_admin")
+    const allowedRoles = ["super_admin", "admin", "administrator", "accountant", "super admin"];
+    
+    const hasAccess = allowedRoles.includes(userRole);
+    console.log('Accounting tab access - Role:', userRole, 'Has access:', hasAccess);
+    
+    return hasAccess;
+  }, [user]);
+
+
+  // Accounting/cashbox tab: only for staff whose role should carry the
+  // *-financials permissions server-side (super admin, admin, and the
+
+  const tabGridClass = showPaymentTabs
+    ? (showAccountingTab ? "grid-cols-4" : "grid-cols-3")
+    : (showAccountingTab ? "grid-cols-2" : "grid-cols-1");
 
   const filteredNotReceivedPayments = useMemo(() => {
     let filtered = Array.isArray(paymentIsNotReceived) ? paymentIsNotReceived : [];
@@ -880,7 +906,7 @@ const handleExportWord = async () => {
         onValueChange={setActiveTab}
         className="w-full p-4"
       >
-        <TabsList className={`grid w-full ${showPaymentTabs ? 'grid-cols-3' : 'grid-cols-1'} bg-card rounded-lg border border-border`}>
+        <TabsList className={`grid w-full ${tabGridClass} bg-card rounded-lg border border-border`}>
           <TabsTrigger value="payments" className="text-xs md:text-sm font-medium">
             جميع الدفعات
           </TabsTrigger>
@@ -907,6 +933,12 @@ const handleExportWord = async () => {
                   />
                 )}
               </div>
+            </TabsTrigger>
+          )}
+          
+          {showAccountingTab && (
+            <TabsTrigger value="accounting" className="text-xs md:text-sm font-medium">
+              المحاسبة والصندوق
             </TabsTrigger>
           )}
         </TabsList>
@@ -1194,6 +1226,14 @@ const handleExportWord = async () => {
  
               />
               
+            </div>
+          </TabsContent>
+        )}
+
+        {showAccountingTab && (
+          <TabsContent value="accounting">
+            <div className="w-full mx-auto">
+              <AccountingPanel />
             </div>
           </TabsContent>
         )}

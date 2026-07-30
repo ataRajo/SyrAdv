@@ -49,8 +49,8 @@ export const CustomerDetailsDrawer = ({ isOpen, onClose, details }) => {
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                     <div>📅 من: <span className="font-medium text-foreground">{booking.start_date}</span></div>
                     <div>➡️ إلى: <span className="font-medium text-foreground">{booking.end_date}</span></div>
-                    <div>💰 المبلغ الكلي: <span className="font-medium text-foreground">{booking.total_price?.toLocaleString("ar-EG")} د.ل</span></div>
-                    <div>⏳ المتبقي: <span className="font-medium text-amber-600">{booking.remaining?.toLocaleString("ar-EG")} د.ل</span></div>
+                    <div>💰 المبلغ الكلي: <span className="font-medium text-foreground">{booking.total_price?.toLocaleString("ar-EG")} $</span></div>
+                    <div>⏳ المتبقي: <span className="font-medium text-amber-600">{booking.remaining?.toLocaleString("ar-EG")} $</span></div>
                   </div>
                 </div>
               ))}
@@ -75,15 +75,15 @@ export const CustomerDetailsDrawer = ({ isOpen, onClose, details }) => {
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div>
                       <span className="text-muted-foreground block">المدفوع</span>
-                      <span className="font-bold text-emerald-600 text-sm">{payment.paid?.toLocaleString("ar-EG")} د.ل</span>
+                      <span className="font-bold text-emerald-600 text-sm">{payment.paid?.toLocaleString("ar-EG")} $</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block">الإجمالي</span>
-                      <span className="font-semibold">{payment.total?.toLocaleString("ar-EG")} د.ل</span>
+                      <span className="font-semibold">{payment.total?.toLocaleString("ar-EG")} $</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block">المتبقي بعد الدفعة</span>
-                      <span className="font-semibold text-rose-500">{payment.remaining_after_payment?.toLocaleString("ar-EG")} د.ل</span>
+                      <span className="font-semibold text-rose-500">{payment.remaining_after_payment?.toLocaleString("ar-EG")} $</span>
                     </div>
                   </div>
                 </div>

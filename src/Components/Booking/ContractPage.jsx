@@ -5,6 +5,7 @@ import { useParams } from "react-router";
 import { useGetOneBookingsQuery } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { styles } from "./ContractStyle";
 import DOMPurify from "dompurify";
+import BookingDocumentButtons from "./BookingDocumentButtons";
 
 const BookingType = {
   1: "مؤقت",  
@@ -717,6 +718,26 @@ const CommonPrintingInfo = () => {
             </span>
           )}
         </button>
+      </div>
+
+      {/* Server-generated documents (signed, secure links) - includes the
+          itemized road-sign price list, which isn't produced by the
+          client-side export above. See BookingDocumentButtons.jsx /
+          BOOKING_ACCOUNTING_COORDINATION.md. */}
+      <div style={{
+        position: "absolute",
+        top: "60px",
+        right: "10px",
+        zIndex: 100,
+        background: "#fff",
+        border: "1px solid #ddd",
+        borderRadius: "6px",
+        padding: "8px",
+      }}>
+        <div style={{ fontSize: "11px", color: "#666", marginBottom: "6px" }}>
+          مستندات من الخادم (روابط موقّعة وآمنة):
+        </div>
+        <BookingDocumentButtons bookingId={bookingId} />
       </div>
 
       {isTemporaryBooking ? <TemporaryContract /> : <PermanentContract />}
