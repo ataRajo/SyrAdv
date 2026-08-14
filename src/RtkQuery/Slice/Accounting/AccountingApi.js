@@ -17,6 +17,40 @@ const getToken = () => {
 };
 
 /**
+ * Shared parser for every paginated list endpoint in this module
+ * (paginateSuccessResponse() on the backend - see ResponseTrait.php):
+ * { data: <Laravel paginator JSON>, meta: {total, per_page, current_page,
+ * total_pages} }. Handles every shape actually seen in the wild (including
+ * the older successResponse() shape with a flat array and an all-zero
+ * meta, for endpoints not yet migrated to real pagination) so a backend
+ * fix never silently breaks the UI either way.
+ */
+const parsePaginatedResponse = (response) => {
+  let items = [];
+  let meta = { total: 0, per_page: 20, current_page: 1, total_pages: 1 };
+
+  if (Array.isArray(response)) {
+    items = response;
+  } else if (Array.isArray(response?.data)) {
+    items = response.data;
+    meta = response?.meta || meta;
+  } else if (Array.isArray(response?.data?.data)) {
+    items = response.data.data;
+    meta = response.data;
+  }
+
+  return {
+    data: items,
+    meta: {
+      total: meta.total ?? items.length,
+      per_page: meta.per_page ?? 20,
+      current_page: meta.current_page ?? 1,
+      total_pages: meta.last_page ?? meta.total_pages ?? 1,
+    },
+  };
+};
+
+/**
  * Every endpoint of the Accounting & Company Cashbox Management API
  * (see ACCOUNTING_MODULE.md) is wired up here - Chart of Accounts,
  * transactions (incoming/outgoing/transfer/reverse), statements, and the
@@ -41,6 +75,11 @@ export const accountingApi = createApi({
     "TrialBalance",
     "CashClosing",
     "PayrollEmployee",
+    "SupplierCategory",
+    "Supplier",
+    "PurchaseInvoice",
+    "BrokerCommission",
+    "Material",
   ],
   endpoints: (builder) => ({
     // ---------------------------------------------------------------
@@ -107,34 +146,7 @@ export const accountingApi = createApi({
 
 getTransactions: builder.query({
   query: (params = {}) => ({ url: "/accounting/transactions", params }),
-  transformResponse: (response) => {
-    console.log('Transactions API Response:', response); // Open F12 Console to see this log!
-
-    // Extract items array regardless of nesting level
-    let items = [];
-    let meta = { total: 0, per_page: 20, current_page: 1, total_pages: 1 };
-
-    if (Array.isArray(response)) {
-      items = response;
-    } else if (Array.isArray(response?.data)) {
-      items = response.data;
-      meta = response?.meta || response;
-    } else if (Array.isArray(response?.data?.data)) {
-      // Handles Laravel standard pagination: { data: { data: [...], current_page: 1 } }
-      items = response.data.data;
-      meta = response.data;
-    }
-
-    return {
-      data: items,
-      meta: {
-        total: meta.total ?? items.length,
-        per_page: meta.per_page ?? 20,
-        current_page: meta.current_page ?? 1,
-        total_pages: meta.last_page ?? meta.total_pages ?? 1,
-      },
-    };
-  },
+  transformResponse: parsePaginatedResponse,
   providesTags: ["Transaction"],
 }),
 
@@ -242,7 +254,7 @@ getTransactions: builder.query({
     }),
     getCashClosings: builder.query({
       query: (params = {}) => ({ url: "/accounting/cash-closings", params }),
-      transformResponse: (response) => response?.data ?? [],
+      transformResponse: parsePaginatedResponse,
       providesTags: ["CashClosing"],
     }),
     getCashClosing: builder.query({
@@ -281,17 +293,7 @@ getTransactions: builder.query({
     }),
 getPayrollHistory: builder.query({
   query: (params = {}) => ({ url: "/accounting/payroll/history", params }),
-  transformResponse: (response) => {
-    console.log('Payroll History Response:', response);
-    // Handle both { status: true, data: [...] } and direct array
-    if (response?.status === true && Array.isArray(response?.data)) {
-      return response.data;
-    }
-    if (Array.isArray(response)) {
-      return response;
-    }
-    return [];
-  },
+  transformResponse: parsePaginatedResponse,
 }),
 
     // ---------------------------------------------------------------
@@ -304,6 +306,124 @@ getPayrollHistory: builder.query({
     getBalanceSheet: builder.query({
       query: (params = {}) => ({ url: "/accounting/reports/balance-sheet", params }),
       transformResponse: (response) => response?.data,
+    }),
+
+    // ---------------------------------------------------------------
+    // Accounts for select-lists only (postable/active, with full path)
+    // ---------------------------------------------------------------
+    getSelectableAccounts: builder.query({
+      query: () => "/accounting/accounts/selectable",
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["Account"],
+    }),
+
+    // ---------------------------------------------------------------
+    // Suppliers (الموردون) - "نوع عمل" منفصل مرتبط بحساب مصروف في الشجرة
+    // ---------------------------------------------------------------
+    getSupplierCategories: builder.query({
+      query: () => "/accounting/supplier-categories",
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["SupplierCategory"],
+    }),
+    addSupplierCategory: builder.mutation({
+      query: (body) => ({
+        url: "/accounting/supplier-categories",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["SupplierCategory"],
+    }),
+    getSuppliers: builder.query({
+      query: () => "/accounting/suppliers",
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["Supplier"],
+    }),
+    addSupplier: builder.mutation({
+      query: (body) => ({ url: "/accounting/suppliers", method: "POST", body }),
+      invalidatesTags: ["Supplier", "Account"],
+    }),
+
+    // ---------------------------------------------------------------
+    // Purchase invoices (فواتير الشراء) - كل فاتورة تُصدر سند دفع فورًا
+    // ---------------------------------------------------------------
+    getPurchaseInvoices: builder.query({
+      query: (params = {}) => ({ url: "/accounting/purchase-invoices", params }),
+      transformResponse: parsePaginatedResponse,
+      providesTags: ["PurchaseInvoice"],
+    }),
+    addPurchaseInvoice: builder.mutation({
+      query: (body) => ({
+        url: "/accounting/purchase-invoices",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: [
+        "PurchaseInvoice",
+        "Supplier",
+        "Account",
+        "Transaction",
+        "TrialBalance",
+      ],
+    }),
+    archivePurchaseInvoice: builder.mutation({
+      query: (id) => ({
+        url: `/accounting/purchase-invoices/${id}/archive`,
+        method: "POST",
+      }),
+      invalidatesTags: ["PurchaseInvoice"],
+    }),
+    unarchivePurchaseInvoice: builder.mutation({
+      query: (id) => ({
+        url: `/accounting/purchase-invoices/${id}/unarchive`,
+        method: "POST",
+      }),
+      invalidatesTags: ["PurchaseInvoice"],
+    }),
+    payPurchaseInvoice: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/accounting/purchase-invoices/${id}/pay`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["PurchaseInvoice", "Account", "Transaction", "TrialBalance"],
+    }),
+
+    // ---------------------------------------------------------------
+    // فهرس المواد - للبحث عند إضافة بنود فاتورة شراء (طلب العميل)
+    // ---------------------------------------------------------------
+    getMaterials: builder.query({
+      query: (params = {}) => ({ url: "/accounting/materials", params }),
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["Material"],
+    }),
+    addMaterial: builder.mutation({
+      query: (body) => ({ url: "/accounting/materials", method: "POST", body }),
+      invalidatesTags: ["Material"],
+    }),
+
+    // ---------------------------------------------------------------
+    // Broker commissions (عمولات الوسطاء) - دفع لكل حجز على حدة
+    // ---------------------------------------------------------------
+    payBrokerCommission: builder.mutation({
+      query: ({ bookingId, ...body }) => ({
+        url: `/accounting/bookings/${bookingId}/broker-commission/pay`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: [
+        "BrokerCommission",
+        "Transaction",
+        "Account",
+        "TrialBalance",
+      ],
+    }),
+    getBrokerCommissionHistory: builder.query({
+      query: (params = {}) => ({
+        url: "/accounting/broker-commissions/history",
+        params,
+      }),
+      transformResponse: parsePaginatedResponse,
+      providesTags: ["BrokerCommission"],
     }),
   }),
 });
@@ -339,4 +459,20 @@ export const {
   useLazyGetPayrollHistoryQuery,
   useLazyGetIncomeStatementQuery,
   useLazyGetBalanceSheetQuery,
+  useGetSelectableAccountsQuery,
+  useGetSupplierCategoriesQuery,
+  useAddSupplierCategoryMutation,
+  useGetSuppliersQuery,
+  useAddSupplierMutation,
+  useGetPurchaseInvoicesQuery,
+  useAddPurchaseInvoiceMutation,
+  useArchivePurchaseInvoiceMutation,
+  useUnarchivePurchaseInvoiceMutation,
+  usePayPurchaseInvoiceMutation,
+  useGetMaterialsQuery,
+  useLazyGetMaterialsQuery,
+  useAddMaterialMutation,
+  usePayBrokerCommissionMutation,
+  useGetBrokerCommissionHistoryQuery,
+  useLazyGetBrokerCommissionHistoryQuery,
 } = accountingApi;

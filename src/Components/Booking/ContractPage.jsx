@@ -734,10 +734,6 @@ const CommonPrintingInfo = () => {
         borderRadius: "6px",
         padding: "8px",
       }}>
-        <div style={{ fontSize: "11px", color: "#666", marginBottom: "6px" }}>
-          مستندات من الخادم (روابط موقّعة وآمنة):
-        </div>
-        <BookingDocumentButtons bookingId={bookingId} />
       </div>
 
       {isTemporaryBooking ? <TemporaryContract /> : <PermanentContract />}

@@ -30,10 +30,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {GeneratePdfSummaryButton} from "./GeneratePdfSummaryButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {useGetCustomerOffersQuery } from "../../RtkQuery/Slice/Offers/offersApiSlice"
-
+import BookingsSelectableTable from "./BookingsSelectableTable";
 const CustomerInfo = () => {
   const { id } = useParams();
   const [showAccountStatement, setShowAccountStatement] = useState(false);
@@ -78,6 +79,33 @@ const { data: customerOffersData, isLoading: isOffersLoading } = useGetCustomerO
     openAddPayment
   } = useCustomers({refetch , id});
 
+// New state
+const [pdfMode, setPdfMode] = useState(false);
+const [selectedBookingIds, setSelectedBookingIds] = useState([]);
+
+
+const togglePdfMode = () => {
+  setPdfMode((prev) => !prev);
+  setSelectedBookingIds([]);
+};
+
+const toggleBookingSelection = (bookingId) => {
+  setSelectedBookingIds((prev) =>
+    prev.includes(bookingId)
+      ? prev.filter((id) => id !== bookingId)
+      : [...prev, bookingId]
+  );
+};
+
+const generatePdfSummary = () => {
+  if (selectedBookingIds.length === 0) {
+    alert("يرجى اختيار حجز واحد على الأقل");
+    return;
+  }
+  const idsParam = selectedBookingIds.join(",");
+  window.open(`/dashboard/bookings/print?ids=${idsParam}`, "_blank");
+};
+
 
 const totalBookingAmount = customer?.total || 0; // Get from backend
 
@@ -89,6 +117,8 @@ const totalPrintingSpace = customer?.bookings?.reduce((sum, booking) => {
   }
   return sum + (parseFloat(booking.total_printing_space) || 0);
 }, 0) || 0;
+
+
 
 
 
@@ -1810,24 +1840,64 @@ ${customerData.bookings
         </DialogContent>
       </Dialog>
 
-      {showBookings && (
-        <Card className="mt-6 sm:mt-8 border-0 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-gray-800 dark:to-emerald-900/20 shadow-xl rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
-          <CardContent className="p-4 sm:p-6">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight mb-4 bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-              📅 الحجوزات الخاصة بالزبون
-            </h1>
-            <DynamicTable
-              data={customer?.bookings || []}
-              columns={BookingCustomerColumns}
-              isLoading={isLoadingCustomer}
-              onShow={onShowBookingDetails}
-              permissions={{
-                show: Permissions.ViewBookings,
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
+{showBookings && (
+  <Card className="mt-6 sm:mt-8 border-0 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-gray-800 dark:to-emerald-900/20 shadow-xl rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
+    <CardContent className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+          📅 الحجوزات الخاصة بالزبون
+        </h1>
+        <div className="flex gap-2">
+          <Button
+            onClick={togglePdfMode}
+            className={`gap-2 ${
+              pdfMode
+                ? "bg-gray-500 hover:bg-gray-600"
+                : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+            } text-white`}
+            size="sm"
+          >
+            <Icon icon="mdi:file-pdf-box" className="text-lg" />
+            {pdfMode ? "إلغاء التحديد" : "توليد مجموعة PDF"}
+          </Button>
+
+          {pdfMode && (
+            <GeneratePdfSummaryButton selectedBookingIds={selectedBookingIds} />
+          )}
+        </div>
+      </div>
+
+      <DynamicTable
+        data={customer?.bookings || []}
+        columns={
+          pdfMode
+            ? [
+                {
+                  header: "",
+                  accessor: "id",
+                  cell: ({ row }) => (
+                    <input
+                      type="checkbox"
+                      checked={selectedBookingIds.includes(row.id)}
+                      onChange={() => toggleBookingSelection(row.id)}
+                      className="w-4 h-4 cursor-pointer accent-purple-600"
+                    />
+                  ),
+                  className: "w-10",
+                },
+                ...BookingCustomerColumns,
+              ]
+            : BookingCustomerColumns
+        }
+        isLoading={isLoadingCustomer}
+        onShow={onShowBookingDetails}
+        permissions={{
+          show: Permissions.ViewBookings,
+        }}
+      />
+    </CardContent>
+  </Card>
+)}
 
       {showPayments && (
         <Card className="mt-6 sm:mt-8 border-0 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-gray-800 dark:to-cyan-900/20 shadow-xl rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl">

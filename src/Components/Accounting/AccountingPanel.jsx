@@ -8,6 +8,17 @@ import TrialBalanceTab from "./TrialBalanceTab";
 import CashClosingTab from "./CashClosingTab";
 import PayrollTab from "./PayrollTab";
 import FinancialReportsTab from "./FinancialReportsTab";
+import SuppliersTab from "./SuppliersTab";
+import PurchaseInvoicesTab from "./PurchaseInvoicesTab";
+import BrokerCommissionsTab from "./BrokerCommissionsTab";
+
+// Helper function to count unpaid credit invoices
+const getUnpaidCreditCount = (purchaseInvoices) => {
+  if (!purchaseInvoices) return 0;
+  return purchaseInvoices.filter(
+    invoice => invoice.payment_type === 'credit' && !invoice.is_fully_paid
+  ).length;
+};
 
 /**
  * The single entry point for the Accounting & Company Cashbox Management
@@ -28,7 +39,7 @@ const AccountingPanel = () => {
   return (
     <div className="space-y-4" dir="rtl">
       <Tabs defaultValue="transactions" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 bg-card rounded-lg border border-border h-auto">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-10 bg-card rounded-lg border border-border h-auto">
           <TabsTrigger value="transactions" className="text-xs md:text-sm font-medium">
             المعاملات والسندات
           </TabsTrigger>
@@ -43,6 +54,20 @@ const AccountingPanel = () => {
           </TabsTrigger>
           <TabsTrigger value="payroll" className="text-xs md:text-sm font-medium">
             الرواتب والأجور
+          </TabsTrigger>
+          <TabsTrigger value="suppliers" className="text-xs md:text-sm font-medium">
+            الموردون
+          </TabsTrigger>
+          <TabsTrigger value="purchase-invoices" className="text-xs md:text-sm font-medium relative">
+            فواتير الشراء
+            {getUnpaidCreditCount(accounting.purchaseInvoices) > 0 && (
+              <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                {getUnpaidCreditCount(accounting.purchaseInvoices)}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="broker-commissions" className="text-xs md:text-sm font-medium">
+            عمولات الوسطاء
           </TabsTrigger>
           <TabsTrigger value="reports" className="text-xs md:text-sm font-medium">
             التقارير المالية
@@ -70,6 +95,18 @@ const AccountingPanel = () => {
 
         <TabsContent value="payroll" className="mt-4">
           <PayrollTab accounting={accounting} />
+        </TabsContent>
+
+        <TabsContent value="suppliers" className="mt-4">
+          <SuppliersTab accounting={accounting} />
+        </TabsContent>
+
+        <TabsContent value="purchase-invoices" className="mt-4">
+          <PurchaseInvoicesTab accounting={accounting} />
+        </TabsContent>
+
+        <TabsContent value="broker-commissions" className="mt-4">
+          <BrokerCommissionsTab accounting={accounting} />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-4">

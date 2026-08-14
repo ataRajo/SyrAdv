@@ -79,13 +79,60 @@ const SetSalaryForm = ({ employee, onCancel, onSave, isSaving }) => {
   );
 };
 
-const PaySalaryForm = ({ employee, onCancel, onPay, isPaying }) => {
+const emptyAdjustment = () => ({ reason: "", amount: "" });
+
+const PaySalaryForm = ({ employee, cashAccounts = [], onCancel, onPay, isPaying }) => {
   const [form, setForm] = useState({
     amount: employee?.salary?.amount ?? "",
+    exchange_rate: "",
     date: new Date().toISOString().slice(0, 10),
     notes: "",
+    cashbox_account_id: "",
   });
+  const [bonuses, setBonuses] = useState([]);
+  const [deductions, setDeductions] = useState([]);
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
+
+  const updateAdjustment = (list, setList, index, patch) =>
+    setList(list.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  const removeAdjustment = (list, setList, index) =>
+    setList(list.filter((_, i) => i !== index));
+
+  const bonusesTotal = bonuses.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+  const deductionsTotal = deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+
+  const renderAdjustmentList = (title, list, setList, addLabel) => (
+    <div className="space-y-2 border border-border rounded-md p-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm">{title}</Label>
+        <Button type="button" size="sm" variant="outline" onClick={() => setList((l) => [...l, emptyAdjustment()])}>
+          <Icon icon="mdi:plus" className="w-4 h-4 ml-1" /> {addLabel}
+        </Button>
+      </div>
+      {list.map((item, index) => (
+        <div key={index} className="flex gap-2 items-start">
+          <Input
+            placeholder="السبب"
+            className="flex-[2]"
+            value={item.reason}
+            onChange={(e) => updateAdjustment(list, setList, index, { reason: e.target.value })}
+          />
+          <Input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="المبلغ"
+            className="flex-1"
+            value={item.amount}
+            onChange={(e) => updateAdjustment(list, setList, index, { amount: e.target.value })}
+          />
+          <Button type="button" size="icon" variant="ghost" onClick={() => removeAdjustment(list, setList, index)}>
+            <Icon icon="mdi:trash-can-outline" className="w-4 h-4 text-destructive" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <form
@@ -94,8 +141,16 @@ const PaySalaryForm = ({ employee, onCancel, onPay, isPaying }) => {
         onPay({
           user_id: employee.id,
           ...(form.amount ? { amount: Number(form.amount) } : {}),
+          ...(form.exchange_rate ? { exchange_rate: Number(form.exchange_rate) } : {}),
           ...(form.date ? { date: form.date } : {}),
           ...(form.notes ? { notes: form.notes } : {}),
+          ...(form.cashbox_account_id ? { cashbox_account_id: Number(form.cashbox_account_id) } : {}),
+          ...(bonuses.length > 0
+            ? { bonuses: bonuses.map((b) => ({ reason: b.reason, amount: Number(b.amount) })) }
+            : {}),
+          ...(deductions.length > 0
+            ? { deductions: deductions.map((d) => ({ reason: d.reason, amount: Number(d.amount) })) }
+            : {}),
         });
       }}
       className="space-y-4"
@@ -106,7 +161,18 @@ const PaySalaryForm = ({ employee, onCancel, onPay, isPaying }) => {
         </p>
       )}
       <div className="space-y-2">
-        <Label>المبلغ {employee?.salary && "(اتركه فارغًا لاستخدام الراتب المحدد)"}</Label>
+        <Label>الصندوق / البنك (اختياري - الافتراضي: الصندوق - دولار)</Label>
+        <Select value={form.cashbox_account_id} onValueChange={set("cashbox_account_id")}>
+          <SelectTrigger><SelectValue placeholder="الصندوق - دولار (افتراضي)" /></SelectTrigger>
+          <SelectContent>
+            {cashAccounts.map((a) => (
+              <SelectItem key={a.id} value={String(a.id)}>{a.name} {a.currency === "SYP" ? "(ل.س)" : "($)"}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>المبلغ الأساسي (بالدولار دائمًا - مبلغ الراتب المُعرَّف) {employee?.salary && "(اتركه فارغًا لاستخدام الراتب المحدد)"}</Label>
         <Input
           type="number"
           step="0.01"
@@ -116,6 +182,29 @@ const PaySalaryForm = ({ employee, onCancel, onPay, isPaying }) => {
           onChange={(e) => set("amount")(e.target.value)}
         />
       </div>
+
+      {renderAdjustmentList("مكافآت (اختياري)", bonuses, setBonuses, "إضافة مكافأة")}
+      {renderAdjustmentList("حسومات / عقوبات / تأخير (اختياري)", deductions, setDeductions, "إضافة حسم")}
+      {(bonusesTotal > 0 || deductionsTotal > 0) && (
+        <p className="text-sm font-medium">
+          الصافي التقديري: {fmt((Number(form.amount) || employee?.salary?.amount || 0) + bonusesTotal - deductionsTotal)}
+        </p>
+      )}
+
+      {cashAccounts.find((a) => String(a.id) === String(form.cashbox_account_id))?.currency === "SYP" && (
+        <div className="space-y-2">
+          <Label>سعر الصرف (كم ليرة = 1 دولار)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="مثال: 15000"
+            value={form.exchange_rate}
+            onChange={(e) => set("exchange_rate")(e.target.value)}
+            required
+          />
+        </div>
+      )}
       <div className="space-y-2">
         <Label>التاريخ</Label>
         <Input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} />
@@ -143,17 +232,24 @@ const PayrollTab = ({ accounting }) => {
     payEmployeeSalary,
     isPayingSalary,
     payrollHistory,
+    payrollHistoryMeta,
     isFetchingPayrollHistory,
     loadPayrollHistory,
     handleOpenVoucher,
+    cashAccounts,
   } = accounting;
 
   const safePayrollHistory = Array.isArray(payrollHistory) ? payrollHistory : [];
 
-
   const [salaryDialogEmployee, setSalaryDialogEmployee] = useState(null);
   const [payDialogEmployee, setPayDialogEmployee] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [dateFilter, setDateFilter] = useState("");
+
+   const filteredPayrollHistory = dateFilter
+    ? safePayrollHistory.filter((entry) => entry.entry_date === dateFilter)
+    : safePayrollHistory;
+
 
   return (
     <div className="space-y-4">
@@ -174,14 +270,14 @@ const PayrollTab = ({ accounting }) => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm text-center">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
-                <th className="p-2 text-right">الموظف</th>
-                <th className="p-2 text-right">القسم</th>
-                <th className="p-2 text-right">الراتب المحدد</th>
-                <th className="p-2 text-right">النوع</th>
-                <th className="p-2 text-right">ساري من</th>
+                <th className="p-2 text-center">الموظف</th>
+                <th className="p-2 text-center">القسم</th>
+                <th className="p-2 text-center">الراتب المحدد</th>
+                <th className="p-2 text-center">النوع</th>
+                <th className="p-2 text-center">ساري من</th>
                 <th className="p-2 text-center">إجراءات</th>
               </tr>
             </thead>
@@ -194,12 +290,12 @@ const PayrollTab = ({ accounting }) => {
               )}
               {payrollEmployees.map((emp) => (
                 <tr key={emp.id} className="border-b border-border/50 hover:bg-muted/30">
-                  <td className="p-2">{emp.name}</td>
-                  <td className="p-2 text-xs text-muted-foreground">{emp.department || "-"}</td>
-                  <td className="p-2 font-mono">{emp.salary ? fmt(emp.salary.amount) : "-"}</td>
-                  <td className="p-2 text-xs">{emp.salary ? SALARY_TYPE_LABELS[emp.salary.salary_type] : "-"}</td>
-                  <td className="p-2 text-xs">{emp.salary?.effective_from ?? "-"}</td>
-                  <td className="p-2">
+                  <td className="p-2 text-center">{emp.name}</td>
+                  <td className="p-2 text-xs text-muted-foreground text-center">{emp.department || "-"}</td>
+                  <td className="p-2 font-mono text-center">{emp.salary ? fmt(emp.salary.amount) : "-"}</td>
+                  <td className="p-2 text-xs text-center">{emp.salary ? SALARY_TYPE_LABELS[emp.salary.salary_type] : "-"}</td>
+                  <td className="p-2 text-xs text-center">{emp.salary?.effective_from ?? "-"}</td>
+                  <td className="p-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Button size="sm" variant="outline" onClick={() => setSalaryDialogEmployee(emp)}>
                         <Icon icon="mdi:pencil" className="w-3.5 h-3.5 ml-1" />
@@ -217,51 +313,100 @@ const PayrollTab = ({ accounting }) => {
           </table>
         </div>
       </div>
-
-      {showHistory && (
+      
+{showHistory && (
         <div className="border border-border rounded-lg bg-card">
-          <div className="p-4 border-b border-border">
+          <div className="p-4 border-b border-border flex items-center justify-between flex-wrap gap-3">
             <h3 className="font-semibold">سجل صرف الرواتب والأجور</h3>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                className="h-8 w-36"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+              />
+              {dateFilter && (
+                <Button size="sm" variant="ghost" className="h-8" onClick={() => setDateFilter("")}>
+                  مسح
+                </Button>
+              )}
+            </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-center">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
-                  <th className="p-2 text-right">التاريخ</th>
-                  <th className="p-2 text-right">رقم السند</th>
-                  <th className="p-2 text-right">البيان</th>
-                  <th className="p-2 text-left">المبلغ</th>
+                  <th className="p-2 text-center">التاريخ</th>
+                  <th className="p-2 text-center">رقم السند</th>
+                  <th className="p-2 text-center">البيان</th>
+                  <th className="p-2 text-center">المبلغ</th>
                   <th className="p-2 text-center">طباعة</th>
                 </tr>
               </thead>
               <tbody>
-                
-
-{isFetchingPayrollHistory && (
-    <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
-  )}
-  {!isFetchingPayrollHistory && safePayrollHistory.length === 0 && (
-    <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">لا يوجد سجل بعد</td></tr>
-  )}
-  {safePayrollHistory.map((entry) => (
-    <tr key={entry.id} className="border-b border-border/50">
-      <td className="p-2 text-xs">{entry.entry_date}</td>
-      <td className="p-2 font-mono text-xs">{entry.voucher_number || entry.entry_number}</td>
-      <td className="p-2 max-w-[260px] truncate" title={entry.description}>{entry.description}</td>
-      <td className="p-2 font-mono">{fmt(entry.total_debit)}</td>
-      <td className="p-2 text-center">
-        {entry.voucher_number && (
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleOpenVoucher(entry.id)}>
-            <Icon icon="mdi:printer-outline" className="w-4 h-4" />
-          </Button>
-        )}
-      </td>
-    </tr>
-  ))}
-
+                {isFetchingPayrollHistory && (
+                  <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+                )}
+                {!isFetchingPayrollHistory && filteredPayrollHistory.length === 0 && (
+                  <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">لا يوجد سجل بعد</td></tr>
+                )}
+                {filteredPayrollHistory.map((entry) => {
+                  const adjustments = entry.payroll_adjustments ?? [];
+                  const adjustmentsTitle = adjustments
+                    .map((a) => `${a.type === "bonus" ? "+ مكافأة" : "- حسم"}: ${a.reason} (${fmt(a.amount)})`)
+                    .join("\n");
+                  return (
+                    <tr key={entry.id} className="border-b border-border/50">
+                      <td className="p-2 text-xs text-center">{entry.entry_date}</td>
+                      <td className="p-2 font-mono text-xs text-center">{entry.voucher_number || entry.entry_number}</td>
+                      <td className="p-2 max-w-[260px] truncate text-center" title={entry.description}>
+                        {entry.description}
+                        {adjustments.length > 0 && (
+                          <span
+                            className="inline-block mr-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 cursor-help"
+                            title={adjustmentsTitle}
+                          >
+                            {adjustments.length} تعديل
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 font-mono text-center">{fmt(entry.total_debit)}</td>
+                      <td className="p-2 text-center">
+                        {entry.voucher_number && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleOpenVoucher(entry.id)}>
+                            <Icon icon="mdi:printer-outline" className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          {payrollHistoryMeta?.total_pages > 1 && (
+            <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={payrollHistoryMeta.current_page <= 1}
+                onClick={() => loadPayrollHistory({ page: (payrollHistoryMeta.current_page || 1) - 1 })}
+              >
+                السابق
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                صفحة {payrollHistoryMeta.current_page} من {payrollHistoryMeta.total_pages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={payrollHistoryMeta.current_page >= payrollHistoryMeta.total_pages}
+                onClick={() => loadPayrollHistory({ page: (payrollHistoryMeta.current_page || 1) + 1 })}
+              >
+                التالي
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -285,6 +430,7 @@ const PayrollTab = ({ accounting }) => {
           <DialogHeader><DialogTitle>صرف راتب {payDialogEmployee?.name}</DialogTitle></DialogHeader>
           <PaySalaryForm
             employee={payDialogEmployee}
+            cashAccounts={cashAccounts}
             onCancel={() => setPayDialogEmployee(null)}
             onPay={async (data) => {
               const ok = await payEmployeeSalary(data);

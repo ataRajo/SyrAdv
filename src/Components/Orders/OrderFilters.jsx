@@ -165,7 +165,7 @@ const OrderFilters = ({
           iconBg="bg-green-100"
           iconColor="text-green-600"
           title="التصفية حسب تاريخ الفك/التركيب:"
-          value={new Date(selectedDate).toLocaleDateString('ar-EG')}
+value={new Date(selectedDate).toLocaleDateString('ar-EG')}
           onClear={() => setSelectedDate("")}
           gradientFrom="from-green-50"
           gradientTo="to-emerald-50"

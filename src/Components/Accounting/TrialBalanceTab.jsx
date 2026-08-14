@@ -31,24 +31,25 @@ const TrialBalanceTab = ({ accounting }) => {
       </div>
 
       <div className="border border-border rounded-lg bg-card overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm text-center">
           <thead>
             <tr className="border-b border-border text-muted-foreground">
-              <th className="p-2 text-right">الرمز</th>
-              <th className="p-2 text-right">اسم الحساب</th>
-              <th className="p-2 text-right">النوع</th>
-              <th className="p-2 text-right">الطبيعة</th>
-              <th className="p-2 text-left">الرصيد</th>
+              <th className="p-2 text-center">الرمز</th>
+              <th className="p-2 text-center">اسم الحساب</th>
+              <th className="p-2 text-center">النوع</th>
+              <th className="p-2 text-center">الطبيعة</th>
+              <th className="p-2 text-center">الرصيد</th>
             </tr>
           </thead>
           <tbody>
             {(trialBalance.accounts ?? []).map((a) => (
               <tr key={a.id} className="border-b border-border/50">
-                <td className="p-2 font-mono text-xs">{a.code}</td>
-                <td className="p-2">{a.name}</td>
-                <td className="p-2 text-xs text-muted-foreground">{a.type}</td>
-                <td className="p-2 text-xs text-muted-foreground">{a.normal_balance === "debit" ? "مدين" : "دائن"}</td>
-                <td className={`p-2 font-mono ${Number(a.balance) < 0 ? "text-emerald-600" : ""}`}>
+                <td className="p-2 font-mono text-xs text-center">{a.code}</td>
+                <td className="p-2 text-center">{a.name}</td>
+                <td className="p-2 text-xs text-muted-foreground text-center">{a.type}</td>
+                <td className="p-2 text-xs text-muted-foreground text-center">{a.normal_balance === "debit" ? "مدين" : "دائن"}</td>
+                <td className={`p-2 font-mono text-center ${Number(a.balance) < 0 ? "text-emerald-600" : ""}`}>
+                  {a.currency === "SYP" ? "ل.س " : "$"}
                   {fmt(a.balance)}
                 </td>
               </tr>

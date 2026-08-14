@@ -27,6 +27,20 @@ import {
   useLazyGetPayrollHistoryQuery,
   useLazyGetIncomeStatementQuery,
   useLazyGetBalanceSheetQuery,
+  useGetSelectableAccountsQuery,
+  useGetSupplierCategoriesQuery,
+  useAddSupplierCategoryMutation,
+  useGetSuppliersQuery,
+  useAddSupplierMutation,
+  useGetPurchaseInvoicesQuery,
+  useAddPurchaseInvoiceMutation,
+  useArchivePurchaseInvoiceMutation,
+  useUnarchivePurchaseInvoiceMutation,
+  usePayPurchaseInvoiceMutation,
+  useLazyGetMaterialsQuery,
+  useAddMaterialMutation,
+  usePayBrokerCommissionMutation,
+  useLazyGetBrokerCommissionHistoryQuery,
 } from "../RtkQuery/Slice/Accounting/AccountingApi";
 
 /**
@@ -399,9 +413,16 @@ const transactions = Array.isArray(transactionsResponse?.data)
     useGetTrialBalanceQuery();
 
   // ---- Cash register closing (تقفيل الصندوق اليومي) --------------------------
-  const [cashClosingFilters, setCashClosingFilters] = useState({ status: "pending" });
-  const { data: cashClosings = [], isFetching: isFetchingCashClosings } =
+  const [cashClosingFilters, setCashClosingFilters] = useState({ status: "pending", page: 1 });
+  const { data: cashClosingsResponse, isFetching: isFetchingCashClosings } =
     useGetCashClosingsQuery(cashClosingFilters);
+  const cashClosings = cashClosingsResponse?.data ?? [];
+  const cashClosingsMeta = cashClosingsResponse?.meta ?? {
+    total: 0,
+    per_page: 20,
+    current_page: 1,
+    total_pages: 1,
+  };
 
   const [previewCashClosingTrigger, { data: cashClosingPreview, isFetching: isPreviewingCashClosing }] =
     useLazyPreviewCashClosingQuery();
@@ -486,8 +507,16 @@ const transactions = Array.isArray(transactionsResponse?.data)
   const [payEmployeeSalaryMutation, { isLoading: isPayingSalary }] =
     usePayEmployeeSalaryMutation();
     
-    const [fetchPayrollHistory, { data: payrollHistory = [], isFetching: isFetchingPayrollHistory }] =
+    const [fetchPayrollHistory, { data: payrollHistoryResponse, isFetching: isFetchingPayrollHistory }] =
     useLazyGetPayrollHistoryQuery();
+  const payrollHistory = payrollHistoryResponse?.data ?? [];
+  const payrollHistoryMeta = payrollHistoryResponse?.meta ?? {
+    total: 0,
+    per_page: 20,
+    current_page: 1,
+    total_pages: 1,
+  };
+  const [payrollHistoryFilters, setPayrollHistoryFilters] = useState({ page: 1 });
 
 
 
@@ -521,9 +550,11 @@ const transactions = Array.isArray(transactionsResponse?.data)
 
   const loadPayrollHistory = useCallback(
     (filters = {}) => {
-      fetchPayrollHistory(filters);
+      const merged = { ...payrollHistoryFilters, ...filters };
+      setPayrollHistoryFilters(merged);
+      fetchPayrollHistory(merged);
     },
-    [fetchPayrollHistory]
+    [fetchPayrollHistory, payrollHistoryFilters]
   );
 
 
@@ -549,6 +580,210 @@ const transactions = Array.isArray(transactionsResponse?.data)
       fetchBalanceSheet(asOfDate ? { as_of_date: asOfDate } : {});
     },
     [fetchBalanceSheet]
+  );
+
+  // ---- Accounts for select-lists (postable/active, with full path) -------
+  const { data: selectableAccounts = [], isFetching: isFetchingSelectableAccounts } =
+    useGetSelectableAccountsQuery();
+
+  // ---- Suppliers (الموردون) ------------------------------------------------
+  const { data: supplierCategories = [], isFetching: isFetchingSupplierCategories } =
+    useGetSupplierCategoriesQuery();
+  const [addSupplierCategoryMutation, { isLoading: isSavingSupplierCategory }] =
+    useAddSupplierCategoryMutation();
+  const { data: suppliers = [], isFetching: isFetchingSuppliers } =
+    useGetSuppliersQuery();
+  const [addSupplierMutation, { isLoading: isSavingSupplier }] =
+    useAddSupplierMutation();
+
+  const addSupplierCategory = useCallback(
+    async (data) => {
+      try {
+        await addSupplierCategoryMutation(data).unwrap();
+        toast.success("تم إنشاء فئة الموردين بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل إنشاء فئة الموردين");
+        return false;
+      }
+    },
+    [addSupplierCategoryMutation]
+  );
+
+  const addSupplier = useCallback(
+    async (data) => {
+      try {
+        await addSupplierMutation(data).unwrap();
+        toast.success("تم إضافة المورد بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل إضافة المورد");
+        return false;
+      }
+    },
+    [addSupplierMutation]
+  );
+
+  // ---- Purchase invoices (فواتير الشراء) -----------------------------------
+  const [purchaseInvoiceFilters, setPurchaseInvoiceFilters] = useState({ page: 1 });
+  const { data: purchaseInvoicesResponse, isFetching: isFetchingPurchaseInvoices } =
+    useGetPurchaseInvoicesQuery(purchaseInvoiceFilters);
+  const purchaseInvoices = purchaseInvoicesResponse?.data ?? [];
+  const purchaseInvoicesMeta = purchaseInvoicesResponse?.meta ?? {
+    total: 0,
+    per_page: 20,
+    current_page: 1,
+    total_pages: 1,
+  };
+  const [addPurchaseInvoiceMutation, { isLoading: isSavingPurchaseInvoice }] =
+    useAddPurchaseInvoiceMutation();
+
+  const addPurchaseInvoice = useCallback(
+    async (data) => {
+      try {
+        await addPurchaseInvoiceMutation(data).unwrap();
+        toast.success("تم تسجيل فاتورة الشراء وإصدار سند الدفع بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تسجيل فاتورة الشراء");
+        return false;
+      }
+    },
+    [addPurchaseInvoiceMutation]
+  );
+
+  /**
+   * سند دفع فاتورة الشراء - يعيد استخدام نفس مسار سند الصرف العادي
+   * (VoucherController::show) الذي يفتحه handleOpenVoucher أعلاه بالضبط،
+   * فقط نستخرج معرّف القيد من payment_journal_entry_id.
+   */
+  const openPurchaseInvoiceVoucher = useCallback(
+    (invoice) => {
+      if (!invoice?.payment_journal_entry_id) {
+        toast.error("لا يوجد سند دفع لهذه الفاتورة");
+        return;
+      }
+      handleOpenVoucher(invoice.payment_journal_entry_id);
+    },
+    [handleOpenVoucher]
+  );
+
+  const [archivePurchaseInvoiceMutation, { isLoading: isArchivingPurchaseInvoice }] =
+    useArchivePurchaseInvoiceMutation();
+  const [unarchivePurchaseInvoiceMutation, { isLoading: isUnarchivingPurchaseInvoice }] =
+    useUnarchivePurchaseInvoiceMutation();
+
+  const archivePurchaseInvoice = useCallback(
+    async (id) => {
+      try {
+        await archivePurchaseInvoiceMutation(id).unwrap();
+        toast.success("تمت أرشفة الفاتورة");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشلت الأرشفة");
+        return false;
+      }
+    },
+    [archivePurchaseInvoiceMutation]
+  );
+
+  const unarchivePurchaseInvoice = useCallback(
+    async (id) => {
+      try {
+        await unarchivePurchaseInvoiceMutation(id).unwrap();
+        toast.success("تمت استعادة الفاتورة من الأرشيف");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشلت الاستعادة");
+        return false;
+      }
+    },
+    [unarchivePurchaseInvoiceMutation]
+  );
+
+  const [payPurchaseInvoiceMutation, { isLoading: isPayingPurchaseInvoice }] =
+    usePayPurchaseInvoiceMutation();
+
+  const payPurchaseInvoice = useCallback(
+    async (id, data = {}) => {
+      try {
+        await payPurchaseInvoiceMutation({ id, ...data }).unwrap();
+        toast.success("تم تسجيل الدفعة بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تسجيل الدفعة");
+        return false;
+      }
+    },
+    [payPurchaseInvoiceMutation]
+  );
+
+  // ---- فهرس المواد (طلب العميل: البحث عن المادة وكميتها) ------------------
+  const [fetchMaterials, { data: materials = [], isFetching: isFetchingMaterials }] =
+    useLazyGetMaterialsQuery();
+  const [addMaterialMutation, { isLoading: isSavingMaterial }] = useAddMaterialMutation();
+
+  const searchMaterials = useCallback(
+    (search = "") => {
+      fetchMaterials(search ? { search } : {});
+    },
+    [fetchMaterials]
+  );
+
+  const addMaterial = useCallback(
+    async (data) => {
+      try {
+        const result = await addMaterialMutation(data).unwrap();
+        return result?.data ?? null;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل إضافة المادة");
+        return null;
+      }
+    },
+    [addMaterialMutation]
+  );
+
+  // ---- Broker commissions (عمولات الوسطاء) --------------------------------
+  const [payBrokerCommissionMutation, { isLoading: isPayingCommission }] =
+    usePayBrokerCommissionMutation();
+  const [
+    fetchBrokerCommissionHistory,
+    { data: brokerCommissionHistoryResponse, isFetching: isFetchingBrokerCommissionHistory },
+  ] = useLazyGetBrokerCommissionHistoryQuery();
+  const brokerCommissionHistory = brokerCommissionHistoryResponse?.data ?? [];
+  const brokerCommissionHistoryMeta = brokerCommissionHistoryResponse?.meta ?? {
+    total: 0,
+    per_page: 20,
+    current_page: 1,
+    total_pages: 1,
+  };
+  const [brokerCommissionHistoryFilters, setBrokerCommissionHistoryFilters] = useState({ page: 1 });
+
+  const payBrokerCommission = useCallback(
+    async (bookingId, data = {}) => {
+      if (!bookingId) {
+        toast.error("رقم الحجز مطلوب");
+        return false;
+      }
+      try {
+        await payBrokerCommissionMutation({ bookingId, ...data }).unwrap();
+        toast.success("تم دفع عمولة الوسيط بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل دفع عمولة الوسيط");
+        return false;
+      }
+    },
+    [payBrokerCommissionMutation]
+  );
+
+  const loadBrokerCommissionHistory = useCallback(
+    (filters = {}) => {
+      const merged = { ...brokerCommissionHistoryFilters, ...filters };
+      setBrokerCommissionHistoryFilters(merged);
+      fetchBrokerCommissionHistory(merged);
+    },
+    [fetchBrokerCommissionHistory, brokerCommissionHistoryFilters]
   );
 
   return {
@@ -628,6 +863,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     cashClosingFilters,
     setCashClosingFilters,
     cashClosings,
+    cashClosingsMeta,
     isFetchingCashClosings,
     cashClosingPreview,
     isPreviewingCashClosing,
@@ -646,6 +882,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     payEmployeeSalary,
     isPayingSalary,
     payrollHistory,
+    payrollHistoryMeta,
     isFetchingPayrollHistory,
     loadPayrollHistory,
 
@@ -656,6 +893,49 @@ const transactions = Array.isArray(transactionsResponse?.data)
     balanceSheet,
     isFetchingBalanceSheet,
     loadBalanceSheet,
+
+    // Accounts for select-lists
+    selectableAccounts,
+    isFetchingSelectableAccounts,
+
+    // Suppliers
+    supplierCategories,
+    isFetchingSupplierCategories,
+    addSupplierCategory,
+    isSavingSupplierCategory,
+    suppliers,
+    isFetchingSuppliers,
+    addSupplier,
+    isSavingSupplier,
+
+    // Purchase invoices
+    purchaseInvoices,
+    purchaseInvoicesMeta,
+    purchaseInvoiceFilters,
+    setPurchaseInvoiceFilters,
+    isFetchingPurchaseInvoices,
+    addPurchaseInvoice,
+    isSavingPurchaseInvoice,
+    openPurchaseInvoiceVoucher,
+    archivePurchaseInvoice,
+    isArchivingPurchaseInvoice,
+    unarchivePurchaseInvoice,
+    isUnarchivingPurchaseInvoice,
+    payPurchaseInvoice,
+    isPayingPurchaseInvoice,
+    materials,
+    isFetchingMaterials,
+    searchMaterials,
+    addMaterial,
+    isSavingMaterial,
+
+    // Broker commissions
+    payBrokerCommission,
+    isPayingCommission,
+    brokerCommissionHistory,
+    brokerCommissionHistoryMeta,
+    isFetchingBrokerCommissionHistory,
+    loadBrokerCommissionHistory,
   };
 };
 

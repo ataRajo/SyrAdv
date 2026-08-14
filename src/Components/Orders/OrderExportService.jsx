@@ -698,13 +698,182 @@ class OrderExportService {
       color: #64748b;
       font-size: 12px;
     }
+
+    /* ============ جدول أوامر الورشة (مجمّع حسب المنطقة) ============ */
+
+    .workshop-table {
+      font-size: 10px;
+      table-layout: fixed;
+      width: 100%;
+    }
+    .workshop-table td {
+      vertical-align: middle;
+      word-wrap: break-word;
+    }
+    .workshop-table tbody tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    /* سطر عنوان المنطقة: يفصل كتلة عن كتلة بصريًا، ولا يُترك وحيدًا في
+       أسفل الصفحة بفضل page-break-after أدناه. */
+    .region-header td {
+      background: #1e293b;
+      color: #fff;
+      text-align: right;
+      padding: 8px 12px;
+      font-size: 12px;
+      border: none;
+    }
+    .region-header .region-title {
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .region-header .region-city {
+      opacity: 0.75;
+      margin-right: 10px;
+      font-size: 11px;
+    }
+    .region-header .region-meta {
+      float: left;
+      opacity: 0.85;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .region-block + .region-block .region-header td {
+      border-top: 3px solid #fff;
+    }
+
+    .serial-cell {
+      font-weight: bold;
+      color: #64748b;
+      font-size: 10px;
+    }
+    .region-cell {
+      font-size: 9px;
+      color: #475569;
+    }
+    .model-name {
+      font-weight: bold;
+      font-size: 11px;
+      color: #1e293b;
+    }
+    .model-size {
+      font-size: 9px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .direction-cell {
+      text-align: right;
+      font-size: 9px;
+      line-height: 1.4;
+    }
+
+    /* خانة العدد هي بيت القصيد: الورشة تقرأ منها كم لوحة في هذا السطر. */
+    .count-cell {
+      background: #eef2ff;
+    }
+    .count-boards {
+      font-size: 18px;
+      font-weight: bold;
+      color: #3730a3;
+      line-height: 1;
+    }
+    .count-label {
+      font-size: 9px;
+      color: #4f46e5;
+      margin-right: 2px;
+    }
+    .count-faces {
+      font-size: 8px;
+      color: #6366f1;
+      margin-top: 3px;
+    }
+
+    .codes-cell {
+      text-align: right;
+    }
+    .code-list {
+      display: block;
+      line-height: 1.7;
+    }
+    .code-chip {
+      display: inline-block;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+      padding: 1px 4px;
+      margin: 1px;
+      font-size: 9px;
+      font-family: 'Courier New', monospace;
+      color: #334155;
+      white-space: nowrap;
+    }
+
+    .note-line {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    /* مربع توقيع/تأشير لفريق الورشة عند إنجاز السطر. */
+    .done-cell {
+      background: #fff;
+    }
+    .done-cell::before {
+      content: '';
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #94a3b8;
+      border-radius: 3px;
+    }
+
+    .region-summary {
+      margin: 0 0 25px 0;
+      padding: 14px 18px;
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+    }
+    .region-summary h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #1e293b;
+    }
+    .region-summary-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .region-summary-item {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+    .region-summary-item b {
+      color: #3730a3;
+    }
+
     @media print {
-      .no-print {
-        display: none;
-      }
-      .page-break {
-        page-break-before: always;
-      }
+      /* التقرير أفقي: 12 عمودًا لا تتسع في A4 عمودي، والوضع الأفقي وحده
+         يوفّر نحو ثلث عدد الصفحات قبل احتساب أثر الدمج. */
+      @page { size: A4 landscape; margin: 10mm; }
+
+      .no-print { display: none; }
+
+      /* تكرار رؤوس الأعمدة في كل صفحة - بدونها تصبح الصفحة الثانية
+         أرقامًا بلا عناوين. */
+      thead { display: table-header-group; }
+
+      /* لا يُقطع سطر في منتصفه، ولا يبقى عنوان منطقة وحيدًا في أسفل
+         صفحة. هذا ما يستبدل الفاصل الثابت كل 20 سطرًا الذي كان يقطع
+         الجدول في مكان عشوائي بصرف النظر عن المنطقة. */
+      tr { page-break-inside: avoid; break-inside: avoid; }
+      .region-header { page-break-after: avoid; break-after: avoid; }
+
+      .region-summary { page-break-after: avoid; }
+      .footer { page-break-before: avoid; }
     }
   `;
 
@@ -732,8 +901,8 @@ class OrderExportService {
           <span style="font-size: 14px; color: #1e293b;">${selectedCustomerName}</span>
         </div>
         <div>
-          <strong>عدد الطلبات:</strong><br>
-          <span style="font-size: 14px; color: #1e293b;">${orders.length}</span>
+          <strong>حجم العمل:</strong><br>
+          <span style="font-size: 14px; color: #1e293b;">${this.getWorkshopStats(orders).boards} لوحة في ${this.getWorkshopStats(orders).lines} سطر (${this.getWorkshopStats(orders).regions} منطقة)</span>
         </div>
         <div>
           <strong>تاريخ التقرير:</strong><br>
@@ -746,30 +915,18 @@ class OrderExportService {
       </div>
     </div>
     
-    <table cellspacing="0" cellpadding="0">
-      <thead>
-        <tr>
-          <th style="width: 60px;">النموذج</th>
-          <th style="width: 50px;">عدد الأوجه</th>
-          <th style="width: 70px;">المنطقة</th>
-          <th style="width: 100px;">الاتجاه</th>
-          <th style="width: 120px;">فك (المعلن القديم)</th>
-          <th style="width: 120px;">تركيب (المعلن الجديد)</th>
-          <th style="width: 80px;">تاريخ الفك/التركيب</th>
-          <th style="width: 90px;">الملاحظات</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${orders.map((order, index) => this.getOrderRow(order, index)).join('')}
-      </tbody>
-    </table>
+    ${this.getWorkshopRegionIndex(orders)}
+
+    ${this.getWorkshopTable(orders)}
     
     <div class="footer">
       <div style="margin-bottom: 20px;">
         <div style="background: #f8fafc; padding: 12px; border-radius: 8px; display: inline-block;">
           <strong>ملخص التقرير:</strong>
           <div style="margin-top: 10px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; font-size: 12px;">
-            <div>عدد الطلبات: <strong>${orders.length}</strong></div>
+            <div>إجمالي اللوحات: <strong>${this.getWorkshopStats(orders).boards}</strong></div>
+            <div>عدد الأسطر: <strong>${this.getWorkshopStats(orders).lines}</strong></div>
+            <div>عدد المناطق: <strong>${this.getWorkshopStats(orders).regions}</strong></div>
             <div>تاريخ الإنشاء: <strong>${formattedReportDate}</strong></div>
             <div>وقت الإنشاء: <strong>${formattedReportTime}</strong></div>
           </div>
@@ -789,6 +946,371 @@ class OrderExportService {
       };
     </script>
   `;
+
+  /* ==================================================================
+   *  تجميع أوامر الورشة
+   * ==================================================================
+   *  المشكلة: كل لوحة كانت تُطبع في سطر مستقل، فحجز فيه 40 لوحة متطابقة
+   *  في المنطقة والنموذج والقياس والاتجاه يخرج في 40 سطرًا موزّعة على
+   *  صفحتين، وأسطر المنطقة الواحدة متناثرة بين المناطق الأخرى - فتضطر
+   *  الورشة للتنقل بين المناطق ذهابًا وإيابًا.
+   *
+   *  الحل هنا على مستويين:
+   *   1) دمج اللوحات المتطابقة في سطر واحد يحمل العدد وأرقام اللوحات.
+   *   2) ترتيب الأسطر ضمن أقسام: كل منطقة كتلة متصلة، تُنجزها الورشة
+   *      كاملة قبل الانتقال للمنطقة التالية.
+   * ================================================================== */
+
+  WORKSHOP_TYPE_LABELS = { 1: 'فك', 2: 'تركيب', 3: 'فك وتركيب', 4: 'صيانة' };
+
+  workshopText = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  };
+
+  /**
+   * تاريخ موحّد للمقارنة: 'YYYY-MM-DD' مأخوذ من النص مباشرة.
+   * لا يمرّ عبر new Date() لأن '2026-08-11' تُقرأ كـ UTC فتظهر يومًا
+   * أسبق في أي متصفح غرب غرينتش - وهذا يفصل لوحتين ليومهما نفسه.
+   */
+  workshopDateKey = (value) => {
+    if (!value) return '';
+    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+  };
+
+  workshopDateLabel = (dateKey) => {
+    if (!dateKey) return 'غير محدد';
+    const [y, m, d] = dateKey.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  /** أسماء المعلن القديم/الجديد - نفس منطق getOrderRow مع إضافة نوع الصيانة. */
+  getWorkshopCustomers = (order) => {
+    const current = order.customer?.company_name || order.customer?.full_name || '';
+    const incoming = order.customer_new?.company_name || order.customer_new?.full_name || '';
+    const type = Number(order.type);
+
+    if (type === 1) return { oldCustomer: current || 'غير محدد', newCustomer: '-' };
+    if (type === 2) return { oldCustomer: '-', newCustomer: incoming || current || 'غير محدد' };
+    if (type === 3) {
+      return {
+        oldCustomer: current || 'المعلن القديم',
+        newCustomer: incoming || 'المعلن الجديد',
+      };
+    }
+    return { oldCustomer: current || 'غير محدد', newCustomer: '-' };
+  };
+
+  /**
+   * مفتاح الدمج: منطقة + مدينة + نموذج + قياس + اتجاه + عدد الأوجه + نوع
+   * الأمر + التاريخ + المعلن القديم + المعلن الجديد.
+   *
+   * النوع والتاريخ والمعلنان جزء من المفتاح عمدًا: دمج فك مع تركيب، أو
+   * دمج لوحتين لمعلنَين مختلفين في سطر واحد، يعطي الورشة أمرًا خاطئًا.
+   * أرقام اللوحات والملاحظات خارج المفتاح - هي ما يُجمَّع داخل السطر.
+   */
+  buildWorkshopKey = (order) => {
+    const roadSign = order.road_sign || {};
+    const template = roadSign.template || {};
+    const { oldCustomer, newCustomer } = this.getWorkshopCustomers(order);
+
+    return [
+      this.workshopText(roadSign.city?.name),
+      this.workshopText(roadSign.region?.name),
+      this.workshopText(template.model),
+      this.workshopText(template.size),
+      this.workshopText(roadSign.directions),
+      this.workshopText(roadSign.faces_number || 1),
+      Number(order.type) || 0,
+      this.workshopDateKey(order.action_date),
+      this.workshopText(oldCustomer),
+      this.workshopText(newCustomer),
+    ].join(' ¦ ');
+  };
+
+  /**
+   * يحوّل مصفوفة الطلبات إلى أقسام مناطق، وكل قسم أسطر مدموجة.
+   */
+  groupOrdersForWorkshop = (orders = []) => {
+    // التجميع يُستدعى عدة مرات في التصدير الواحد (الفهرس، الجدول، الرأس،
+    // التذييل). النتيجة تُحفظ مقابل مرجع المصفوفة نفسه فلا يُعاد الحساب.
+    if (this._workshopCacheSource === orders && this._workshopCache) {
+      return this._workshopCache;
+    }
+
+    const regions = new Map();
+
+    orders.forEach((order) => {
+      const roadSign = order.road_sign || {};
+      const template = roadSign.template || {};
+      const cityName = this.workshopText(roadSign.city?.name) || 'مدينة غير محددة';
+      const regionName = this.workshopText(roadSign.region?.name) || 'منطقة غير محددة';
+      const regionKey = `${cityName} ¦ ${regionName}`;
+
+      if (!regions.has(regionKey)) {
+        regions.set(regionKey, { regionKey, regionName, cityName, groups: new Map() });
+      }
+
+      const region = regions.get(regionKey);
+      const key = this.buildWorkshopKey(order);
+
+      if (!region.groups.has(key)) {
+        const { oldCustomer, newCustomer } = this.getWorkshopCustomers(order);
+        const type = Number(order.type) || 0;
+        const dateKey = this.workshopDateKey(order.action_date);
+
+        region.groups.set(key, {
+          key,
+          cityName,
+          regionName,
+          model: this.workshopText(template.model) || 'غير محدد',
+          size: this.workshopText(template.size),
+          direction: this.workshopText(roadSign.directions) || 'غير محددة',
+          facesPerBoard: Number(roadSign.faces_number) || 1,
+          type,
+          typeLabel: this.WORKSHOP_TYPE_LABELS[type] || 'غير محدد',
+          dateKey,
+          dateLabel: this.workshopDateLabel(dateKey),
+          oldCustomer,
+          newCustomer,
+          codes: [],
+          orderIds: [],
+          notes: [],
+        });
+      }
+
+      const group = region.groups.get(key);
+      const code = this.workshopText(roadSign.roadsign_code) || `#${order.id}`;
+      group.codes.push(code);
+      group.orderIds.push(order.id);
+
+      const note = this.workshopText(order.notes);
+      if (note) group.notes.push({ code, note });
+    });
+
+    const collator = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
+
+    const result = Array.from(regions.values())
+      .map((region) => {
+        const groups = Array.from(region.groups.values()).map((group) => {
+          group.codes.sort(collator.compare);
+
+          // ملاحظة واحدة متكررة تُعرض مرة واحدة؛ الملاحظات المختلفة تُعرض
+          // مسبوقة برقم لوحتها كي لا تضيع المعلومة عند الدمج.
+          const distinctNotes = [...new Set(group.notes.map((n) => n.note))];
+          // شرط "كل اللوحات" ضروري: لو كتب أحدهم ملاحظة على لوحة واحدة من
+          // ثلاث، عرضها كملاحظة موحّدة للسطر يبلّغ الورشة بخطأ على لوحتين
+          // سليمتين. تُعرض موحّدة فقط إن حملتها كل لوحات السطر بالنص نفسه.
+          group.uniformNote =
+            distinctNotes.length === 1 && group.notes.length === group.codes.length
+              ? distinctNotes[0]
+              : null;
+          group.hasNotes = group.notes.length > 0;
+
+          group.boards = group.codes.length;
+          group.faces = group.boards * group.facesPerBoard;
+          return group;
+        });
+
+        // الترتيب داخل المنطقة: الاتجاه (خط سير الورشة) ثم النموذج فالقياس
+        // ثم نوع الأمر فالتاريخ - أي حسب ما تنفّذه الورشة فعليًا.
+        groups.sort(
+          (a, b) =>
+            collator.compare(a.direction, b.direction) ||
+            collator.compare(a.model, b.model) ||
+            collator.compare(a.size, b.size) ||
+            a.type - b.type ||
+            a.dateKey.localeCompare(b.dateKey)
+        );
+
+        return {
+          ...region,
+          groups,
+          lines: groups.length,
+          boards: groups.reduce((sum, g) => sum + g.boards, 0),
+          faces: groups.reduce((sum, g) => sum + g.faces, 0),
+        };
+      })
+      .sort(
+        (a, b) =>
+          collator.compare(a.cityName, b.cityName) ||
+          b.boards - a.boards ||
+          collator.compare(a.regionName, b.regionName)
+      );
+
+    this._workshopCacheSource = orders;
+    this._workshopCache = result;
+    return result;
+  };
+
+  /** أرقام مجمّعة تُعرض في رأس التقرير وتذييله. */
+  getWorkshopStats = (orders = []) => {
+    const regions = this.groupOrdersForWorkshop(orders);
+    return {
+      regions: regions.length,
+      lines: regions.reduce((sum, r) => sum + r.lines, 0),
+      boards: regions.reduce((sum, r) => sum + r.boards, 0),
+      faces: regions.reduce((sum, r) => sum + r.faces, 0),
+      orders: orders.length,
+    };
+  };
+
+  getWorkshopNotesCell = (group) => {
+    if (!group.hasNotes) return '<span class="no-notes"></span>';
+    if (group.uniformNote) return `<div class="notes-display">${group.uniformNote}</div>`;
+
+    return `<div class="notes-display">${group.notes
+      .map((n) => `<span class="note-line"><b>${n.code}:</b> ${n.note}</span>`)
+      .join('')}</div>`;
+  };
+
+  getWorkshopGroupRow = (group, serial) => {
+    const typeClass =
+      group.type === 1 ? 'badge-release' : group.type === 2 ? 'badge-install' : 'badge-both';
+
+    const codesCell =
+      group.boards === 1
+        ? `<span class="code-chip">${group.codes[0]}</span>`
+        : `<div class="code-list">${group.codes
+            .map((code) => `<span class="code-chip">${code}</span>`)
+            .join('')}</div>`;
+
+    return `
+      <tr>
+        <td class="serial-cell">${serial}</td>
+        <td class="region-cell">${group.regionName}</td>
+        <td class="model-cell">
+          <div class="model-name">${group.model}</div>
+          ${group.size ? `<div class="model-size">${group.size}</div>` : ''}
+        </td>
+        <td class="direction-cell">${group.direction}</td>
+        <td class="count-cell">
+          <span class="count-boards">${group.boards}</span>
+          <span class="count-label">لوحة</span>
+          <div class="count-faces">${group.faces} وجه</div>
+        </td>
+        <td class="codes-cell">${codesCell}</td>
+        <td>
+          <span class="badge ${typeClass}">${group.typeLabel}</span>
+        </td>
+        <td>
+          ${
+            group.oldCustomer && group.oldCustomer !== '-'
+              ? `<div class="customer-old">${group.oldCustomer}</div>`
+              : '<span class="no-customer">-</span>'
+          }
+        </td>
+        <td>
+          ${
+            group.newCustomer && group.newCustomer !== '-'
+              ? `<div class="customer-new">${group.newCustomer}</div>`
+              : '<span class="no-customer">-</span>'
+          }
+        </td>
+        <td><span class="date-badge">${group.dateLabel}</span></td>
+        <td class="notes-cell">${this.getWorkshopNotesCell(group)}</td>
+        <td class="done-cell"></td>
+      </tr>
+    `;
+  };
+
+  /**
+   * كل منطقة في <tbody> مستقل يسبقه سطر عنوان. مع
+   * `page-break-after: avoid` على سطر العنوان لا يبقى عنوان منطقة وحيدًا
+   * في أسفل الصفحة، ومع `display: table-header-group` على <thead> تتكرر
+   * رؤوس الأعمدة في كل صفحة - وهما ما يجعل عدد الصفحات منطقيًا بدل
+   * الفاصل الثابت كل 20 سطرًا الذي كان يقطع الجدول عشوائيًا.
+   */
+  getWorkshopRegionBody = (region, startSerial) => {
+    let serial = startSerial;
+
+    return `
+      <tbody class="region-block">
+        <tr class="region-header">
+          <td colspan="12">
+            <span class="region-title">${region.regionName}</span>
+            <span class="region-city">${region.cityName}</span>
+            <span class="region-meta">${region.lines} سطر · ${region.boards} لوحة · ${region.faces} وجه</span>
+          </td>
+        </tr>
+        ${region.groups.map((group) => this.getWorkshopGroupRow(group, serial++)).join('')}
+      </tbody>
+    `;
+  };
+
+  /**
+   * فهرس المناطق أعلى التقرير: يقرأ منه مسؤول الورشة خط سيره قبل أن يبدأ
+   * (كم منطقة، وكم لوحة في كل منها) بدل أن يكتشف ذلك بتقليب الصفحات.
+   */
+  getWorkshopRegionIndex = (orders) => {
+    const regions = this.groupOrdersForWorkshop(orders);
+    if (regions.length === 0) return '';
+
+    return `
+      <div class="region-summary">
+        <h3>خط سير الورشة - ${regions.length} منطقة</h3>
+        <div class="region-summary-list">
+          ${regions
+            .map(
+              (region, index) => `
+            <div class="region-summary-item">
+              <b>${index + 1}. ${region.regionName}</b>
+              <span style="color:#64748b;"> (${region.cityName})</span>
+              &nbsp;·&nbsp; ${region.boards} لوحة &nbsp;·&nbsp; ${region.lines} سطر
+            </div>`
+            )
+            .join('')}
+        </div>
+      </div>
+    `;
+  };
+
+  getWorkshopTable = (orders, options = {}) => {
+    const forWord = !!options.forWord;
+    const regions = this.groupOrdersForWorkshop(orders);
+
+    if (regions.length === 0) {
+      return '<p style="text-align:center; padding:30px;">لا توجد طلبات للطباعة</p>';
+    }
+
+    // Word لا يطبّق قواعد الطباعة من CSS الخارجي بشكل موثوق، فتُحقن
+    // ألوان الرأس مباشرةً كما كان يفعل exportToWord أصلًا.
+    const th = forWord ? ' style="background:#000; color:#fff; border:1px solid #fff;"' : '';
+
+    let serial = 1;
+    const bodies = regions
+      .map((region) => {
+        const html = this.getWorkshopRegionBody(region, serial);
+        serial += region.groups.length;
+        return html;
+      })
+      .join('');
+
+    return `
+      <table cellspacing="0" cellpadding="0" class="workshop-table">
+        <thead>
+          <tr>
+            <th${th} style="width: 30px;">م</th>
+            <th${th} style="width: 70px;">المنطقة</th>
+            <th${th} style="width: 90px;">النموذج / القياس</th>
+            <th${th} style="width: 110px;">الاتجاه</th>
+            <th${th} style="width: 55px;">العدد</th>
+            <th${th} style="width: 150px;">أرقام اللوحات</th>
+            <th${th} style="width: 60px;">الأمر</th>
+            <th${th} style="width: 105px;">فك (المعلن القديم)</th>
+            <th${th} style="width: 105px;">تركيب (المعلن الجديد)</th>
+            <th${th} style="width: 70px;">التاريخ</th>
+            <th${th} style="width: 110px;">الملاحظات</th>
+            <th${th} style="width: 30px;">تم</th>
+          </tr>
+        </thead>
+        ${bodies}
+      </table>
+    `;
+  };
 
   getOrderRow = (order, index) => {
     const typeText = order.type === 1 ? "فك" : order.type === 2 ? "تركيب" : "فك و تركيب";
@@ -883,9 +1405,21 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
           'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: Black;',
           'background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: Black;'
         )}
+
+        /* Word لا يقرأ @page size من داخل @media print - يحتاج تعريف
+           WordSection الخاص به ليفتح الملف بوضع أفقي مباشرة. */
+        @page WordSection1 {
+          size: 29.7cm 21cm;
+          mso-page-orientation: landscape;
+          margin: 1cm 1cm 1cm 1cm;
+        }
+        div.WordSection1 { page: WordSection1; }
+        .workshop-table { mso-table-layout-alt: fixed; }
+        .region-header td { background: #1e293b !important; color: #fff !important; }
       </style>
     </head>
     <body>
+      <div class="WordSection1">
       <div class="header">
         <div class="logo-container">
           ${logoBase64 ? `<img src="${logoBase64}" alt="الشركة السورية للإعلان" class="logo">` : '<div class="logo-placeholder">الشعار</div>'}
@@ -909,8 +1443,8 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
             <span style="font-size: 14px; color: Black;">${selectedCustomerName}</span>
           </div>
           <div>
-            <strong>عدد الطلبات:</strong><br>
-            <span style="font-size: 14px; color: Black;">${orders.length}</span>
+            <strong>حجم العمل:</strong><br>
+            <span style="font-size: 14px; color: Black;">${this.getWorkshopStats(orders).boards} لوحة في ${this.getWorkshopStats(orders).lines} سطر (${this.getWorkshopStats(orders).regions} منطقة)</span>
           </div>
           <div>
             <strong>تاريخ التقرير:</strong><br>
@@ -923,30 +1457,18 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
         </div>
       </div>
       
-      <table cellspacing="0" cellpadding="0">
-  <thead>
-    <tr>
-      <th style="width: 60px; background: black; color: white; border: 1px solid white;">النموذج</th>
-      <th style="width: 50px; background: black; color: white; border: 1px solid white;">عدد الأوجه</th>
-      <th style="width: 70px; background: black; color: white; border: 1px solid white;">المنطقة</th>
-      <th style="width: 100px; background: black; color: white; border: 1px solid white;">الاتجاه</th>
-      <th style="width: 120px; background: black; color: white; border: 1px solid white;">فك (المعلن القديم)</th>
-      <th style="width: 120px; background: black; color: white; border: 1px solid white;">تركيب (المعلن الجديد)</th>
-      <th style="width: 80px; background: black; color: white; border: 1px solid white;">تاريخ الفك/التركيب</th>
-      <th style="width: 90px; background: black; color: white; border: 1px solid white;">الملاحظات</th>
-    </tr>
-  </thead>
-        <tbody>
-          ${orders.map((order, index) => this.getOrderRow(order, index)).join('')}
-        </tbody>
-      </table>
+      ${this.getWorkshopRegionIndex(orders)}
+
+      ${this.getWorkshopTable(orders, { forWord: true })}
       
       <div class="footer">
         <div style="margin-bottom: 20px;">
           <div style="background: #f8fafc; padding: 12px; border-radius: 8px; display: inline-block;">
             <strong>ملخص التقرير:</strong>
             <div style="margin-top: 10px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; font-size: 12px;">
-              <div>عدد الطلبات: <strong>${orders.length}</strong></div>
+              <div>إجمالي اللوحات: <strong>${this.getWorkshopStats(orders).boards}</strong></div>
+            <div>عدد الأسطر: <strong>${this.getWorkshopStats(orders).lines}</strong></div>
+            <div>عدد المناطق: <strong>${this.getWorkshopStats(orders).regions}</strong></div>
               <div>تاريخ الإنشاء: <strong>${formattedReportDate}</strong></div>
               <div>وقت الإنشاء: <strong>${formattedReportTime}</strong></div>
             </div>
@@ -955,6 +1477,7 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
         <p>تم إنشاء هذا التقرير تلقائياً من نظام إدارة الطلبات</p>
         <p>تاريخ التقرير: ${formattedReportDate} - الساعة: ${formattedReportTime}</p>
         <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
+      </div>
       </div>
     </body>
     </html>

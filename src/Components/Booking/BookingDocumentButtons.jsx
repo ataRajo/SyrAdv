@@ -17,6 +17,8 @@ const BookingDocumentButtons = ({ bookingId, className = "" }) => {
 
   return (
     <div className={`flex flex-wrap gap-2 ${className}`}>
+
+      {/*
       <Button
         size="sm"
         onClick={() => openContractPdf(bookingId)}
@@ -26,6 +28,7 @@ const BookingDocumentButtons = ({ bookingId, className = "" }) => {
         {loadingAction === "contract-pdf" ? "جارٍ التحضير..." : "تحميل العقد (PDF)"}
       </Button>
 
+         
       <Button
         size="sm"
         variant="outline"
@@ -34,7 +37,7 @@ const BookingDocumentButtons = ({ bookingId, className = "" }) => {
       >
         <Icon icon="mdi:eye-outline" className="w-4 h-4 ml-1" />
         {loadingAction === "contract-view" ? "جارٍ التحضير..." : "معاينة العقد"}
-      </Button>
+      </Button> 
 
       <Button
         size="sm"
@@ -45,6 +48,12 @@ const BookingDocumentButtons = ({ bookingId, className = "" }) => {
         <Icon icon="mdi:file-word-box" className="w-4 h-4 ml-1" />
         {loadingAction === "roadsign-list" ? "جارٍ التحضير..." : "قائمة اللوحات (Word)"}
       </Button>
+
+      
+      */}
+  
+
+      
     </div>
   );
 };

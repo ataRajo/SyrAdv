@@ -663,7 +663,7 @@ const getStatistics = (signs) => {
         {/* ─── LEFT SIDE: Stacked (Add Photo Top + Location Bottom) ─── */}
         <div style={{ display: "flex", flexDirection: "column", width: "50%" }}>
 
-          {/* Top Left: Add Photo / Uploaded Photo */}
+                  {/* Top Left: Add Photo / Uploaded Photo */}
           <div style={{ 
             height: "50%", 
             padding: "1.5rem", 
@@ -674,59 +674,77 @@ const getStatistics = (signs) => {
             backgroundColor: "#f9fafb",
             borderBottom: "1px solid #e5e7eb"
           }}>
-            {/* Upload dropzone (screen only) */}
-            <div className="w-full text-center no-print">
-              <h3 style={{ fontSize: "0.875rem", fontWeight: 700, color: "#9ca3af", marginBottom: "1rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                <Plus size={18} /> إضافة صورة
-              </h3>
-              <div style={{ 
-                position: "relative", 
-                width: "100%", 
-                height: "140px", 
-                border: "4px dashed #e5e7eb", 
-                borderRadius: "2rem", 
-                display: "flex", 
-                flexDirection: "column", 
-                alignItems: "center", 
-                justifyContent: "center",
-                cursor: "pointer",
-                marginBottom: "0.5rem",
-                backgroundColor: "rgba(255,255,255,0.5)",
-                transition: "all 0.2s"
-              }}>
-                <input type="file" accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        setImagesPerSign((prev) => ({ ...prev, [primarySignId]: [reader.result] }));
-                        localStorage.setItem(`booking_images_${bookingId}_sign_${primarySignId}`, JSON.stringify([reader.result]));
-                        toast.success("تم حفظ الصورة محلياً");
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
-                <div style={{ backgroundColor: "#eef2ff", padding: "0.75rem", borderRadius: "9999px", color: "#4f46e5", transition: "transform 0.2s" }}><Plus size={24} /></div>
-                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#6b7280", fontWeight: 500 }}>اضغط لرفع الصورة</p>
-                <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.125rem" }}>أو اسحب وأفلت الصورة هنا</p>
+            {groupImages.length === 0 ? (
+              /* NO PHOTO — show upload dropzone */
+              <div className="w-full text-center no-print">
+                <h3 style={{ fontSize: "0.875rem", fontWeight: 700, color: "#9ca3af", marginBottom: "1rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                  <Plus size={18} /> إضافة صورة
+                </h3>
+                <div style={{ 
+                  position: "relative", 
+                  width: "100%", 
+                  height: "140px", 
+                  border: "4px dashed #e5e7eb", 
+                  borderRadius: "2rem", 
+                  display: "flex", 
+                  flexDirection: "column", 
+                  alignItems: "center", 
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  backgroundColor: "rgba(255,255,255,0.5)"
+                }}>
+                  <input type="file" accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setImagesPerSign((prev) => ({ ...prev, [primarySignId]: [reader.result] }));
+                          localStorage.setItem(`booking_images_${bookingId}_sign_${primarySignId}`, JSON.stringify([reader.result]));
+                          toast.success("تم حفظ الصورة محلياً");
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
+                  <div style={{ backgroundColor: "#eef2ff", padding: "0.75rem", borderRadius: "9999px", color: "#4f46e5" }}><Plus size={24} /></div>
+                  <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#6b7280", fontWeight: 500 }}>اضغط لرفع الصورة</p>
+                  <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.125rem" }}>أو اسحب وأفلت الصورة هنا</p>
+                </div>
               </div>
-            </div>
-
-            {groupImages.length > 0 ? (
+            ) : (
+              /* PHOTO EXISTS — show photo with hover delete icon */
               <>
                 {/* Screen view */}
-                <div className="photos-grid-view no-print" style={{ width: "100%" }}>
-                  <div style={{ width: "100%", display: "flex", justifyContent: "center", padding: "0.5rem" }}>
-                    <div style={{ position: "relative", width: "100%", maxWidth: "36rem", borderRadius: "1rem", overflow: "hidden", border: "2px solid white", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}>
-                      <img src={groupImages[0]} style={{ width: "100%", height: "auto", objectFit: "contain", backgroundColor: "#f9fafb" }} alt="uploaded" />
-                      <div style={{ position: "absolute", top: "0.75rem", right: "0.75rem", display: "flex", gap: "0.5rem", opacity: 0, transition: "opacity 0.2s" }} className="group-hover:opacity-100">
-                        <button onClick={() => handleEditImage(primarySignId, 0, groupImages[0])} style={{ backgroundColor: "#3b82f6", color: "white", padding: "0.5rem", borderRadius: "9999px", border: "none", cursor: "pointer" }}><Edit2 size={16} /></button>
-                        <button onClick={() => handleDeleteImage(primarySignId, 0)} style={{ backgroundColor: "#ef4444", color: "white", padding: "0.5rem", borderRadius: "9999px", border: "none", cursor: "pointer" }}><Trash2 size={16} /></button>
+                <div className="no-print" style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                  <div className="group" style={{ position: "relative", width: "100%", maxWidth: "36rem", borderRadius: "1rem", overflow: "hidden", border: "2px solid white", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}>
+                    <img src={groupImages[0]} style={{ width: "100%", height: "auto", objectFit: "contain", backgroundColor: "#f9fafb", display: "block" }} alt="uploaded" />
+                    {/* HOVER OVERLAY WITH DELETE ICON */}
+                    <div className="group-hover:opacity-100" style={{ 
+                      position: "absolute", 
+                      inset: 0, 
+                      backgroundColor: "rgba(0,0,0,0.5)", 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "center", 
+                      opacity: 0, 
+                      transition: "opacity 0.2s",
+                      cursor: "pointer"
+                    }} onClick={() => handleDeleteImage(primarySignId, 0)}>
+                      <div style={{ 
+                        backgroundColor: "#ef4444", 
+                        color: "white", 
+                        padding: "0.75rem", 
+                        borderRadius: "9999px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}>
+                        <Trash2 size={24} />
                       </div>
                     </div>
                   </div>
+                  <p style={{ fontSize: "0.75rem", color: "#9ca3af" }}>اضغط على الصورة لحذفها</p>
                 </div>
                 {/* Print view */}
                 <div className="photos-large-view" style={{ display: "none", width: "100%", flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -737,14 +755,9 @@ const getStatistics = (signs) => {
                   </div>
                 </div>
               </>
-            ) : (
-              <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "1.5rem 0", flex: 1 }}>
-                <div style={{ backgroundColor: "#f3f4f6", padding: "1rem", borderRadius: "9999px", marginBottom: "0.5rem" }}><FileText size={32} style={{ color: "#9ca3af" }} /></div>
-                <p className="hidden print:block" style={{ color: "#9ca3af", fontStyle: "italic" }}>لم يتم إرفاق صورة</p>
-                <p className="no-print" style={{ color: "#9ca3af", fontSize: "0.875rem", textAlign: "center" }}>لا توجد صورة مضافة</p>
-              </div>
             )}
           </div>
+          
 
           {/* Bottom Left: Location Photo (صورة الموقع) */}
           <div style={{ 

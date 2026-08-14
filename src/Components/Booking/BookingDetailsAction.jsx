@@ -10,7 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2, Info, ArrowRightLeft, Calendar, Package, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { RefreshCw, Loader2, Info, ArrowRightLeft, Calendar, Package, CheckCircle, XCircle, AlertCircle ,ChevronLeft, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { Clock } from "lucide-react"
@@ -21,6 +21,8 @@ export const BookingDetailsAction = ({ booking }) => {
   const [selectedTargetSign, setSelectedTargetSign] = useState("");
   const [isTempMoving, setIsTempMoving] = useState(false);
   const [tempEndDate, setTempEndDate] = useState("");
+  const [paginationPage, setPaginationPage] = useState(1);
+  const [paginationPerPage, setPaginationPerPage] = useState(50);
 
 
   const { data: fullDetails, isLoading: isFetching  } = useGetOneBookingsQuery(booking.id, {
@@ -51,7 +53,9 @@ export const BookingDetailsAction = ({ booking }) => {
     {
       template_size: selectedOldSignDetails?.template?.size,
       start_date: booking?.start_date,
-      end_date: booking?.end_date
+      end_date: booking?.end_date ,
+      page : paginationPage ,
+      per_page : paginationPerPage 
     },
     { 
       skip: !isOpen || !selectedOldSignDetails?.template?.size
@@ -74,30 +78,29 @@ export const BookingDetailsAction = ({ booking }) => {
     if (availableSignsData.roadSigns && Array.isArray(availableSignsData.roadSigns)) {
       return availableSignsData.roadSigns;
     }
+    // Handle the actual response structure with status and data
+    if (availableSignsData.status === true && Array.isArray(availableSignsData.data)) {
+      return availableSignsData.data;
+    }
     return [];
   }, [availableSignsData]);
 
-  // Calculate available target signs (unbooked only)
-  const availableTargetSigns = useMemo(() => {
+    const totalItems = availableSignsData?.meta?.total || allSignsWithSameTemplate.length;
+  const totalPages = availableSignsData?.meta?.total_pages || 1;
+
+
+
+   const availableTargetSigns = useMemo(() => {
     if (!allSignsWithSameTemplate.length || !selectedOldSignDetails) return [];
 
     return allSignsWithSameTemplate.filter(sign => {
       // Don't include the selected old sign itself
       if (sign.id.toString() === selectedOldSign) return false;
       
-      // Use API's is_booked flag to determine availability
-      const isBooked = sign.is_booked === true;
-      
-      // Also check if sign has any active bookings in its bookings array
-      const hasActiveBookings = sign.bookings && 
-                               Array.isArray(sign.bookings) && 
-                               sign.bookings.some(b => b.status === 1);
-      
-      // Only return signs that are completely unbooked
-      return !isBooked && !hasActiveBookings;
+     
+      return true;
     });
   }, [allSignsWithSameTemplate, selectedOldSignDetails, selectedOldSign]);
-
 
   // Validate temp end date against booking end date
   const isTempEndDateValid = useMemo(() => {
@@ -374,6 +377,38 @@ export const BookingDetailsAction = ({ booking }) => {
                       نقل إلى لوحة جديدة (نفس المقاس - غير محجوزة)
                     </label>
                   </div>
+                                          {/* Pagination Controls */}
+                        {availableTargetSigns.length > 0 && (
+                          <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                            <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
+                              عرض {availableTargetSigns.length} من {totalItems} لوحة
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => setPaginationPage(p => Math.max(1, p - 1))}
+                                disabled={paginationPage <= 1}
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                              </Button>
+                              <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 px-2">
+                                {paginationPage} / {totalPages}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => setPaginationPage(p => Math.min(totalPages, p + 1))}
+                                disabled={paginationPage >= totalPages}
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
                   
                   <div className="space-y-2 sm:space-y-3">
                     {isLoadingSignsData ? (
@@ -477,7 +512,7 @@ export const BookingDetailsAction = ({ booking }) => {
               </Button>
               <Button 
                 onClick={handleSwap} 
-                               disabled={isMoving || !selectedOldSign || !selectedTargetSign || availableTargetSigns.length === 0 || (isTempMoving && !tempEndDate) || (isTempMoving && !isTempEndDateValid)}
+                disabled={isMoving || !selectedOldSign || !selectedTargetSign || availableTargetSigns.length === 0 || (isTempMoving && !tempEndDate) || (isTempMoving && !isTempEndDateValid)}
               >
                 {isMoving ? (
                   <>

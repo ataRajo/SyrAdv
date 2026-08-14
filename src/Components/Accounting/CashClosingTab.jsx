@@ -70,6 +70,7 @@ const CashClosingTab = ({ accounting }) => {
     cashClosingFilters,
     setCashClosingFilters,
     cashClosings,
+    cashClosingsMeta,
     isFetchingCashClosings,
     cashClosingPreview,
     isPreviewingCashClosing,
@@ -222,75 +223,98 @@ const CashClosingTab = ({ accounting }) => {
       </div>
 
       {/* History / list */}
-      <div className="border border-border rounded-lg bg-card">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-semibold">سجل التقفيلات</h3>
-          <Select
-            value={cashClosingFilters.status || "all"}
-            onValueChange={(v) => setCashClosingFilters((f) => ({ ...f, status: v === "all" ? undefined : v }))}
-          >
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">الكل</SelectItem>
-              <SelectItem value="pending">بانتظار التأكيد</SelectItem>
-              <SelectItem value="confirmed">مؤكّد</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground">
-                <th className="p-2 text-right">التاريخ</th>
-                <th className="p-2 text-right">الحساب</th>
-                <th className="p-2 text-right">الموظف</th>
-                <th className="p-2 text-left">الصافي المحسوب</th>
-                <th className="p-2 text-left">المعدود</th>
-                <th className="p-2 text-left">الفرق</th>
-                <th className="p-2 text-center">الحالة</th>
-                <th className="p-2 text-center">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isFetchingCashClosings && (
-                <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
-              )}
-              {!isFetchingCashClosings && cashClosings.length === 0 && (
-                <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">لا توجد تقفيلات</td></tr>
-              )}
-              {cashClosings.map((c) => (
-                <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
-                  <td className="p-2">{c.closing_date}</td>
-                  <td className="p-2">{c.account?.name}</td>
-                  <td className="p-2">{c.employee?.name ?? "الكل"}</td>
-                  <td className="p-2 font-mono">{fmt(c.calculated_closing_balance)}</td>
-                  <td className="p-2 font-mono">{c.counted_amount != null ? fmt(c.counted_amount) : "-"}</td>
-                  <td className={`p-2 font-mono ${c.variance < 0 ? "text-red-700" : c.variance > 0 ? "text-emerald-700" : ""}`}>
-                    {c.variance != null ? fmt(c.variance) : "-"}
-                  </td>
-                  <td className="p-2 text-center">
-                    <Badge variant={c.status === "confirmed" ? "default" : "secondary"}>
-                      {c.status === "confirmed" ? "مؤكّد" : "بانتظار التأكيد"}
-                    </Badge>
-                  </td>
-                  <td className="p-2">
-                    <div className="flex items-center justify-center gap-1">
-                      {c.status === "pending" && (
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title="تأكيد الاستلام" onClick={() => setConfirmTarget(c)}>
-                          <Icon icon="mdi:check-decagram-outline" className="w-4 h-4 text-emerald-700" />
-                        </Button>
-                      )}
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="طباعة سند التسليم" onClick={() => printCashClosing(c.id)}>
-                        <Icon icon="mdi:printer-outline" className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+     <div className="border border-border rounded-lg bg-card">
+  <div className="flex items-center justify-between p-4 border-b border-border">
+    <h3 className="font-semibold">سجل التقفيلات</h3>
+    <Select
+      value={cashClosingFilters.status || "all"}
+      onValueChange={(v) => setCashClosingFilters((f) => ({ ...f, status: v === "all" ? undefined : v }))}
+    >
+      <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">الكل</SelectItem>
+        <SelectItem value="pending">بانتظار التأكيد</SelectItem>
+        <SelectItem value="confirmed">مؤكّد</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm text-center">
+      <thead>
+        <tr className="border-b border-border text-muted-foreground">
+          <th className="p-2 text-center">التاريخ</th>
+          <th className="p-2 text-center">الحساب</th>
+          <th className="p-2 text-center">الموظف</th>
+          <th className="p-2 text-center">الصافي المحسوب</th>
+          <th className="p-2 text-center">المعدود</th>
+          <th className="p-2 text-center">الفرق</th>
+          <th className="p-2 text-center">الحالة</th>
+          <th className="p-2 text-center">إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {isFetchingCashClosings && (
+          <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+        )}
+        {!isFetchingCashClosings && cashClosings.length === 0 && (
+          <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">لا توجد تقفيلات</td></tr>
+        )}
+        {cashClosings.map((c) => (
+          <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
+            <td className="p-2 text-center">{c.closing_date}</td>
+            <td className="p-2 text-center">{c.account?.name}</td>
+            <td className="p-2 text-center">{c.employee?.name ?? "الكل"}</td>
+            <td className="p-2 font-mono text-center">{fmt(c.calculated_closing_balance)}</td>
+            <td className="p-2 font-mono text-center">{c.counted_amount != null ? fmt(c.counted_amount) : "-"}</td>
+            <td className={`p-2 font-mono text-center ${c.variance < 0 ? "text-red-700" : c.variance > 0 ? "text-emerald-700" : ""}`}>
+              {c.variance != null ? fmt(c.variance) : "-"}
+            </td>
+            <td className="p-2 text-center">
+              <Badge variant={c.status === "confirmed" ? "default" : "secondary"}>
+                {c.status === "confirmed" ? "مؤكّد" : "بانتظار التأكيد"}
+              </Badge>
+            </td>
+            <td className="p-2 text-center">
+              <div className="flex items-center justify-center gap-1">
+                {c.status === "pending" && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="تأكيد الاستلام" onClick={() => setConfirmTarget(c)}>
+                    <Icon icon="mdi:check-decagram-outline" className="w-4 h-4 text-emerald-700" />
+                  </Button>
+                )}
+                <Button size="icon" variant="ghost" className="h-7 w-7" title="طباعة سند التسليم" onClick={() => printCashClosing(c.id)}>
+                  <Icon icon="mdi:printer-outline" className="w-4 h-4" />
+                </Button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    {cashClosingsMeta?.total_pages > 1 && (
+      <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={cashClosingsMeta.current_page <= 1}
+          onClick={() => setCashClosingFilters((f) => ({ ...f, page: (f.page || 1) - 1 }))}
+        >
+          السابق
+        </Button>
+        <span className="text-sm text-muted-foreground">
+          صفحة {cashClosingsMeta.current_page} من {cashClosingsMeta.total_pages}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={cashClosingsMeta.current_page >= cashClosingsMeta.total_pages}
+          onClick={() => setCashClosingFilters((f) => ({ ...f, page: (f.page || 1) + 1 }))}
+        >
+          التالي
+        </Button>
       </div>
+    )}
+  </div>
+</div>
 
       <Dialog open={Boolean(confirmTarget)} onOpenChange={(v) => !v && setConfirmTarget(null)}>
         <DialogContent>

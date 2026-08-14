@@ -42,15 +42,15 @@ const StatementLines = ({ statement, isLoading, onPrintVoucher, emptyLabel }) =>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs text-center">
           <thead>
             <tr className="text-muted-foreground border-b border-border">
-              <th className="text-right p-1">التاريخ</th>
-              <th className="text-right p-1">رقم السند</th>
-              <th className="text-right p-1">البيان</th>
-              <th className="text-left p-1">مدين</th>
-              <th className="text-left p-1">دائن</th>
-              <th className="text-left p-1">الرصيد</th>
+              <th className="text-center p-1">التاريخ</th>
+              <th className="text-center p-1">رقم السند</th>
+              <th className="text-center p-1">البيان</th>
+              <th className="text-center p-1">مدين</th>
+              <th className="text-center p-1">دائن</th>
+              <th className="text-center p-1">الرصيد</th>
               <th className="text-center p-1">طباعة</th>
             </tr>
           </thead>
@@ -60,12 +60,12 @@ const StatementLines = ({ statement, isLoading, onPrintVoucher, emptyLabel }) =>
             )}
             {lines.map((line) => (
               <tr key={line.id} className="border-b border-border/50">
-                <td className="p-1">{line.entry_date}</td>
-                <td className="p-1 font-mono">{line.entry_number}</td>
-                <td className="p-1 max-w-[200px] truncate" title={line.description}>{line.description}</td>
-                <td className="p-1 font-mono">{line.debit ? fmt(line.debit) : "-"}</td>
-                <td className="p-1 font-mono">{line.credit ? fmt(line.credit) : "-"}</td>
-                <td className="p-1 font-mono">{fmt(line.balance_after)}</td>
+                <td className="p-1 text-center">{line.entry_date}</td>
+                <td className="p-1 font-mono text-center">{line.entry_number}</td>
+                <td className="p-1 max-w-[200px] truncate text-center" title={line.description}>{line.description}</td>
+                <td className="p-1 font-mono text-center">{line.debit ? fmt(line.debit) : "-"}</td>
+                <td className="p-1 font-mono text-center">{line.credit ? fmt(line.credit) : "-"}</td>
+                <td className="p-1 font-mono text-center">{fmt(line.balance_after)}</td>
                 <td className="p-1 text-center">
                   {(line.type === "incoming" || line.type === "outgoing") && line.journal_entry_id && (
                     <Button

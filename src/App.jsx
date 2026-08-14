@@ -52,6 +52,7 @@ import WorkTypePage from "./Pages/WorkTypesPage/WorkTypesPage"
 import OffersPage from "./Pages/offers/OffersPage";
 import BookingDesignChange from "./Pages/Booking/BookingDesignChange";
 import SearchInput from "./Pages/SearchInput/SearchInput"
+import SummaryBookings from "./Components/Customers/SummaryBookings";
 function App() {
 
   axios.defaults.baseURL = "/api"; // goes through Vite proxy
@@ -141,6 +142,8 @@ function App() {
             {/*<Route path="road_signs/:id/stats" element={<RoadSignStats />} />*/}
 
             <Route path="bookings" element={<BookingPage />} />
+            <Route path="bookings/summary" element={<SummaryBookings />} />  {/* ✅ ADD THIS LINE */}
+
             <Route path="bookings/:bookingId" element={<BookingDetails />} />
             <Route path="booking/add" element={<BookingForm />} />
             <Route

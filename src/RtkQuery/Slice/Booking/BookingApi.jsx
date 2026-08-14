@@ -220,6 +220,7 @@ export const {
   useUploadBookingPdfMutation,
   useChangeAdvertisementDesignMutation,
     useGetNotificationsQuery,
-useAddDiscountMutation
+useAddDiscountMutation , 
+useLazyGetOneBookingsQuery
   //useCalculateExtendedPriceMutation
 } = BookingSlice;

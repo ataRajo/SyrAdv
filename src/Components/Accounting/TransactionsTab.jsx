@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
 import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import CurrencyAmountField from "./CurrencyAmountField";
 
 const TYPE_LABELS = {
   incoming: { label: "قبض", variant: "default" },
@@ -54,6 +55,7 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
   const [form, setForm] = useState({
     customer_id: "",
     amount: "",
+    exchange_rate: "",
     date: "",
     description: "",
     reference_no: "",
@@ -66,6 +68,7 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
     onSave({
       customer_id: Number(form.customer_id),
       amount: Number(form.amount),
+      ...(form.exchange_rate ? { exchange_rate: Number(form.exchange_rate) } : {}),
       ...(form.date ? { date: form.date } : {}),
       ...(form.description ? { description: form.description } : {}),
       ...(form.reference_no ? { reference_no: form.reference_no } : {}),
@@ -97,31 +100,34 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>المبلغ</Label>
-          <Input type="number" step="0.01" min="0.01" value={form.amount} onChange={(e) => set("amount")(e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label>التاريخ (اختياري)</Label>
-          <Input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} />
-        </div>
-      </div>
-
       <div className="space-y-2">
-        <Label>الصندوق / البنك (اختياري - الافتراضي: الصندوق الرئيسي)</Label>
+        <Label>الصندوق / البنك (اختياري - الافتراضي: الصندوق - دولار)</Label>
         <Select value={form.cashbox_account_id} onValueChange={set("cashbox_account_id")}>
           <SelectTrigger>
-            <SelectValue placeholder="الصندوق الرئيسي (افتراضي)" />
+            <SelectValue placeholder="الصندوق - دولار (افتراضي)" />
           </SelectTrigger>
           <SelectContent>
             {cashAccounts.map((a) => (
               <SelectItem key={a.id} value={String(a.id)}>
-                {a.name}
+                {a.name} {a.currency === "SYP" ? "(ل.س)" : "($)"}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <CurrencyAmountField
+        cashAccounts={cashAccounts}
+        selectedCashboxId={form.cashbox_account_id}
+        amount={form.amount}
+        onAmountChange={set("amount")}
+        exchangeRate={form.exchange_rate}
+        onExchangeRateChange={set("exchange_rate")}
+      />
+
+      <div className="space-y-2">
+        <Label>التاريخ (اختياري)</Label>
+        <Input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} />
       </div>
 
       <div className="space-y-2">
@@ -149,6 +155,7 @@ const OutgoingForm = ({ postableAccounts, cashAccounts, onCancel, onSave, isSavi
   const [form, setForm] = useState({
     account_id: "",
     amount: "",
+    exchange_rate: "",
     date: "",
     description: "",
     reference_no: "",
@@ -161,6 +168,7 @@ const OutgoingForm = ({ postableAccounts, cashAccounts, onCancel, onSave, isSavi
     onSave({
       account_id: Number(form.account_id),
       amount: Number(form.amount),
+      ...(form.exchange_rate ? { exchange_rate: Number(form.exchange_rate) } : {}),
       description: form.description,
       ...(form.date ? { date: form.date } : {}),
       ...(form.reference_no ? { reference_no: form.reference_no } : {}),
@@ -186,31 +194,34 @@ const OutgoingForm = ({ postableAccounts, cashAccounts, onCancel, onSave, isSavi
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>المبلغ</Label>
-          <Input type="number" step="0.01" min="0.01" value={form.amount} onChange={(e) => set("amount")(e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label>التاريخ (اختياري)</Label>
-          <Input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} />
-        </div>
-      </div>
-
       <div className="space-y-2">
-        <Label>الصندوق / البنك (اختياري - الافتراضي: الصندوق الرئيسي)</Label>
+        <Label>الصندوق / البنك (اختياري - الافتراضي: الصندوق - دولار)</Label>
         <Select value={form.cashbox_account_id} onValueChange={set("cashbox_account_id")}>
           <SelectTrigger>
-            <SelectValue placeholder="الصندوق الرئيسي (افتراضي)" />
+            <SelectValue placeholder="الصندوق - دولار (افتراضي)" />
           </SelectTrigger>
           <SelectContent>
             {cashAccounts.map((a) => (
               <SelectItem key={a.id} value={String(a.id)}>
-                {a.name}
+                {a.name} {a.currency === "SYP" ? "(ل.س)" : "($)"}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <CurrencyAmountField
+        cashAccounts={cashAccounts}
+        selectedCashboxId={form.cashbox_account_id}
+        amount={form.amount}
+        onAmountChange={set("amount")}
+        exchangeRate={form.exchange_rate}
+        onExchangeRateChange={set("exchange_rate")}
+      />
+
+      <div className="space-y-2">
+        <Label>التاريخ (اختياري)</Label>
+        <Input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} />
       </div>
 
       <div className="space-y-2">
@@ -234,8 +245,12 @@ const OutgoingForm = ({ postableAccounts, cashAccounts, onCancel, onSave, isSavi
 };
 
 const TransferForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
-  const [form, setForm] = useState({ from_account_id: "", to_account_id: "", amount: "", date: "", description: "" });
+  const [form, setForm] = useState({ from_account_id: "", to_account_id: "", amount: "", exchange_rate: "", date: "", description: "" });
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
+
+  const fromAccount = cashAccounts.find((a) => String(a.id) === String(form.from_account_id));
+  const toAccount = cashAccounts.find((a) => String(a.id) === String(form.to_account_id));
+  const isExchange = fromAccount && toAccount && fromAccount.currency !== toAccount.currency;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -243,6 +258,7 @@ const TransferForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
       from_account_id: Number(form.from_account_id),
       to_account_id: Number(form.to_account_id),
       amount: Number(form.amount),
+      ...(form.exchange_rate ? { exchange_rate: Number(form.exchange_rate) } : {}),
       ...(form.date ? { date: form.date } : {}),
       ...(form.description ? { description: form.description } : {}),
     });
@@ -257,7 +273,7 @@ const TransferForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
             <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
             <SelectContent>
               {cashAccounts.map((a) => (
-                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                <SelectItem key={a.id} value={String(a.id)}>{a.name} {a.currency === "SYP" ? "(ل.س)" : "($)"}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -268,16 +284,22 @@ const TransferForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
             <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
             <SelectContent>
               {cashAccounts.filter((a) => String(a.id) !== form.from_account_id).map((a) => (
-                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                <SelectItem key={a.id} value={String(a.id)}>{a.name} {a.currency === "SYP" ? "(ل.س)" : "($)"}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       </div>
       <div className="space-y-2">
-        <Label>المبلغ</Label>
+        <Label>{fromAccount?.currency === "SYP" ? "المبلغ المحوَّل (ل.س)" : "المبلغ المحوَّل ($)"}</Label>
         <Input type="number" step="0.01" min="0.01" value={form.amount} onChange={(e) => set("amount")(e.target.value)} required />
       </div>
+      {isExchange && (
+        <div className="space-y-2">
+          <Label>سعر الصرف (كم ليرة = 1 دولار) - عملية صرف عملة</Label>
+          <Input type="number" step="0.01" min="0.01" placeholder="مثال: 15000" value={form.exchange_rate} onChange={(e) => set("exchange_rate")(e.target.value)} required />
+        </div>
+      )}
       <div className="space-y-2">
         <Label>البيان (اختياري)</Label>
         <Input value={form.description} onChange={(e) => set("description")(e.target.value)} />
@@ -400,73 +422,73 @@ const TransactionsTab = ({ accounting }) => {
         </div>
       </div>
 
-      <div className="border border-border rounded-lg bg-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-muted-foreground">
-              <th className="p-2 text-right">رقم القيد</th>
-              <th className="p-2 text-right">رقم السند</th>
-              <th className="p-2 text-right">النوع</th>
-              <th className="p-2 text-right">التاريخ</th>
-              <th className="p-2 text-right">البيان</th>
-              <th className="p-2 text-right">الموظف</th>
-              <th className="p-2 text-left">مدين</th>
-              <th className="p-2 text-left">دائن</th>
-              <th className="p-2 text-center">إجراءات</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isFetchingTransactions && (
-              <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
-            )}
-            {!isFetchingTransactions && transactions.length === 0 && (
-              <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">لا توجد معاملات</td></tr>
-            )}
-            {transactions.map((tx) => (
-              <tr key={tx.id} className="border-b border-border/50 hover:bg-muted/30">
-                <td className="p-2 font-mono text-xs">{tx.entry_number}</td>
-                <td className="p-2 font-mono text-xs">{tx.voucher_number || "-"}</td>
-                <td className="p-2">
-                  <Badge variant={TYPE_LABELS[tx.type]?.variant || "outline"}>
-                    {TYPE_LABELS[tx.type]?.label || tx.type}
-                  </Badge>
-                </td>
-                <td className="p-2 text-xs">{tx.entry_date}</td>
-                <td className="p-2 max-w-[220px] truncate" title={tx.description}>{tx.description}</td>
-                <td className="p-2 text-xs text-muted-foreground">{tx.created_by_name || "-"}</td>
-                <td className="p-2 font-mono">{Number(tx.total_debit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
-                <td className="p-2 font-mono">{Number(tx.total_credit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
-                <td className="p-2">
-                  <div className="flex items-center justify-center gap-1">
-                    {tx.voucher_number && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        title="طباعة السند"
-                        onClick={() => handleOpenVoucher(tx.id)}
-                      >
-                        <Icon icon="mdi:printer-outline" className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {tx.type !== "reversal" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        title="عكس القيد"
-                        onClick={() => setReverseTarget(tx)}
-                      >
-                        <Icon icon="mdi:undo" className="w-4 h-4 text-destructive" />
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+   <div className="border border-border rounded-lg bg-card overflow-x-auto">
+  <table className="w-full text-sm text-center">
+    <thead>
+      <tr className="border-b border-border text-muted-foreground">
+        <th className="p-2 text-center">رقم القيد</th>
+        <th className="p-2 text-center">رقم السند</th>
+        <th className="p-2 text-center">النوع</th>
+        <th className="p-2 text-center">التاريخ</th>
+        <th className="p-2 text-center">البيان</th>
+        <th className="p-2 text-center">الموظف</th>
+        <th className="p-2 text-center">مدين</th>
+        <th className="p-2 text-center">دائن</th>
+        <th className="p-2 text-center">إجراءات</th>
+      </tr>
+    </thead>
+    <tbody>
+      {isFetchingTransactions && (
+        <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+      )}
+      {!isFetchingTransactions && transactions.length === 0 && (
+        <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">لا توجد معاملات</td></tr>
+      )}
+      {transactions.map((tx) => (
+        <tr key={tx.id} className="border-b border-border/50 hover:bg-muted/30">
+          <td className="p-2 font-mono text-xs text-center">{tx.entry_number}</td>
+          <td className="p-2 font-mono text-xs text-center">{tx.voucher_number || "-"}</td>
+          <td className="p-2 text-center">
+            <Badge variant={TYPE_LABELS[tx.type]?.variant || "outline"}>
+              {TYPE_LABELS[tx.type]?.label || tx.type}
+            </Badge>
+          </td>
+          <td className="p-2 text-xs text-center">{tx.entry_date}</td>
+          <td className="p-2 max-w-[220px] truncate text-center" title={tx.description}>{tx.description}</td>
+          <td className="p-2 text-xs text-muted-foreground text-center">{tx.created_by_name || "-"}</td>
+          <td className="p-2 font-mono text-center">{Number(tx.total_debit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
+          <td className="p-2 font-mono text-center">{Number(tx.total_credit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
+          <td className="p-2 text-center">
+            <div className="flex items-center justify-center gap-1">
+              {tx.voucher_number && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  title="طباعة السند"
+                  onClick={() => handleOpenVoucher(tx.id)}
+                >
+                  <Icon icon="mdi:printer-outline" className="w-4 h-4" />
+                </Button>
+              )}
+              {tx.type !== "reversal" && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  title="عكس القيد"
+                  onClick={() => setReverseTarget(tx)}
+                >
+                  <Icon icon="mdi:undo" className="w-4 h-4 text-destructive" />
+                </Button>
+              )}
+            </div>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
 
       {transactionsMeta?.total_pages > 1 && (
         <div className="flex items-center justify-center gap-2">
