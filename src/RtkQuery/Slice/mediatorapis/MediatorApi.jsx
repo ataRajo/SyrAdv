@@ -213,6 +213,27 @@ submitBrokerActivity: builder.mutation({
   },
 }),
 
+// إرسال رسالة واتساب فورية عبر الباك-إند (WAHA) - يستبدل
+// window.open(`https://wa.me/...`) اليدوي في MapBroker: نفس نص الرسالة
+// الذي كان يُبنى في الواجهة تمامًا، يُرسَل تلقائيًا بدل فتح واتساب
+// ليضغط الوسيط "إرسال" يدويًا. راجع
+// App\Http\Controllers\Api\V1\WhatsappController على الباك-إند.
+sendWhatsappMessage: builder.mutation({
+  query: ({ phoneNumber, message }) => ({
+    url: "/whatsapp/send",
+    method: "POST",
+    body: { phone_number: phoneNumber, message },
+  }),
+  transformResponse: (response) => ({
+    success: true,
+    message: response?.message || "تم إرسال الرسالة عبر واتساب بنجاح",
+  }),
+  transformErrorResponse: (error) => ({
+    success: false,
+    message: error.data?.message || "فشل في إرسال الرسالة عبر واتساب",
+  }),
+}),
+
 
 
     // Create New Booking (Customer Booking) - uses /bookings endpoint
@@ -274,4 +295,5 @@ export const {
   useAddBrokerCustomerMutation,
   useBrokerLogoutMutation  ,
   useSubmitBrokerActivityMutation,
+  useSendWhatsappMessageMutation,
 } = MediatorSlice;

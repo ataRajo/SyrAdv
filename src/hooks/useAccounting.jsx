@@ -32,15 +32,28 @@ import {
   useAddSupplierCategoryMutation,
   useGetSuppliersQuery,
   useAddSupplierMutation,
+  useDeleteSupplierMutation,
+  useLazyGetSupplierStatementQuery,
   useGetPurchaseInvoicesQuery,
   useAddPurchaseInvoiceMutation,
   useArchivePurchaseInvoiceMutation,
   useUnarchivePurchaseInvoiceMutation,
   usePayPurchaseInvoiceMutation,
+  useUploadPurchaseInvoiceImageMutation,
+  useRemovePurchaseInvoiceImageMutation,
   useLazyGetMaterialsQuery,
   useAddMaterialMutation,
   usePayBrokerCommissionMutation,
   useLazyGetBrokerCommissionHistoryQuery,
+  useGiveEmployeeAdvanceMutation,
+  useSettleEmployeeAdvanceMutation,
+  useLazyGetEmployeeAdvanceBalanceQuery,
+  useGetEmployeeAdvancesHistoryQuery,
+  useLazyGetEmployeeStatementQuery,
+  useGiveSupplierAdvanceMutation,
+  useSettleSupplierAdvanceMutation,
+  useLazyGetSupplierAdvanceBalanceQuery,
+  useGetSupplierAdvancesHistoryQuery,
 } from "../RtkQuery/Slice/Accounting/AccountingApi";
 
 /**
@@ -537,9 +550,20 @@ const transactions = Array.isArray(transactionsResponse?.data)
   const payEmployeeSalary = useCallback(
     async (data) => {
       try {
-        await payEmployeeSalaryMutation(data).unwrap();
-        toast.success("تم تسجيل صرف الراتب بنجاح");
-        return true;
+        const response = await payEmployeeSalaryMutation(data).unwrap();
+        // طلب العميل: إشارة صريحة عند الصرف أنه خُصمت سلفة سابقة من هذا
+        // الموظف + القيمة الصافية التي خرجت فعليًا من الصندوق - انظر
+        // PayrollController::pay() / PayrollService::paySalary().
+        const payload = response?.data;
+        if (payload?.had_outstanding_advance) {
+          toast.success(
+            `تم صرف الراتب - خُصم من سلفة سابقة: ${Number(payload.advance_deducted ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}، الصافي المدفوع فعليًا: ${Number(payload.net_amount_paid ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success("تم تسجيل صرف الراتب بنجاح");
+        }
+        return payload ?? true;
       } catch (error) {
         toast.error(error?.data?.message || "فشل صرف الراتب");
         return false;
@@ -595,6 +619,8 @@ const transactions = Array.isArray(transactionsResponse?.data)
     useGetSuppliersQuery();
   const [addSupplierMutation, { isLoading: isSavingSupplier }] =
     useAddSupplierMutation();
+  const [deleteSupplierMutation, { isLoading: isDeletingSupplier }] =
+    useDeleteSupplierMutation();
 
   const addSupplierCategory = useCallback(
     async (data) => {
@@ -622,6 +648,204 @@ const transactions = Array.isArray(transactionsResponse?.data)
       }
     },
     [addSupplierMutation]
+  );
+
+  const deleteSupplier = useCallback(
+    async (id) => {
+      try {
+        await deleteSupplierMutation(id).unwrap();
+        toast.success("تم حذف المورد بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل حذف المورد");
+        return false;
+      }
+    },
+    [deleteSupplierMutation]
+  );
+
+  // ---- سلف الموظفين والموردين (Employee & Supplier Advances) -------------
+  // كل سلفة تُخصم تلقائيًا (FIFO) من أول راتب/فاتورة شراء لاحقة على
+  // الباك-إند - لا حاجة لأي فعل هنا غير المنح والعرض.
+  const [employeeAdvanceHistoryFilters, setEmployeeAdvanceHistoryFilters] = useState({});
+  const { data: employeeAdvancesResponse, isFetching: isFetchingEmployeeAdvances } =
+    useGetEmployeeAdvancesHistoryQuery(employeeAdvanceHistoryFilters);
+  const employeeAdvances = employeeAdvancesResponse?.data ?? [];
+
+  const [giveEmployeeAdvanceMutation, { isLoading: isGivingEmployeeAdvance }] =
+    useGiveEmployeeAdvanceMutation();
+  const [triggerEmployeeAdvanceBalance] = useLazyGetEmployeeAdvanceBalanceQuery();
+
+  const giveEmployeeAdvance = useCallback(
+    async ({ userId, ...data }) => {
+      try {
+        const result = await giveEmployeeAdvanceMutation({ userId, ...data }).unwrap();
+        toast.success("تم تسجيل سلفة الموظف بنجاح");
+        return result?.data ?? result;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تسجيل سلفة الموظف");
+        return null;
+      }
+    },
+    [giveEmployeeAdvanceMutation]
+  );
+
+  const getEmployeeAdvanceBalance = useCallback(
+    async (userId) => {
+      try {
+        const result = await triggerEmployeeAdvanceBalance(userId).unwrap();
+        return result?.data ?? result;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل جلب رصيد السلفة");
+        return null;
+      }
+    },
+    [triggerEmployeeAdvanceBalance]
+  );
+
+  // تحصيل/تسوية سلفة موظف يدويًا (سند قبض) - طلب صريح: موظف يستقيل وعليه
+  // سلفة لم تُسدَّد بعد. amount اختياري - بلا تحديد، تُسوَّى كامل السلفة
+  // المتبقية دفعة واحدة (هذا بالضبط ما تحتاجه حالة الاستقالة).
+  const [settleEmployeeAdvanceMutation, { isLoading: isSettlingEmployeeAdvance }] =
+    useSettleEmployeeAdvanceMutation();
+
+  const settleEmployeeAdvance = useCallback(
+    async ({ userId, ...data }) => {
+      try {
+        const result = await settleEmployeeAdvanceMutation({ userId, ...data }).unwrap();
+        toast.success("تم تسجيل سند قبض تحصيل السلفة بنجاح");
+        return result?.data ?? result;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تحصيل السلفة");
+        return null;
+      }
+    },
+    [settleEmployeeAdvanceMutation]
+  );
+
+  // ---- كشف حساب موظف (Employee Statement) - راتب+سلفة+مكافآت+خصومات ------
+  // طلب صريح (المطلب الرابع). راجع EmployeeStatementController/Service.
+  const [statementEmployeeId, setStatementEmployeeId] = useState(null);
+  const [employeeStatementFilters, setEmployeeStatementFilters] = useState({});
+  const [
+    fetchEmployeeStatement,
+    { data: employeeStatement, isFetching: isFetchingEmployeeStatement },
+  ] = useLazyGetEmployeeStatementQuery();
+
+  const openEmployeeStatement = useCallback(
+    (userId) => {
+      setStatementEmployeeId(userId);
+      setEmployeeStatementFilters({});
+      fetchEmployeeStatement({ userId });
+    },
+    [fetchEmployeeStatement]
+  );
+
+  const closeEmployeeStatement = useCallback(() => {
+    setStatementEmployeeId(null);
+  }, []);
+
+  // ملاحظة: على عكس loadPayrollHistory (الذي يدمج فوق الفلاتر الحالية)،
+  // هذه الدالة تستبدل الفلاتر بالكامل في كل استدعاء - الحوار (Dialog)
+  // يمرّر دائمًا المجموعة الكاملة المطلوبة (from_date/to_date معًا، أو {}
+  // لإعادة الضبط لنطاق آخر 12 شهرًا الافتراضي)، فلا حاجة للدمج، وتفاديًا
+  // لتسريب مفاتيح قديمة (مثل from_date سابق) لا يريدها المستخدم بعد الآن.
+  const loadEmployeeStatement = useCallback(
+    (filters = {}) => {
+      if (!statementEmployeeId) return;
+      setEmployeeStatementFilters(filters);
+      fetchEmployeeStatement({ userId: statementEmployeeId, ...filters });
+    },
+    [fetchEmployeeStatement, statementEmployeeId]
+  );
+
+  const [supplierAdvanceHistoryFilters, setSupplierAdvanceHistoryFilters] = useState({});
+  const { data: supplierAdvancesResponse, isFetching: isFetchingSupplierAdvances } =
+    useGetSupplierAdvancesHistoryQuery(supplierAdvanceHistoryFilters);
+  const supplierAdvances = supplierAdvancesResponse?.data ?? [];
+
+  const [giveSupplierAdvanceMutation, { isLoading: isGivingSupplierAdvance }] =
+    useGiveSupplierAdvanceMutation();
+  const [triggerSupplierAdvanceBalance] = useLazyGetSupplierAdvanceBalanceQuery();
+
+  const giveSupplierAdvance = useCallback(
+    async ({ supplierId, ...data }) => {
+      try {
+        const result = await giveSupplierAdvanceMutation({ supplierId, ...data }).unwrap();
+        toast.success("تم تسجيل سلفة المورد بنجاح");
+        return result?.data ?? result;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تسجيل سلفة المورد");
+        return null;
+      }
+    },
+    [giveSupplierAdvanceMutation]
+  );
+
+  const getSupplierAdvanceBalance = useCallback(
+    async (supplierId) => {
+      try {
+        const result = await triggerSupplierAdvanceBalance(supplierId).unwrap();
+        return result?.data ?? result;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل جلب رصيد السلفة");
+        return null;
+      }
+    },
+    [triggerSupplierAdvanceBalance]
+  );
+
+  // تحصيل/استرجاع سلفة مورد يدويًا (سند قبض) - نفس فكرة settleEmployeeAdvance
+  // تمامًا، على الجانب الآخر.
+  const [settleSupplierAdvanceMutation, { isLoading: isSettlingSupplierAdvance }] =
+    useSettleSupplierAdvanceMutation();
+
+  const settleSupplierAdvance = useCallback(
+    async ({ supplierId, ...data }) => {
+      try {
+        const result = await settleSupplierAdvanceMutation({ supplierId, ...data }).unwrap();
+        toast.success("تم تسجيل سند قبض تحصيل السلفة بنجاح");
+        return result?.data ?? result;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل تحصيل السلفة");
+        return null;
+      }
+    },
+    [settleSupplierAdvanceMutation]
+  );
+
+  // ---- كشف حساب مورد (Supplier Statement) - فواتير شراء+مواد+دفعات+سلف ----
+  // طلب صريح من العميل. راجع SupplierStatementController/Service. نفس
+  // نمط كشف حساب الموظف (statementEmployeeId/...) أعلاه تمامًا.
+  const [statementSupplierId, setStatementSupplierId] = useState(null);
+  const [supplierStatementFilters, setSupplierStatementFilters] = useState({});
+  const [
+    fetchSupplierStatement,
+    { data: supplierStatement, isFetching: isFetchingSupplierStatement },
+  ] = useLazyGetSupplierStatementQuery();
+
+  const openSupplierStatement = useCallback(
+    (supplierId) => {
+      setStatementSupplierId(supplierId);
+      setSupplierStatementFilters({});
+      fetchSupplierStatement({ supplierId });
+    },
+    [fetchSupplierStatement]
+  );
+
+  const closeSupplierStatement = useCallback(() => {
+    setStatementSupplierId(null);
+  }, []);
+
+  // تستبدل الفلاتر بالكامل في كل استدعاء (لا تدمج فوق الحالي) - نفس سبب
+  // loadEmployeeStatement أعلاه بالضبط.
+  const loadSupplierStatement = useCallback(
+    (filters = {}) => {
+      if (!statementSupplierId) return;
+      setSupplierStatementFilters(filters);
+      fetchSupplierStatement({ supplierId: statementSupplierId, ...filters });
+    },
+    [fetchSupplierStatement, statementSupplierId]
   );
 
   // ---- Purchase invoices (فواتير الشراء) -----------------------------------
@@ -716,6 +940,42 @@ const transactions = Array.isArray(transactionsResponse?.data)
       }
     },
     [payPurchaseInvoiceMutation]
+  );
+
+  // إرفاق/إزالة صورة الفاتورة الخارجية (طلب صريح) --------------------------
+  const [uploadPurchaseInvoiceImageMutation, { isLoading: isUploadingPurchaseInvoiceImage }] =
+    useUploadPurchaseInvoiceImageMutation();
+  const [removePurchaseInvoiceImageMutation, { isLoading: isRemovingPurchaseInvoiceImage }] =
+    useRemovePurchaseInvoiceImageMutation();
+
+  const uploadPurchaseInvoiceImage = useCallback(
+    async (id, file) => {
+      try {
+        const formData = new FormData();
+        formData.append("image", file);
+        await uploadPurchaseInvoiceImageMutation({ id, body: formData }).unwrap();
+        toast.success("تم إرفاق صورة الفاتورة بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "تعذّر إرفاق صورة الفاتورة");
+        return false;
+      }
+    },
+    [uploadPurchaseInvoiceImageMutation]
+  );
+
+  const removePurchaseInvoiceImage = useCallback(
+    async (id) => {
+      try {
+        await removePurchaseInvoiceImageMutation(id).unwrap();
+        toast.success("تم حذف صورة الفاتورة");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "تعذّر حذف صورة الفاتورة");
+        return false;
+      }
+    },
+    [removePurchaseInvoiceImageMutation]
   );
 
   // ---- فهرس المواد (طلب العميل: البحث عن المادة وكميتها) ------------------
@@ -907,6 +1167,47 @@ const transactions = Array.isArray(transactionsResponse?.data)
     isFetchingSuppliers,
     addSupplier,
     isSavingSupplier,
+    deleteSupplier,
+    isDeletingSupplier,
+
+    // Employee & Supplier Advances
+    employeeAdvances,
+    isFetchingEmployeeAdvances,
+    employeeAdvanceHistoryFilters,
+    setEmployeeAdvanceHistoryFilters,
+    giveEmployeeAdvance,
+    isGivingEmployeeAdvance,
+    getEmployeeAdvanceBalance,
+    settleEmployeeAdvance,
+    isSettlingEmployeeAdvance,
+
+    // Employee statement (كشف حساب موظف)
+    statementEmployeeId,
+    openEmployeeStatement,
+    closeEmployeeStatement,
+    employeeStatement,
+    isFetchingEmployeeStatement,
+    employeeStatementFilters,
+    loadEmployeeStatement,
+
+    supplierAdvances,
+    isFetchingSupplierAdvances,
+    supplierAdvanceHistoryFilters,
+    setSupplierAdvanceHistoryFilters,
+    giveSupplierAdvance,
+    isGivingSupplierAdvance,
+    getSupplierAdvanceBalance,
+    settleSupplierAdvance,
+    isSettlingSupplierAdvance,
+
+    // Supplier statement (كشف حساب مورد)
+    statementSupplierId,
+    openSupplierStatement,
+    closeSupplierStatement,
+    supplierStatement,
+    isFetchingSupplierStatement,
+    supplierStatementFilters,
+    loadSupplierStatement,
 
     // Purchase invoices
     purchaseInvoices,
@@ -923,6 +1224,10 @@ const transactions = Array.isArray(transactionsResponse?.data)
     isUnarchivingPurchaseInvoice,
     payPurchaseInvoice,
     isPayingPurchaseInvoice,
+    uploadPurchaseInvoiceImage,
+    isUploadingPurchaseInvoiceImage,
+    removePurchaseInvoiceImage,
+    isRemovingPurchaseInvoiceImage,
     materials,
     isFetchingMaterials,
     searchMaterials,

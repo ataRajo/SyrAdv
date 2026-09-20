@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import axios from "axios";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { 
+import {
   Search,
   X,
   Navigation,
@@ -28,13 +29,14 @@ import {
 } from "lucide-react";
 import { showToast } from "../../../utils/Notifictions/showToast";
 
+const ROAD_SIGNS_API_URL = "https://devsyrback.addresses.sy/api/road-signs";
+
 const MoveSignDialog = ({
   isOpen,
   onClose,
   booking,
+  newEndDate, // ✅ NEW PROP — pass this from ExtendBooking.jsx (the selected extension end date)
   selectedRoadSigns,
-  allRoadSigns,
-  isRoadSignsFetching,
   currentMoveSignId,
   setCurrentMoveSignId,
   onAddMove,
@@ -42,6 +44,7 @@ const MoveSignDialog = ({
 }) => {
   const [newRoadSignId, setNewRoadSignId] = useState("");
   const [availableRoadSigns, setAvailableRoadSigns] = useState([]);
+  const [isRoadSignsFetching, setIsRoadSignsFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSignDetails, setSelectedSignDetails] = useState(null);
 
@@ -73,72 +76,128 @@ const MoveSignDialog = ({
     return region || 'غير محدد';
   };
 
-  useEffect(() => {
-    if (isOpen && currentMoveSignId && booking?.roadsigns) {
-      const signDetails = booking.roadsigns.find(sign => sign.id == currentMoveSignId);
-      setSelectedSignDetails(signDetails || null);
-      
-      if (signDetails && allRoadSigns) {
-        const currentTemplateId = signDetails.template?.id;
-        const currentSize = signDetails.size || 
-                           (signDetails.width && signDetails.height ? 
-                            `${signDetails.width}×${signDetails.height}` : null);
+  // ✅ Matches the real API field: sign.is_booked (boolean), not a "status" enum
+  const isSignBooked = (sign) => !!sign?.is_booked;
 
-        const filtered = allRoadSigns.filter(sign => {
-          if (!sign) return false;
-          if (sign.id == currentMoveSignId) return false;
-          
-          if (!sign.template || sign.template.id !== currentTemplateId) {
-            return false;
-          }
-          
-          if (currentSize) {
-            const signSize = sign.size || 
-                            (sign.width && sign.height ? 
-                             `${sign.width}×${sign.height}` : null);
-            if (signSize !== currentSize) return false;
-          }
-          
-          const hasAnyBookings = sign.bookings && Array.isArray(sign.bookings) && sign.bookings.length > 0;
-          
-          if (!hasAnyBookings) {
-            return true;
-          }
-          
-          if (hasAnyBookings) {
-            const hasActiveBookings = sign.bookings.some(booking => 
-              booking.status === 1 || 
-              booking.status === "approved" ||
-              booking.status === "active" ||
-              booking.status === "confirmed"
-            );
-            return !hasActiveBookings;
-          }
-          
-          return false;
-        });
-        
-        setAvailableRoadSigns(filtered || []);
-      }
-    } else {
+  // ✅ Matches the real API shape: bookings[].customer.company_name, bookings[].pivot.start_date/end_date
+  const getActiveBookingInfo = (sign) => {
+    if (!sign?.bookings?.length) return null;
+    const activeBooking = sign.bookings[0];
+    return {
+      customer: activeBooking.customer?.company_name || activeBooking.customer?.full_name || null,
+      startDate: activeBooking.pivot?.start_date
+        ? new Date(activeBooking.pivot.start_date).toLocaleDateString('ar-EG')
+        : null,
+      endDate: activeBooking.pivot?.end_date
+        ? new Date(activeBooking.pivot.end_date).toLocaleDateString('ar-EG')
+        : null,
+    };
+  };
+
+  const showBookedSignAlert = (sign) => {
+    const bookingInfo = getActiveBookingInfo(sign);
+    const details = [];
+    if (bookingInfo?.customer) details.push(`العميل: ${bookingInfo.customer}`);
+    if (bookingInfo?.startDate && bookingInfo?.endDate) {
+      details.push(`الفترة: من ${bookingInfo.startDate} إلى ${bookingInfo.endDate}`);
+    }
+    showToast(
+      "error",
+      `⚠️ اللوحة "${sign.place || `#${sign.id}`}" محجوزة حالياً${details.length ? ' — ' + details.join(' | ') : ''}`,
+      { duration: 6000 }
+    );
+  };
+
+  // ✅ Correctly handles month/year rollover (e.g. Aug 30 -> Aug 31, Aug 31 -> Sep 1)
+  // JS Date normalizes an out-of-range day automatically, so no manual "how many days
+  // does this month have" logic is needed.
+  const formatDate = (date) => date.toISOString().split('T')[0];
+
+  const getExtensionStartDate = (endDateString) => {
+    if (!endDateString) return null;
+    const date = new Date(endDateString);
+    date.setDate(date.getDate() + 1);
+    return formatDate(date);
+  };
+
+  // Resolve the current sign being moved, and fetch same-size signs from the API
+  useEffect(() => {
+    if (!isOpen || !currentMoveSignId || !booking?.roadsigns) {
       setSelectedSignDetails(null);
       setAvailableRoadSigns([]);
       setSearchTerm("");
       setNewRoadSignId("");
+      return;
     }
-  }, [isOpen, currentMoveSignId, booking?.roadsigns, allRoadSigns]);
 
+    const signDetails = booking.roadsigns.find(sign => sign.id == currentMoveSignId) || null;
+    setSelectedSignDetails(signDetails);
+
+    if (!signDetails) {
+      setAvailableRoadSigns([]);
+      return;
+    }
+
+    const templateSize = signDetails.template?.size ||
+      (signDetails.width && signDetails.height ? `${signDetails.width}X${signDetails.height}` : null);
+
+    const startDateStr = getExtensionStartDate(booking.end_date);
+    const endDateStr = newEndDate; // already "YYYY-MM-DD" from the date input
+
+    if (!templateSize || !startDateStr || !endDateStr) {
+      setAvailableRoadSigns([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchAvailableSigns = async () => {
+      try {
+        setIsRoadSignsFetching(true);
+
+        const raw = localStorage.getItem("SuperAdminInfo");
+        const info = raw ? JSON.parse(raw) : null;
+        const token = info?.user?.token || info?.token || null;
+
+        const response = await axios.get(ROAD_SIGNS_API_URL, {
+          params: {
+            start_date: startDateStr,
+            end_date: endDateStr,
+            template_size: templateSize,
+            only_available: 0, // fetch BOTH booked and unbooked signs
+          },
+          headers: {
+            Accept: 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        });
+
+        if (cancelled) return;
+
+        const signs = response.data?.data || [];
+        const filtered = signs.filter(sign => sign && sign.id != currentMoveSignId);
+        setAvailableRoadSigns(filtered);
+      } catch (error) {
+        console.error("Error fetching available road signs:", error);
+        if (!cancelled) {
+          showToast("error", "حدث خطأ أثناء جلب اللوحات المتاحة");
+          setAvailableRoadSigns([]);
+        }
+      } finally {
+        if (!cancelled) setIsRoadSignsFetching(false);
+      }
+    };
+
+    fetchAvailableSigns();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, currentMoveSignId, booking?.roadsigns, booking?.end_date, newEndDate]);
+
+  // ✅ Uses the real is_booked field instead of a non-existent "status"
   const hasActiveBookings = useMemo(() => {
-    if (!selectedSignDetails) return false;
-    
-    return selectedSignDetails.bookings && 
-           Array.isArray(selectedSignDetails.bookings) && 
-           selectedSignDetails.bookings.some(booking => 
-             booking.status === 1 || 
-             booking.status === "approved" ||
-             booking.status === "active" ||
-             booking.status === "confirmed"
-           );
+    return isSignBooked(selectedSignDetails);
   }, [selectedSignDetails]);
 
   const getPendingMoveForSign = (signId) => {
@@ -147,29 +206,26 @@ const MoveSignDialog = ({
 
   const filteredAvailableSigns = useMemo(() => {
     if (!availableRoadSigns) return [];
-    
+
     if (!searchTerm.trim()) {
       return availableRoadSigns;
     }
-    
+
     const term = searchTerm.toLowerCase();
     return availableRoadSigns.filter(sign => {
       const areaName = getAreaName(sign);
       const cityName = getCityName(sign);
       const regionName = getRegionName(sign);
-      
+
       return (
         (sign.place && sign.place.toLowerCase().includes(term)) ||
         (sign.roadsign_code && sign.roadsign_code.toLowerCase().includes(term)) ||
         (sign.directions && sign.directions.toLowerCase().includes(term)) ||
         (sign.direction && sign.direction.toLowerCase().includes(term)) ||
         (sign.template?.model && sign.template.model.toLowerCase().includes(term)) ||
-        
-        // Search in extracted names
         (areaName && areaName.toLowerCase().includes(term)) ||
         (cityName && cityName.toLowerCase().includes(term)) ||
         (regionName && regionName.toLowerCase().includes(term)) ||
-        
         (sign.id && sign.id.toString().includes(term))
       );
     });
@@ -200,11 +256,20 @@ const MoveSignDialog = ({
     }
 
     onAddMove(currentMoveSignId, newRoadSignId, currentSign, newSign);
-    showToast("success", "تمت إضافة حركة النقل للوحة (بانتظار التمديد)", { 
-      icon: "⏳", 
-      duration: 3000 
-    });
-    
+
+    if (isSignBooked(newSign)) {
+      showToast(
+        "info",
+        "⚠️ تمت إضافة حركة النقل، لكن يرجى الانتباه أن اللوحة الجديدة محجوزة حالياً — تأكد من توفرها قبل تأكيد التمديد",
+        { icon: "⚠️", duration: 5000 }
+      );
+    } else {
+      showToast("success", "تمت إضافة حركة النقل للوحة (بانتظار التمديد)", {
+        icon: "⏳",
+        duration: 3000
+      });
+    }
+
     onClose();
   };
 
@@ -227,7 +292,7 @@ const MoveSignDialog = ({
             اختر اللوحة التي تريد نقلها إلى موقع جديد (سيتم النقل عند تأكيد التمديد)
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="current-sign">اختر اللوحة المراد نقلها</Label>
@@ -246,10 +311,10 @@ const MoveSignDialog = ({
                 {booking?.roadsigns?.map((sign) => {
                   const isSelected = selectedRoadSigns.includes(sign.id);
                   const hasPendingMove = getPendingMoveForSign(sign.id);
-                  
+
                   return (
-                    <SelectItem 
-                      key={sign.id} 
+                    <SelectItem
+                      key={sign.id}
                       value={sign.id.toString()}
                       disabled={!isSelected}
                     >
@@ -291,22 +356,19 @@ const MoveSignDialog = ({
                 <InfoField label="كود اللوحة" value={selectedSignDetails.roadsign_code || 'غير محدد'} />
                 <InfoField label="القالب" value={selectedSignDetails.template?.model || 'غير محدد'} />
                 <InfoField label="معرف القالب" value={selectedSignDetails.template?.id || 'غير محدد'} />
-                
-                {/* المدينة والمنطقة فقط */}
                 <InfoField label="المدينة" value={getCityName(selectedSignDetails)} />
                 <InfoField label="المنطقة" value={getAreaName(selectedSignDetails)} />
-                
                 <InfoField label="الاتجاه" value={selectedSignDetails.directions || selectedSignDetails.direction || 'غير محدد'} />
                 <InfoField label="الحالة" value={
-                  <span className={`font-semibold ${hasActiveBookings ? 'text-green-600' : 'text-yellow-600'}`}>
-                    {hasActiveBookings ? '✅ مؤهلة للنقل' : '⚠️ بدون حجز نشط'}
+                  <span className={`font-semibold ${hasActiveBookings ? 'text-yellow-600' : 'text-green-600'}`}>
+                    {hasActiveBookings ? '⚠️ محجوزة حالياً' : '✅ بدون حجز نشط'}
                   </span>
                 } />
               </div>
             </div>
           )}
 
-          {selectedSignDetails && hasActiveBookings && selectedRoadSigns.includes(parseInt(currentMoveSignId)) && (
+          {selectedSignDetails && selectedRoadSigns.includes(parseInt(currentMoveSignId)) && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -319,11 +381,22 @@ const MoveSignDialog = ({
                       جاري التحميل...
                     </span>
                   ) : (
-                    <span>متاح {availableRoadSigns.length} لوحة</span>
+                    <span>
+                      {availableRoadSigns.length} لوحة بنفس الحجم
+                      {" "}(
+                      <span className="text-green-600 font-medium">
+                        {availableRoadSigns.filter(s => !isSignBooked(s)).length} متاحة
+                      </span>
+                      {" / "}
+                      <span className="text-orange-600 font-medium">
+                        {availableRoadSigns.filter(s => isSignBooked(s)).length} محجوزة
+                      </span>
+                      )
+                    </span>
                   )}
                 </div>
               </div>
-              
+
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
@@ -342,7 +415,7 @@ const MoveSignDialog = ({
                   </button>
                 )}
               </div>
-              
+
               {isRoadSignsFetching ? (
                 <div className="text-center p-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
@@ -367,22 +440,27 @@ const MoveSignDialog = ({
                           <th className="p-2 text-right">المدينة</th>
                           <th className="p-2 text-right">المنطقة</th>
                           <th className="p-2 text-right">القالب</th>
+                          <th className="p-2 text-right">الحالة</th>
                           <th className="p-2 text-right">اختيار</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredAvailableSigns.map((sign, index) => {
-                          const existingMoveForNewSign = pendingMoves.find(move => 
+                          const existingMoveForNewSign = pendingMoves.find(move =>
                             move.newSignId == sign.id
                           );
-                          
+                          const signBooked = isSignBooked(sign);
                           return (
-                            <tr 
-                              key={sign.id} 
+                            <tr
+                              key={sign.id}
                               className={`border-t hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
                                 newRoadSignId == sign.id ? 'bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-300' : ''
                               } ${
                                 existingMoveForNewSign ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
+                              } ${
+                                signBooked && newRoadSignId != sign.id && !existingMoveForNewSign
+                                  ? 'bg-orange-50/60 dark:bg-orange-900/10'
+                                  : ''
                               }`}
                             >
                               <td className="p-2">{index + 1}</td>
@@ -393,31 +471,52 @@ const MoveSignDialog = ({
                                 </div>
                               </td>
                               <td className="p-2">{sign.roadsign_code || `RS-${sign.id}`}</td>
-                              
-                              {/* المدينة والمنطقة فقط */}
                               <td className="p-2">{getCityName(sign)}</td>
                               <td className="p-2">{getAreaName(sign)}</td>
-                              
                               <td className="p-2">
                                 <Badge variant="outline" className="text-green-700 border-green-300">
                                   {sign.template?.model || 'غير محدد'}
                                 </Badge>
                               </td>
                               <td className="p-2">
+                                {signBooked ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      showBookedSignAlert(sign);
+                                    }}
+                                    title="اضغط لعرض تفاصيل الحجز"
+                                    className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/40 dark:text-orange-300 transition-colors"
+                                  >
+                                    <AlertTriangle className="w-3 h-3" />
+                                    محجوزة
+                                  </button>
+                                ) : (
+                                  <span className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                                    <CheckCircle className="w-3 h-3" />
+                                    متاحة
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2">
                                 <button
                                   onClick={() => {
                                     setNewRoadSignId(sign.id.toString());
+                                    if (signBooked) {
+                                      showBookedSignAlert(sign);
+                                    }
                                   }}
                                   disabled={!!existingMoveForNewSign}
                                   className={`px-3 py-1 rounded text-xs transition-all ${
-                                    newRoadSignId == sign.id 
-                                      ? 'bg-blue-500 text-white shadow-md' 
+                                    newRoadSignId == sign.id
+                                      ? 'bg-blue-500 text-white shadow-md'
                                       : existingMoveForNewSign
                                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                       : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 hover:shadow-sm'
                                   }`}
                                 >
-                                  {newRoadSignId == sign.id ? '✓ محددة' : 
+                                  {newRoadSignId == sign.id ? '✓ محددة' :
                                    existingMoveForNewSign ? 'محجوزة لنقل آخر' : 'اختر'}
                                 </button>
                               </td>
@@ -425,11 +524,11 @@ const MoveSignDialog = ({
                           );
                         })}
                       </tbody>
-                      
+
                       {filteredAvailableSigns.length === 0 && searchTerm && (
                         <tfoot>
                           <tr>
-                            <td colSpan="7" className="text-center p-4 text-gray-500">
+                            <td colSpan="8" className="text-center p-4 text-gray-500">
                               لا توجد نتائج للبحث "{searchTerm}"
                             </td>
                           </tr>
@@ -439,34 +538,52 @@ const MoveSignDialog = ({
                   </div>
                 </div>
               )}
-              
-              {newRoadSignId && !isRoadSignsFetching && (
-                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-green-700 dark:text-green-300">
-                      <span className="font-semibold">✅ اللوحة المختارة:</span>
-                      <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
-                        {(() => {
-                          const selected = availableRoadSigns.find(s => s.id == newRoadSignId);
-                          if (!selected) return null;
-                          
-                          return (
-                            <>
-                              <div>الاسم: {selected.place || `اللوحة #${selected.id}`}</div>
-                              <div>الكود: {selected.roadsign_code || `RS-${selected.id}`}</div>
-                              <div>المدينة: {getCityName(selected)}</div>
-                              <div>المنطقة: {getAreaName(selected)}</div>
-                              <div>القالب: {selected.template?.model || 'غير محدد'}</div>
-                              <div>الاتجاه: {selected.directions || selected.direction || 'غير محدد'}</div>
-                            </>
-                          );
-                        })()}
+
+              {newRoadSignId && !isRoadSignsFetching && (() => {
+                const selected = availableRoadSigns.find(s => s.id == newRoadSignId);
+                if (!selected) return null;
+                const selectedBooked = isSignBooked(selected);
+                const selectedBookingInfo = selectedBooked ? getActiveBookingInfo(selected) : null;
+                return (
+                  <div className={`p-3 rounded-lg border animate-in fade-in ${
+                    selectedBooked
+                      ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+                      : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className={`text-sm ${selectedBooked ? 'text-orange-700 dark:text-orange-300' : 'text-green-700 dark:text-green-300'}`}>
+                        <span className="font-semibold">
+                          {selectedBooked ? '⚠️ اللوحة المختارة (محجوزة حالياً):' : '✅ اللوحة المختارة:'}
+                        </span>
+                        <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
+                          <div>الاسم: {selected.place || `اللوحة #${selected.id}`}</div>
+                          <div>الكود: {selected.roadsign_code || `RS-${selected.id}`}</div>
+                          <div>المدينة: {getCityName(selected)}</div>
+                          <div>المنطقة: {getAreaName(selected)}</div>
+                          <div>القالب: {selected.template?.model || 'غير محدد'}</div>
+                          <div>الاتجاه: {selected.directions || selected.direction || 'غير محدد'}</div>
+                        </div>
+                        {selectedBooked && (
+                          <div className="mt-2 pt-2 border-t border-orange-200 dark:border-orange-800 text-xs space-y-0.5">
+                            {selectedBookingInfo?.customer && (
+                              <div>العميل الحالي: {selectedBookingInfo.customer}</div>
+                            )}
+                            {selectedBookingInfo?.startDate && selectedBookingInfo?.endDate && (
+                              <div>فترة الحجز: من {selectedBookingInfo.startDate} إلى {selectedBookingInfo.endDate}</div>
+                            )}
+                            <div className="mt-1 font-medium">يرجى التأكد من توفر اللوحة قبل تأكيد النقل</div>
+                          </div>
+                        )}
                       </div>
+                      {selectedBooked ? (
+                        <AlertTriangle className="w-8 h-8 text-orange-600 flex-shrink-0" />
+                      ) : (
+                        <CheckCircle className="w-8 h-8 text-green-600 flex-shrink-0" />
+                      )}
                     </div>
-                    <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -488,14 +605,14 @@ const MoveSignDialog = ({
         </div>
 
         <DialogFooter className="flex gap-3 mt-6">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={onClose}
             className="flex-1"
           >
             إلغاء
           </Button>
-          <Button 
+          <Button
             onClick={handleAddPendingMove}
             disabled={!currentMoveSignId || !newRoadSignId || !selectedRoadSigns.includes(parseInt(currentMoveSignId))}
             className="flex-1 bg-purple-600 hover:bg-purple-700"

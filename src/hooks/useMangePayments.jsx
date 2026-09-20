@@ -4,6 +4,7 @@ import {
   useDeletePaymentMutation,
   useGetPaymentsQuery,
   useGetTotalPaymentAndRemainingQuery,
+  useGetBoxDailyReportQuery,
 } from "../RtkQuery/Slice/Payments/PaymentsApi";
 import { showToast } from "../utils/Notifictions/showToast";
 import { Permissions } from "../Static/StaticData";
@@ -23,6 +24,15 @@ const useMangePayments = () => {
   // Add filter states
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState("");
+
+  // فلترة يومية للصندوق (طلب صريح) - وضع منفصل عن نطاق from/toDate أعلاه:
+  // يجلب الدفعات والحجوزات "لهذا اليوم" تحديدًا من /get-box-daily-report،
+  // بقيم متكاملة بين الدفعات والحجوزات (راجع تعليق
+  // PaymentService::getDailyBoxReport() على الباك-إند). isDailyView يبدّل
+  // Box.jsx بين عرض النطاق العام (data من useGetTotalPaymentAndRemainingQuery
+  // أدناه) وهذا العرض اليومي.
+  const [isDailyView, setIsDailyView] = useState(false);
+  const [dailyDate, setDailyDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [confirmPayment, { isLoading: isLoadingConfirm }] =
     useConfirmOnePaymentMutation();
@@ -45,7 +55,18 @@ const useMangePayments = () => {
       to_date: toDate,
       user_id: selectedUser,
       customer_id: selectedCustomer,
-    }
+    },
+    { skip: isDailyView }
+  );
+
+  // الاستعلام اليومي - نفس فلاتر الموظف/الزبون، لكن بتاريخ يوم واحد فقط.
+  const { data: dailyBoxData, isFetching: isFetchingDailyBox } = useGetBoxDailyReportQuery(
+    {
+      date: dailyDate,
+      user_id: selectedUser,
+      customer_id: selectedCustomer,
+    },
+    { skip: !isDailyView || !dailyDate }
   );
 
   // ✅ دالة يمكن إعادة استخدامها لحساب إشعارات أي مجموعة من الدفعات
@@ -280,6 +301,13 @@ const useMangePayments = () => {
     selectedCustomer,
     setSelectedCustomer,
     isFetchingBox,
+    // فلترة يومية للصندوق (طلب صريح)
+    isDailyView,
+    setIsDailyView,
+    dailyDate,
+    setDailyDate,
+    dailyBoxData,
+    isFetchingDailyBox,
     // إرجاع دالة حساب الإشعارات والبيانات
     calculateBookingNotifications, // ✅ أضف هذه الدالة
     allNotifications, // ✅ إشعارات جميع البيانات

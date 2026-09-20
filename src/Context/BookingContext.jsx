@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useMemo } from "react";
+import { createContext, useState, useEffect, useMemo, useRef } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useGetCustomersQuery } from "../RtkQuery/Slice/Customers/CustomersApi";
@@ -15,6 +15,50 @@ import { useGetCompanyQuery } from "../RtkQuery/Slice/Auth/AuthApi";
 import { Toaster } from "react-hot-toast";
 
 export const BookingContext = createContext();
+
+// حفظ سلة الحجز مؤقتًا (طلب العميل: "streamline the process for
+// employees" - إذا أضاف الموظف لوحات إلى السلة ثم خرج من الواجهة (أغلق
+// التبويب/تنقّل بعيدًا/أعاد تحميل الصفحة)، تبقى العناصر محفوظة لمدة 30
+// دقيقة قبل إفراغها تلقائيًا، بدل أن يضطر لإعادة اختيار كل شيء من جديد).
+// المدة تُقاس منذ آخر نشاط فعلي على السلة (آخر إضافة/تعديل) لا منذ أول
+// إضافة - أي أنها فعليًا "مهلة خمول" (idle timeout).
+const CART_PERSIST_TTL_MS = 30 * 60 * 1000; // 30 دقيقة
+const CART_STORAGE_KEY = "booking_cart_draft_v1";
+
+const loadPersistedCart = () => {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > CART_PERSIST_TTL_MS) {
+      // انتهت مهلة الـ30 دقيقة منذ آخر حفظ - نعتبر السلة منتهية الصلاحية.
+      localStorage.removeItem(CART_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    // بيانات تالفة في التخزين المحلي - تجاهلها بدل كسر الصفحة.
+    localStorage.removeItem(CART_STORAGE_KEY);
+    return null;
+  }
+};
+
+const savePersistedCart = (data) => {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ ...data, savedAt: Date.now() }));
+  } catch (e) {
+    // مثلًا تجاوز حصة التخزين المحلي - السلة تبقى تعمل في الذاكرة فقط
+    // (كسابقًا) دون حفظ عبر الجلسات، دون كسر الواجهة.
+  }
+};
+
+const clearPersistedCart = () => {
+  try {
+    localStorage.removeItem(CART_STORAGE_KEY);
+  } catch (e) {
+    // تجاهل
+  }
+};
 
 export const BookingContextApi = ({ children, bookingId }) => {
   const isEditMode = !!bookingId;
@@ -35,6 +79,12 @@ export const BookingContextApi = ({ children, bookingId }) => {
   const [queryParams, setQueryParams] = useState({});
   const [individualCalculations, setIndividualCalculations] = useState({});
   const [individualLoadingStates, setIndividualLoadingStates] = useState({}); // New state for individual loading states
+
+  // استرجاع/حفظ سلة الحجز - انظر تعليق CART_PERSIST_TTL_MS أعلاه. لا تُطبَّق
+  // على وضع التعديل (isEditMode): هناك تُعبَّأ الحقول من بيانات الحجز
+  // الفعلية على الخادم، فلا معنى لاستعادة مسودة سلة قديمة فوقها.
+  const hasRestoredCartRef = useRef(false);
+  const lastCartActivityRef = useRef(Date.now());
 
   // RTK Query hooks
   const { data: roadSigns, isLoading: isLoadingRoadSigns } =
@@ -153,6 +203,8 @@ const formik = useFormik({
       setNotes("");
       setOpenDialog(false);
       setContractDialog(false);
+      // اكتمل الحجز فعليًا - لا داعٍ لبقاء مسودة السلة المحفوظة محليًا.
+      clearPersistedCart();
       navigate("/dashboard/bookings");
     } catch (error) {
       showToast(
@@ -187,6 +239,96 @@ const formik = useFormik({
       setNotes(superAdminInfo?.user?.company?.contract_note || "");
     }
   }, [isEditMode]);
+
+  // استرجاع مسودة السلة المحفوظة (إن وُجدت ولم تنتهِ صلاحيتها بعد) عند
+  // فتح واجهة إنشاء حجز جديد - مرة واحدة فقط عند التحميل الأول.
+  useEffect(() => {
+    if (isEditMode || hasRestoredCartRef.current) return;
+    hasRestoredCartRef.current = true;
+
+    const persisted = loadPersistedCart();
+    if (persisted && Array.isArray(persisted.selectedSigns) && persisted.selectedSigns.length > 0) {
+      setSelectedSigns(persisted.selectedSigns);
+      setAddedSignIds(new Set(persisted.addedSignIds || []));
+      setNotes(persisted.notes ?? "");
+      setShowDiscount(Boolean(persisted.showDiscount));
+      setDiscountType(persisted.discountType ?? "1");
+      setDiscountValue(persisted.discountValue ?? "");
+      if (persisted.formikValues) {
+        formik.setValues((prev) => ({ ...prev, ...persisted.formikValues }));
+      }
+      lastCartActivityRef.current = persisted.savedAt || Date.now();
+      showToast("success", "تم استرجاع عناصر السلة المحفوظة من جلسة سابقة");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode]);
+
+  // حفظ مسودة السلة تلقائيًا مع كل تغيير - يُستخدَم عند العودة لاحقًا (خلال
+  // 30 دقيقة) لاستعادتها، وأيضًا كمرجع لوقت آخر نشاط (انظر مؤقّت الإفراغ
+  // التلقائي بالأسفل).
+  useEffect(() => {
+    if (isEditMode) return;
+
+    if (selectedSigns.length === 0) {
+      // سلة فارغة - لا داعٍ لحفظ شيء، ونمسح أي مسودة قديمة متبقية.
+      clearPersistedCart();
+      return;
+    }
+
+    lastCartActivityRef.current = Date.now();
+    savePersistedCart({
+      selectedSigns,
+      addedSignIds: [...addedSignIds],
+      notes,
+      showDiscount,
+      discountType,
+      discountValue,
+      formikValues: {
+        customer_id: formik.values.customer_id,
+        type: formik.values.type,
+        start_date: formik.values.start_date,
+        end_date: formik.values.end_date,
+        product_type: formik.values.product_type,
+        printing_id: formik.values.printing_id,
+        units: formik.values.units,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isEditMode,
+    selectedSigns,
+    addedSignIds,
+    notes,
+    showDiscount,
+    discountType,
+    discountValue,
+    formik.values.customer_id,
+    formik.values.type,
+    formik.values.start_date,
+    formik.values.end_date,
+    formik.values.product_type,
+    formik.values.printing_id,
+    formik.values.units,
+  ]);
+
+  // إفراغ تلقائي للسلة بعد 30 دقيقة من الخمول (بلا أي إضافة/تعديل) حتى لو
+  // بقي الموظف على نفس الصفحة مفتوحة دون تنقّل - يمنع بقاء سلة قديمة منسية
+  // تحجز اللوحات ذهنيًا رغم عدم إتمام الحجز فعليًا.
+  useEffect(() => {
+    if (isEditMode) return;
+    const interval = setInterval(() => {
+      if (selectedSigns.length > 0 && Date.now() - lastCartActivityRef.current > CART_PERSIST_TTL_MS) {
+        setSelectedSigns([]);
+        setAddedSignIds(new Set());
+        setCalculationResult(null);
+        setIndividualCalculations({});
+        setIndividualLoadingStates({});
+        clearPersistedCart();
+        showToast("warning", "تم إفراغ سلة الحجز تلقائيًا بعد مرور 30 دقيقة بلا نشاط");
+      }
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isEditMode, selectedSigns.length]);
 
   // Update query params
   useEffect(() => {

@@ -62,7 +62,8 @@ import { Separator } from "@/components/ui/separator";
 import { BrokerNavbar } from "../../Components/Broker/BrokerNavbar";
 import { useGetRoadSignsQuery } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import { useGetCitiesWithRegionsQuery ,
-  useSubmitBrokerActivityMutation  
+  useSubmitBrokerActivityMutation,
+  useSendWhatsappMessageMutation,
  } from "../../RtkQuery/Slice/mediatorapis/MediatorApi";
 import { useCalculateReservationMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { showToast } from "../../utils/Notifictions/showToast";
@@ -272,6 +273,7 @@ export function MapBroker() {
   // API hooks
   const [calculateReservation] = useCalculateReservationMutation();
   const [submitBrokerActivity] = useSubmitBrokerActivityMutation();
+  const [sendWhatsappMessage] = useSendWhatsappMessageMutation();
 
   // Fetch cities
   const { data: cities = [], isLoading: citiesLoading } =
@@ -655,13 +657,17 @@ export function MapBroker() {
 
         message += `\n*تاريخ الطلب:* ${new Date().toLocaleDateString("ar-SY")}`;
 
-        const encodedMessage = encodeURIComponent(message);
+        // إرسال تلقائي عبر الباك-إند (WAHA) بدل فتح واتساب يدويًا - نفس نص
+        // الرسالة الذي كان يُبنى أعلاه تمامًا بلا أي تغيير.
         // Clean the WhatsApp number (remove any non-digits)
         const cleanNumber = whatsappNumber.replace(/\D/g, "");
-        const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
 
-        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-        showToast("success", "تم إرسال البيانات وفتح واتساب بنجاح");
+        await sendWhatsappMessage({
+          phoneNumber: cleanNumber,
+          message,
+        }).unwrap();
+
+        showToast("success", "تم إرسال البيانات ورسالة واتساب بنجاح");
 
         // Reset form after sending
         setShowWhatsAppForm(false);
@@ -679,7 +685,7 @@ export function MapBroker() {
       }
     } catch (error) {
       console.error("Error in handleSendToWhatsApp:", error);
-      showToast("error", error?.data?.message || "حدث خطأ في فتح واتساب");
+      showToast("error", error?.message || error?.data?.message || "حدث خطأ أثناء إرسال رسالة واتساب");
     } finally {
       setIsSending(false);
     }

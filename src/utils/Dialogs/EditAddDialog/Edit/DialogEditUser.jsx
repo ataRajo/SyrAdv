@@ -46,6 +46,16 @@ export const DialogEditUser = ({ show, handleClose, initData }) => {
           : initData.roles[0]
         : "",
     department: initData.department || "", // Add department to initial values
+    // الصلاحيات المباشرة المُسنَدة حاليًا للموظف (مستقلة عن دوره) - راجع
+    // UserService::getById التي تُحمِّل علاقة permissions الآن.
+    permissions: Array.isArray(initData.permissions)
+      ? initData.permissions.map((p) => (typeof p === "object" ? p.name : p))
+      : [],
+    // ✅ الراتب (طلب صريح): تعبئة الخانة بالراتب الفعّال حاليًا إن وُجد -
+    // راجع User::currentSalary() وUserService::getById على الباك-إند.
+    // تُترك فارغة (لا 0) حتى لا يُفسَّر "بلا راتب" كـ"راتب صفري" عند
+    // الحفظ (UserService::update يتجاهل salary=0 عن قصد).
+    salary: initData?.current_salary?.amount ?? "",
   };
 
   const onSubmitTransform = (values) => ({

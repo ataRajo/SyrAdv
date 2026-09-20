@@ -17,6 +17,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
+import SupplierStatementDialog from "./SupplierStatementDialog";
+
+const fmt = (n) => Number(n ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 });
 
 const AddCategoryForm = ({ selectableAccounts, onCancel, onSave, isSaving }) => {
   const [form, setForm] = useState({ name: "", expense_account_id: "" });
@@ -141,11 +144,21 @@ const SuppliersTab = ({ accounting }) => {
     isFetchingSuppliers,
     addSupplier,
     isSavingSupplier,
+    deleteSupplier,
+    isDeletingSupplier,
     selectableAccounts,
+    openSupplierStatement,
   } = accounting;
 
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+
+  const handleDeleteSupplier = async (supplier) => {
+    if (isDeletingSupplier) return;
+    const userConfirmed = window.confirm(`هل تريد حذف المورد "${supplier.name}"؟ لا يمكن التراجع عن هذا الإجراء.`);
+    if (!userConfirmed) return;
+    await deleteSupplier(supplier.id);
+  };
 
   return (
     <div className="space-y-4">
@@ -171,14 +184,22 @@ const SuppliersTab = ({ accounting }) => {
                 <th className="p-2 text-center">الفئة (نوع العمل)</th>
                 <th className="p-2 text-center">الهاتف</th>
                 <th className="p-2 text-center">العنوان</th>
+                {/* طلب صريح: "خانة جديدة اسمها المتبقي على الشركة" - مثال
+                    العميل: فاتورة شراء 500 + سلفة 200 = متبقي 300. القيمة
+                    من SupplierResource::net_remaining_balance (رصيد حساب
+                    المورد المستحق ناقص أي سلفة قائمة لم تُستهلَك بعد) -
+                    نفس الحساب المعروض داخل "كشف حساب" لكن هنا مباشرة بجانب
+                    كل مورد بلا حاجة لفتح الكشف. */}
+                <th className="p-2 text-center">المتبقي على الشركة</th>
+                <th className="p-2 text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody>
               {isFetchingSuppliers && (
-                <tr><td colSpan={4} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+                <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
               )}
               {!isFetchingSuppliers && (suppliers ?? []).length === 0 && (
-                <tr><td colSpan={4} className="p-4 text-center text-muted-foreground">لا يوجد موردون بعد</td></tr>
+                <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">لا يوجد موردون بعد</td></tr>
               )}
               {(suppliers ?? []).map((s) => (
                 <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -186,6 +207,40 @@ const SuppliersTab = ({ accounting }) => {
                   <td className="p-2 text-xs text-muted-foreground text-center">{s.category?.name ?? "-"}</td>
                   <td className="p-2 text-xs text-center">{s.phone || "-"}</td>
                   <td className="p-2 text-xs text-center">{s.address || "-"}</td>
+                  <td className="p-2 text-center font-mono">
+                    {/* net_remaining_balance_raw سالب => السلفة القائمة تفوق
+                        المستحق (فائض سلفة جاهز لفواتير قادمة)، نفس منطق
+                        SupplierStatementDialog تمامًا. */}
+                    {s.net_remaining_balance_raw < 0 ? (
+                      <span className="text-emerald-700 text-xs">
+                        فائض سلفة: {fmt(Math.abs(s.net_remaining_balance_raw))}
+                      </span>
+                    ) : (
+                      <span className={s.net_remaining_balance > 0 ? "text-amber-700 font-semibold" : ""}>
+                        {fmt(s.net_remaining_balance)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => openSupplierStatement(s.id)}>
+                        <Icon icon="mdi:file-document-outline" className="w-3.5 h-3.5 ml-1" />
+                        كشف حساب
+                      </Button>
+                      {/* طلب صريح: "إضافة خيار حذف المورد" - مرفوض من
+                          الباك-إند إن كان للمورد فواتير شراء أو سلف مسجَّلة
+                          (رسالة الخطأ من السيرفر تُعرض كما هي عبر toast). */}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isDeletingSupplier}
+                        onClick={() => handleDeleteSupplier(s)}
+                      >
+                        <Icon icon="mdi:trash-can-outline" className="w-3.5 h-3.5 ml-1" />
+                        حذف
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -254,6 +309,8 @@ const SuppliersTab = ({ accounting }) => {
           />
         </DialogContent>
       </Dialog>
+
+      <SupplierStatementDialog accounting={accounting} />
     </div>
   );
 };

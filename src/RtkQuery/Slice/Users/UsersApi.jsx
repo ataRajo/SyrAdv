@@ -13,6 +13,12 @@ export const UsersSlice = createApi({
     getRoles: builder.query({
       query: () => "/roles",
     }),
+    // قائمة كل الصلاحيات (مُجمَّعة حسب المورد + قائمة الصلاحيات
+    // الاستثنائية) - راجع PermissionController على الباك-إند.
+    getPermissions: builder.query({
+      query: () => "/permissions",
+      transformResponse: (response) => response?.data ?? { groups: [], exceptional: [] },
+    }),
     addNewUsers: builder.mutation({
       query: (data) => {
         return {
@@ -55,6 +61,7 @@ export const UsersSlice = createApi({
 export const {
   useGetUsersQuery,
   useGetRolesQuery,
+  useGetPermissionsQuery,
   useAddNewUsersMutation,
   useShowOneUsersQuery,
   useUpdateUsersMutation,

@@ -8,21 +8,29 @@ import { useAuth } from "../../Context/AuthProvider";
 import { Link } from "react-router";
 import { Icon } from "@iconify/react";
 import { Button } from "@/components/ui/button";
-import BoxSummaryCards from "../../Components/Box/Boxsummarycards"; 
+import BoxSummaryCards from "../../Components/Box/Boxsummarycards";
 import { CustomerDetailsDrawer } from "../../Components/Box/CustomerDetailsDrawer";
+import DailyBoxSummary from "../../Components/Box/DailyBoxSummary";
 
 const Box = () => {
-  const { 
-    data, 
-    fromDate, 
-    setFromDate, 
-    toDate, 
-    setToDate, 
+  const {
+    data,
+    fromDate,
+    setFromDate,
+    toDate,
+    setToDate,
     isFetchingBox,
     selectedUser,
     setSelectedUser,
     selectedCustomer,
-    setSelectedCustomer
+    setSelectedCustomer,
+    // فلترة يومية للصندوق (طلب صريح)
+    isDailyView,
+    setIsDailyView,
+    dailyDate,
+    setDailyDate,
+    dailyBoxData,
+    isFetchingDailyBox,
   } = useMangePayments();
 
   const [selectedDetails, setSelectedDetails] = useState(null);
@@ -90,39 +98,76 @@ const Box = () => {
           حركة الصندوق والزبائن
         </h1>
 
-        <Button
-          asChild
-          className="bg-slate-700 hover:bg-slate-800 text-white gap-2"
-        >
-          <Link to="/dashboard/administration-page/payments">
-            <Icon icon="mdi:cash-register" className="w-5 h-5" />
-            <span>إدارة الدفعات</span>
-            <Icon icon="mdi:arrow-left" className="w-4 h-4" />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => setIsDailyView(false)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                !isDailyView ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              حسب الفترة
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDailyView(true)}
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                isDailyView ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon icon="mdi:calendar-today" className="w-3.5 h-3.5" />
+              فلترة يومية
+            </button>
+          </div>
+          <Button
+            asChild
+            className="bg-slate-700 hover:bg-slate-800 text-white gap-2"
+          >
+            <Link to="/dashboard/administration-page/payments">
+              <Icon icon="mdi:cash-register" className="w-5 h-5" />
+              <span>إدارة الدفعات</span>
+              <Icon icon="mdi:arrow-left" className="w-4 h-4" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-card p-4 rounded-xl border border-border shadow-sm">
-        <div className="flex flex-col">
-          <label className="mb-1.5 text-xs font-semibold text-muted-foreground">من تاريخ</label>
-          <input
-            type="date"
-            value={fromDate || ""}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="p-2.5 border rounded-xl bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        </div>
+        {isDailyView ? (
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-xs font-semibold text-muted-foreground">اليوم</label>
+            <input
+              type="date"
+              value={dailyDate || ""}
+              onChange={(e) => setDailyDate(e.target.value)}
+              className="p-2.5 border rounded-xl bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col">
+              <label className="mb-1.5 text-xs font-semibold text-muted-foreground">من تاريخ</label>
+              <input
+                type="date"
+                value={fromDate || ""}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="p-2.5 border rounded-xl bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
 
-        <div className="flex flex-col">
-          <label className="mb-1.5 text-xs font-semibold text-muted-foreground">إلى تاريخ</label>
-          <input
-            type="date"
-            value={toDate || ""}
-            onChange={(e) => setToDate(e.target.value)}
-            className="p-2.5 border rounded-xl bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        </div>
+            <div className="flex flex-col">
+              <label className="mb-1.5 text-xs font-semibold text-muted-foreground">إلى تاريخ</label>
+              <input
+                type="date"
+                value={toDate || ""}
+                onChange={(e) => setToDate(e.target.value)}
+                className="p-2.5 border rounded-xl bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </>
+        )}
 
         <div className="flex flex-col">
           <label className="mb-1.5 text-xs font-semibold text-muted-foreground">الموظف</label>
@@ -184,18 +229,26 @@ const Box = () => {
         </div>
       </div>
 
-      {/* Cards Summary */}
-      <BoxSummaryCards 
-        summary={data?.summary} 
-        isLoading={isFetchingBox} 
-      />
+      {isDailyView ? (
+        /* فلترة يومية للصندوق (طلب صريح) - ملخّص وحركات يوم واحد محدَّد،
+           بقيم متكاملة بين الدفعات والحجوزات (راجع DailyBoxSummary). */
+        <DailyBoxSummary data={dailyBoxData} isLoading={isFetchingDailyBox} />
+      ) : (
+        <>
+          {/* Cards Summary */}
+          <BoxSummaryCards
+            summary={data?.summary}
+            isLoading={isFetchingBox}
+          />
 
-      {/* Main Table */}
-      <DynamicTable
-        data={data?.customers || []}
-        isLoading={isFetchingBox}
-        columns={columns}
-      />
+          {/* Main Table */}
+          <DynamicTable
+            data={data?.customers || []}
+            isLoading={isFetchingBox}
+            columns={columns}
+          />
+        </>
+      )}
 
       {/* Customer Detailed View Drawer */}
       <CustomerDetailsDrawer 
@@ -207,4 +260,4 @@ const Box = () => {
   );
 };
 
-export default Box;
+export default Box; 

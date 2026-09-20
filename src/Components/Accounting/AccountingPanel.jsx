@@ -1,4 +1,5 @@
 import React from "react";
+import { useSearchParams } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAccounting } from "../../hooks/useAccounting";
 import ChartOfAccountsTab from "./ChartOfAccountsTab";
@@ -10,7 +11,9 @@ import PayrollTab from "./PayrollTab";
 import FinancialReportsTab from "./FinancialReportsTab";
 import SuppliersTab from "./SuppliersTab";
 import PurchaseInvoicesTab from "./PurchaseInvoicesTab";
+import MaterialsTab from "./MaterialsTab";
 import BrokerCommissionsTab from "./BrokerCommissionsTab";
+import AdvancesTab from "./AdvancesTab";
 
 // Helper function to count unpaid credit invoices
 const getUnpaidCreditCount = (purchaseInvoices) => {
@@ -33,13 +36,44 @@ const getUnpaidCreditCount = (purchaseInvoices) => {
  * with each other (e.g. posting an incoming transaction here immediately
  * refreshes the trial balance and any open statement).
  */
+const VALID_TABS = [
+  "transactions",
+  "accounts",
+  "statements",
+  "cash-closing",
+  "payroll",
+  "suppliers",
+  "purchase-invoices",
+  "materials",
+  "broker-commissions",
+  "advances",
+  "reports",
+  "trial-balance",
+];
+
 const AccountingPanel = () => {
   const accounting = useAccounting();
 
+  // يقرأ التبويب المطلوب من ?tab= في الرابط - يسمح بالانتقال المباشر
+  // لتبويب معيّن (الموردين/المواد) من الشريط الجانبي أو من نتائج البحث
+  // الذكي، بدل الاضطرار لفتح صفحة المحاسبة ثم اختيار التبويب يدويًا.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const requestedTab = searchParams.get("tab");
+  const activeTab = VALID_TABS.includes(requestedTab) ? requestedTab : "transactions";
+
+  const handleTabChange = (value) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", value);
+      return next;
+    }, { replace: true });
+  };
+
   return (
     <div className="space-y-4" dir="rtl">
-      <Tabs defaultValue="transactions" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-10 bg-card rounded-lg border border-border h-auto">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-12 bg-card rounded-lg border border-border h-auto">
           <TabsTrigger value="transactions" className="text-xs md:text-sm font-medium">
             المعاملات والسندات
           </TabsTrigger>
@@ -66,8 +100,14 @@ const AccountingPanel = () => {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="materials" className="text-xs md:text-sm font-medium">
+            المواد
+          </TabsTrigger>
           <TabsTrigger value="broker-commissions" className="text-xs md:text-sm font-medium">
             عمولات الوسطاء
+          </TabsTrigger>
+          <TabsTrigger value="advances" className="text-xs md:text-sm font-medium">
+            السلف
           </TabsTrigger>
           <TabsTrigger value="reports" className="text-xs md:text-sm font-medium">
             التقارير المالية
@@ -105,8 +145,16 @@ const AccountingPanel = () => {
           <PurchaseInvoicesTab accounting={accounting} />
         </TabsContent>
 
+        <TabsContent value="materials" className="mt-4">
+          <MaterialsTab />
+        </TabsContent>
+
         <TabsContent value="broker-commissions" className="mt-4">
           <BrokerCommissionsTab accounting={accounting} />
+        </TabsContent>
+
+        <TabsContent value="advances" className="mt-4">
+          <AdvancesTab accounting={accounting} />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-4">

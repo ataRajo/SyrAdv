@@ -1,16 +1,17 @@
 import React, { useState, useMemo , useEffect } from "react";
-import { 
-  useGetOneBookingsQuery, 
-  useMoveBookingMutation 
+import {
+  useGetOneBookingsQuery,
+  useMoveBookingMutation,
+  useSwapRoadSignsMutation
 } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { 
   useGetRoadSignsQuery 
 } from "../../RtkQuery/Slice/RoadSings/RoadSingsApi";
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2, Info, ArrowRightLeft, Calendar, Package, CheckCircle, XCircle, AlertCircle ,ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, Loader2, Info, ArrowRightLeft, Calendar, Package, CheckCircle, XCircle, AlertCircle, AlertTriangle ,ChevronLeft, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { Clock } from "lucide-react"
@@ -23,6 +24,9 @@ export const BookingDetailsAction = ({ booking }) => {
   const [tempEndDate, setTempEndDate] = useState("");
   const [paginationPage, setPaginationPage] = useState(1);
   const [paginationPerPage, setPaginationPerPage] = useState(50);
+  // معلومات تنبيه "اللوحة محجوزة ضمن عقد آخر" بانتظار موافقة المستخدم -
+  // راجع BookingService::swapRoadSigns على الباك-إند للسيناريو الكامل.
+  const [swapConflict, setSwapConflict] = useState(null);
 
 
   const { data: fullDetails, isLoading: isFetching  } = useGetOneBookingsQuery(booking.id, {
@@ -35,6 +39,7 @@ export const BookingDetailsAction = ({ booking }) => {
       setSelectedTargetSign("");
             setIsTempMoving(false);
       setTempEndDate("");
+      setSwapConflict(null);
 
     }
   }, [isOpen]);
@@ -55,14 +60,23 @@ export const BookingDetailsAction = ({ booking }) => {
       start_date: booking?.start_date,
       end_date: booking?.end_date ,
       page : paginationPage ,
-      per_page : paginationPerPage 
+      per_page : paginationPerPage ,
+      // النقل المؤقت (isTempMoving) يمر عبر moveBooking القديمة، ويتطلب
+      // فعلًا لوحة هدف متاحة فعليًا الآن - يبقى only_available=true هناك.
+      // أما التبديل العادي (المطلب الأول) فجوهره تمكين التبديل حتى لو
+      // كانت اللوحة الهدف محجوزة ضمن عقد آخر (BookingService::swapRoadSigns
+      // يتولى تأكيد/تنفيذ ذلك) - فلا يجوز استبعادها من القائمة هنا أصلًا،
+      // وإلا ظهرت رسالة "لا توجد لوحات بنفس المقاس" كلما كانت كل لوحات
+      // هذا المقاس محجوزة، وهي بالضبط الحالة التي صُممت هذه الميزة لها.
+      only_available: isTempMoving,
     },
-    { 
+    {
       skip: !isOpen || !selectedOldSignDetails?.template?.size
     }
   );
 
   const [moveBooking, { isLoading: isMoving }] = useMoveBookingMutation();
+  const [swapRoadSigns, { isLoading: isSwapping }] = useSwapRoadSignsMutation();
 
   // Get available signs (all road signs with same template size)
   const allSignsWithSameTemplate = useMemo(() => {
@@ -125,19 +139,56 @@ export const BookingDetailsAction = ({ booking }) => {
       return;
     }
 
+    // النقل المؤقت (إرجاع تلقائي لاحقًا للوحة الأصلية) يبقى بنفس منطقه
+    // الحالي عبر moveBooking - لا علاقة له بتبديل عقدين محجوزين ببعضهما.
+    if (isTempMoving) {
+      try {
+        await moveBooking({
+          booking_id: booking.id,
+          old_roadsign_id: selectedOldSign,
+          new_roadsign_id: selectedTargetSign,
+          isTempMoving: true,
+          end_date: tempEndDate,
+        }).unwrap();
+
+        toast.success("تم نقل الحجز مؤقتًا بنجاح");
+        window.location.reload();
+      } catch (err) {
+        toast.error(err?.data?.message || "فشل في عملية النقل المؤقت");
+      }
+      return;
+    }
+
+    await performSwap(false);
+  };
+
+  /**
+   * ينفّذ التبديل الفعلي. أول محاولة بلا confirmSwap: إن كانت اللوحة
+   * الهدف متاحة يتم التبديل مباشرة، وإن كانت محجوزة ضمن عقد آخر يعود
+   * الباك-إند بخطأ 409 يحمل تفاصيل ذلك العقد (conflicting_booking) فنعرض
+   * تنبيه تأكيد بدل تنفيذ التبديل مباشرة - راجع BookingService::swapRoadSigns.
+   */
+  const performSwap = async (confirmSwap) => {
     try {
-      await moveBooking({
+      await swapRoadSigns({
         booking_id: booking.id,
         old_roadsign_id: selectedOldSign,
         new_roadsign_id: selectedTargetSign,
-        isTempMoving,                         
-        ...(isTempMoving && { end_date: tempEndDate }), 
+        confirm_swap: confirmSwap,
       }).unwrap();
-      
-      toast.success("تم نقل الحجز بنجاح");
+
+      toast.success(
+        confirmSwap ? "تم تبديل اللوحتين بين العقدين بنجاح" : "تم تبديل اللوحة بنجاح"
+      );
+      setSwapConflict(null);
       window.location.reload();
     } catch (err) {
-      toast.error(err?.data?.message || "فشل في عملية النقل");
+      const payload = err?.data || {};
+      if (err?.status === 409 && payload.requires_confirmation) {
+        setSwapConflict(payload.conflicting_booking || {});
+        return;
+      }
+      toast.error(payload.message || "فشل في عملية تبديل اللوحة");
     }
   };
 
@@ -145,6 +196,7 @@ export const BookingDetailsAction = ({ booking }) => {
   const isLoadingSignsData = isLoadingSigns || isFetchingSigns;
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button 
@@ -374,7 +426,7 @@ export const BookingDetailsAction = ({ booking }) => {
                       <ArrowRightLeft className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600 dark:text-orange-400" />
                     </div>
                     <label className="text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300">
-                      نقل إلى لوحة جديدة (نفس المقاس - غير محجوزة)
+                      تبديل إلى لوحة (نفس المقاس - المحجوزة ضمن عقد آخر متاحة أيضًا للتبديل)
                     </label>
                   </div>
                                           {/* Pagination Controls */}
@@ -430,20 +482,24 @@ export const BookingDetailsAction = ({ booking }) => {
                           onChange={(e) => setSelectedTargetSign(e.target.value)}
                         >
                           <option value="">-- اختر لوحة بديلة --</option>
-                          {availableTargetSigns.map(sign => (
-                            <option key={sign.id} value={sign.id}>
-                              {sign.roadsign_code || `RS-${sign.id}`} | 
-                              {sign.city?.name || 'غير محدد'} | 
-                              {sign.place || 'موقع غير محدد'} -
-                              الاتجاه: {sign.directions || 'غير محدد'}
-                            </option>
-                          ))}
+                          {availableTargetSigns.map(sign => {
+                            const isBooked = Array.isArray(sign.bookings) && sign.bookings.length > 0;
+                            return (
+                              <option key={sign.id} value={sign.id}>
+                                {isBooked ? '🔒 ' : ''}{sign.roadsign_code || `RS-${sign.id}`} |
+                                {sign.city?.name || 'غير محدد'} |
+                                {sign.place || 'موقع غير محدد'} -
+                                الاتجاه: {sign.directions || 'غير محدد'}
+                                {isBooked ? ' - محجوزة ضمن عقد آخر' : ' - متاحة'}
+                              </option>
+                            );
+                          })}
                         </select>
 
-                        {/* Show count of available signs */}
+                        {/* Show count of signs */}
                         {availableTargetSigns.length > 0 && (
-                          <div className="text-[10px] sm:text-xs text-green-600 dark:text-green-400">
-                            ✓ متاح {availableTargetSigns.length} لوحة غير محجوزة بنفس المقاس
+                          <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
+                            {availableTargetSigns.length} لوحة بنفس المقاس (🔒 = محجوزة ضمن عقد آخر حاليًا - يمكن تبديلها أيضًا بعد التأكيد)
                           </div>
                         )}
 
@@ -486,7 +542,7 @@ export const BookingDetailsAction = ({ booking }) => {
                           )}>
                             <AlertCircle className="h-3 w-3 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
                             <p className="text-[10px] sm:text-xs text-red-700 dark:text-red-400">
-                              ⚠️ لا توجد لوحات غير محجوزة متاحة للتبديل بنفس المقاس ({selectedOldSignDetails.template?.size || 'هذا المقاس'})
+                              ⚠️ لا توجد لوحات بنفس المقاس ({selectedOldSignDetails.template?.size || 'هذا المقاس'})
                             </p>
                           </div>
                         )}
@@ -510,11 +566,11 @@ export const BookingDetailsAction = ({ booking }) => {
               >
                 إلغاء
               </Button>
-              <Button 
-                onClick={handleSwap} 
-                disabled={isMoving || !selectedOldSign || !selectedTargetSign || availableTargetSigns.length === 0 || (isTempMoving && !tempEndDate) || (isTempMoving && !isTempEndDateValid)}
+              <Button
+                onClick={handleSwap}
+                disabled={isMoving || isSwapping || !selectedOldSign || !selectedTargetSign || availableTargetSigns.length === 0 || (isTempMoving && !tempEndDate) || (isTempMoving && !isTempEndDateValid)}
               >
-                {isMoving ? (
+                {(isMoving || isSwapping) ? (
                   <>
                     <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin ml-1 sm:ml-2" />
                     جاري التبديل...
@@ -528,5 +584,61 @@ export const BookingDetailsAction = ({ booking }) => {
         )}
       </DialogContent>
     </Dialog>
+
+    {/* تنبيه: اللوحة الهدف محجوزة ضمن عقد آخر - يعرض تفاصيل ذلك العقد
+        ويطلب تأكيدًا صريحًا قبل تنفيذ تبديل حقيقي بين العقدين. حوار
+        مستقل تمامًا عن حوار التفاصيل أعلاه كي لا يتعارض focus trap
+        الخاص بأحدهما مع الآخر. */}
+    <Dialog open={!!swapConflict} onOpenChange={(open) => !open && setSwapConflict(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" />
+              اللوحة محجوزة ضمن عقد آخر
+            </DialogTitle>
+            <DialogDescription className="text-right">
+              اللوحة التي ستقوم بتبديلها محجوزة حاليًا ضمن عقد آخر. هل تريد
+              المتابعة وتبديل اللوحتين بين العقدين؟ (لوحة هذا العقد ستنتقل
+              لذلك العقد، ولوحته ستنتقل إلى هذا العقد)
+            </DialogDescription>
+          </DialogHeader>
+
+          {swapConflict && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm space-y-1">
+              <div><span className="font-semibold">رقم العقد:</span> {swapConflict.number ?? swapConflict.id}</div>
+              {swapConflict.customer_name && (
+                <div><span className="font-semibold">العميل:</span> {swapConflict.customer_name}</div>
+              )}
+              {(swapConflict.start_date || swapConflict.end_date) && (
+                <div>
+                  <span className="font-semibold">فترة الحجز:</span>{" "}
+                  {swapConflict.start_date} → {swapConflict.end_date}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-3 mt-2">
+            <Button variant="outline" onClick={() => setSwapConflict(null)} className="flex-1">
+              إلغاء
+            </Button>
+            <Button
+              onClick={() => performSwap(true)}
+              disabled={isSwapping}
+              className="flex-1 bg-amber-600 hover:bg-amber-700"
+            >
+              {isSwapping ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                  جاري التبديل...
+                </>
+              ) : (
+                "موافق، بدّل اللوحتين"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

@@ -41,6 +41,23 @@
   providesTags: ["payments"],
 }),
 
+      // فلترة يومية للصندوق (طلب صريح) - يجلب الدفعات والحجوزات المُنشأة في
+      // يوم واحد محدَّد معًا، بقيم متكاملة (راجع تعليق
+      // PaymentService::getDailyBoxReport() على الباك-إند لشرح الفرق عن
+      // getTotalPaymentAndRemaining أعلاه).
+      getBoxDailyReport: builder.query({
+        query: ({ date, user_id, customer_id } = {}) => {
+          const params = new URLSearchParams();
+          if (date) params.append("date", date);
+          if (user_id) params.append("user_id", user_id);
+          if (customer_id) params.append("customer_id", customer_id);
+
+          const queryString = params.toString();
+          return `/get-box-daily-report${queryString ? `?${queryString}` : ""}`;
+        },
+        providesTags: ["payments"],
+      }),
+
       addNewPayment: builder.mutation({
         query: (data) => ({
           url: "payments",
@@ -83,6 +100,8 @@
     useAddNewPaymentMutation,
     useConfirmOnePaymentMutation,
     useGetTotalPaymentAndRemainingQuery,
+    useGetBoxDailyReportQuery,
+    useLazyGetBoxDailyReportQuery,
     useDeletePaymentMutation,
     useUpdatePaymentStatusMutation, // 👈 now properly exported
   } = PaymentsSlice;

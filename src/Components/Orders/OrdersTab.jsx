@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Eye,
   Lock,
   ShoppingCart,
   Wrench,
@@ -28,9 +27,6 @@ import useMangeOrders from "../../hooks/useMangeOrders";
 
 /* ==================== ثوابت النطاق ==================== */
 
-// كل حسابات "اليوم/غدًا/متأخر" تجري بتوقيت العمليات، لا بتوقيت متصفح
-// المستخدم. موظف يفتح اللوحة من جهاز مضبوط على توقيت آخر كان سيرى تصنيفًا
-// مختلفًا لليوم نفسه - وهذا يفسد كامل منطق الأولوية أدناه.
 const OPERATIONS_TIMEZONE = "Asia/Damascus";
 
 const ORDER_TYPES = [
@@ -99,9 +95,6 @@ const MAINTENANCE_STATUS_LABELS = {
 
 /* ==================== أدوات التاريخ ==================== */
 
-// 'YYYY-MM-DD' هو الشكل الوحيد المتداول هنا. المقارنة تجري على النص/الأيام
-// الكاملة لا على كائنات Date، تفاديًا لانزياح المنطقة الزمنية الذي يجعل
-// new Date('2026-08-11') يظهر كـ 10 أغسطس في أي متصفح غرب غرينتش.
 const toDateKey = (value) => {
   if (!value) return null;
   if (typeof value === "string") {
@@ -151,6 +144,15 @@ const urgencyOf = (dateKey, todayKey) => {
 
 const isConfirmed = (order) => Number(order?.status) === 1;
 
+// زر "تأكيد" يُتاح فقط إذا حان تاريخ الطلب فعليًا (اليوم أو متأخر) - تأكيد
+// طلب لم يحن موعده بعد لا معنى له ميدانيًا. الزر يعاود الظهور تلقائيًا بمجرد
+// وصول التاريخ لأن الحساب مبني على todayKey الحالي في كل عرض، لا على قيمة محفوظة.
+const hasDateArrived = (order, todayKey) => {
+  const dateKey = toDateKey(order.action_date);
+  const level = urgencyOf(dateKey, todayKey).level;
+  return level === "overdue" || level === "today";
+};
+
 /* ==================== مكوّنات فرعية ==================== */
 
 const UrgencyChip = ({ urgency }) => {
@@ -192,11 +194,11 @@ const OrderRow = ({ order, todayKey, canConfirm, onConfirm, onShow }) => {
   const confirmed = isConfirmed(order);
   const dateKey = toDateKey(order.action_date);
   const urgency = urgencyOf(dateKey, todayKey);
+  const dateArrived = urgency.level === "overdue" || urgency.level === "today";
   const isMaintenance = Number(order.type) === 4;
   const maintenance = MAINTENANCE_STATUS_LABELS[order.maintenance_status];
   const reminderCount = Number(order.reminder_count) || 0;
 
-  // Location details
   const roadSign = order.road_sign;
   const locationDetails = [
     roadSign?.place,
@@ -244,18 +246,6 @@ const OrderRow = ({ order, todayKey, canConfirm, onConfirm, onShow }) => {
 
         {!confirmed && <UrgencyChip urgency={urgency} />}
 
-        {onShow && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onShow(order)}
-            className="h-8 w-8 p-0 text-gray-500"
-            aria-label="عرض تفاصيل الطلب"
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-        )}
-
         {isMaintenance ? (
           <Badge className={`text-xs ${maintenance?.className || "bg-gray-100 text-gray-700"}`}>
             <Wrench className="w-3 h-3 ml-1" />
@@ -266,7 +256,7 @@ const OrderRow = ({ order, todayKey, canConfirm, onConfirm, onShow }) => {
             <CheckCircle className="w-3 h-3 ml-1" />
             تم التأكيد
           </Badge>
-        ) : canConfirm ? (
+        ) : canConfirm && dateArrived ? (
           <Button
             size="sm"
             variant="outline"
@@ -278,7 +268,7 @@ const OrderRow = ({ order, todayKey, canConfirm, onConfirm, onShow }) => {
           </Button>
         ) : (
           <Badge variant="outline" className="text-xs text-gray-500">
-            بانتظار التأكيد
+            {dateArrived ? "بانتظار التأكيد" : "لم يحن موعد التنفيذ بعد"}
           </Badge>
         )}
       </div>
@@ -291,6 +281,8 @@ const OrderTypeSection = ({ typeConfig, orders, todayKey, expanded, onToggle, ca
   if (!orders || orders.length === 0) return null;
 
   const pending = orders.filter((o) => !isConfirmed(o));
+  // "تأكيد الكل" لا يجب أن يؤكد طلبات لم يحن موعدها بعد.
+  const arrivedPending = pending.filter((o) => hasDateArrived(o, todayKey));
   const isMaintenance = typeConfig.value === 4;
 
   return (
@@ -323,14 +315,14 @@ const OrderTypeSection = ({ typeConfig, orders, todayKey, expanded, onToggle, ca
           )}
         </button>
 
-        {!isMaintenance && pending.length > 0 && canConfirm && (
+        {!isMaintenance && arrivedPending.length > 0 && canConfirm && (
           <Button
             size="sm"
-            onClick={() => onConfirm(pending.map((o) => o.id))}
+            onClick={() => onConfirm(arrivedPending.map((o) => o.id))}
             className="h-7 px-2 ml-3 bg-green-600 hover:bg-green-700 text-white text-xs shrink-0"
           >
             <CheckCircle className="w-3 h-3 ml-1" />
-            تأكيد الكل
+            تأكيد الكل ({arrivedPending.length})
           </Button>
         )}
       </div>
@@ -357,7 +349,6 @@ const OrderTypeSection = ({ typeConfig, orders, todayKey, expanded, onToggle, ca
 const BookingCard = ({ group, todayKey, canConfirm, onConfirm, onShow }) => {
   const { stats, booking } = group;
 
-  // الأقسام غير المؤكدة مفتوحة تلقائيًا: العمل المتبقي هو سبب فتح الصفحة.
   const [expandedTypes, setExpandedTypes] = useState(() => {
     const initial = new Set();
     ORDER_TYPES.forEach((type) => {
@@ -413,14 +404,14 @@ const BookingCard = ({ group, todayKey, canConfirm, onConfirm, onShow }) => {
             <span className="text-sm text-gray-500 whitespace-nowrap">
               {stats.confirmed}/{stats.total} مؤكد
             </span>
-            {stats.pending > 0 && canConfirm && (
+            {stats.arrivedPendingCount > 0 && canConfirm && (
               <Button
                 size="sm"
-                onClick={() => onConfirm(stats.pendingIds)}
+                onClick={() => onConfirm(stats.arrivedPendingIds)}
                 className="h-8 bg-green-600 hover:bg-green-700 text-white text-xs"
               >
                 <CheckCircle className="w-3 h-3 ml-1" />
-                تأكيد كل الحجز ({stats.pending})
+                تأكيد كل الحجز ({stats.arrivedPendingCount})
               </Button>
             )}
           </div>
@@ -473,7 +464,7 @@ const BookingCard = ({ group, todayKey, canConfirm, onConfirm, onShow }) => {
   );
 };
 
-/** شريط الأرقام أعلى القائمة - يقرأ منه المدير حالة اليوم في سطر واحد. */
+/** شريط الأرقام أعلى القائمة. */
 const SummaryStrip = ({ summary }) => {
   const cells = [
     { label: "متأخر", value: summary.overdue, className: "text-red-600 dark:text-red-400" },
@@ -529,10 +520,10 @@ const OrdersTab = ({ data, permission, isAdmin }) => {
     regions,
   } = useMangeOrders();
 
-const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
-  per_page: 1000, // pull everything in one shot if your API supports a high per_page
-});
-const customersList = customersResponse?.data ?? [];
+  const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
+    per_page: 1000,
+  });
+  const customersList = customersResponse?.data ?? [];
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -541,8 +532,6 @@ const customersList = customersResponse?.data ?? [];
 
   const exportService = useMemo(() => new ExportService(), []);
 
-  // شكل prop الصلاحيات يختلف بين الشاشات، فتُقرأ دفاعيًا: غياب المعلومة
-  // يعني السماح (السلوك السابق)، والمنع يحدث فقط عند تصريح واضح بالمنع.
   const canConfirm = useMemo(() => {
     if (permission == null) return true;
     if (typeof permission === "boolean") return permission;
@@ -569,8 +558,6 @@ const customersList = customersResponse?.data ?? [];
     const groups = new Map();
 
     data.forEach((order) => {
-      // الطلبات بلا حجز (صيانة مستقلة مثلًا) تُجمَّع حسب الزبون بدل أن
-      // تنهار كلها في مفتاح واحد باسم null.
       const key =
         order.booking_id != null ? `booking-${order.booking_id}` : `customer-${order.customer_id ?? "unknown"}`;
 
@@ -593,8 +580,6 @@ const customersList = customersResponse?.data ?? [];
 
       group.allOrders.push(order);
 
-      // أي نوع غير معروف مستقبلًا يُلحَق بسلته الخاصة بدل أن يختفي بصمت -
-      // النسخة السابقة كانت تُسقِط النوعين 3 و 4 كليًا من الشاشة.
       const typeValue = Number(order.type);
       if (!group.ordersByType[typeValue]) group.ordersByType[typeValue] = [];
       group.ordersByType[typeValue].push(order);
@@ -607,11 +592,11 @@ const customersList = customersResponse?.data ?? [];
 
       const confirmable = group.allOrders.filter((o) => Number(o.type) !== 4);
       const pendingOrders = confirmable.filter((o) => !isConfirmed(o));
+      // فقط الطلبات التي حان موعدها فعلًا تُدرَج ضمن "تأكيد كل الحجز".
+      const arrivedPendingOrders = pendingOrders.filter((o) => hasDateArrived(o, todayKey));
       const dateKeys = group.allOrders.map((o) => toDateKey(o.action_date)).filter(Boolean).sort();
       const pendingKeys = pendingOrders.map((o) => toDateKey(o.action_date)).filter(Boolean).sort();
 
-      // أولوية البطاقة تُحسب من الطلبات غير المؤكدة وحدها: حجز أُنجز بالكامل
-      // لا يجب أن يتصدّر القائمة لمجرد أن تاريخه قديم.
       const drivingKey = pendingKeys[0] || dateKeys[0] || null;
 
       const buckets = pendingOrders.reduce(
@@ -634,6 +619,8 @@ const customersList = customersResponse?.data ?? [];
           confirmed: confirmable.filter(isConfirmed).length,
           pending: pendingOrders.length,
           pendingIds: pendingOrders.map((o) => o.id),
+          arrivedPendingIds: arrivedPendingOrders.map((o) => o.id),
+          arrivedPendingCount: arrivedPendingOrders.length,
           overdue: buckets.overdue,
           today: buckets.today,
           tomorrow: buckets.tomorrow,
@@ -679,14 +666,62 @@ const customersList = customersResponse?.data ?? [];
       );
     }
 
-  if (selectedDate) {
-  result = result.filter((g) =>
-    g.allOrders.some((o) => toDateKey(o.action_date) === selectedDate)
-  );
-}
+    // عند التصفية بتاريخ محدد، تُعرَض فقط طلبات ذلك اليوم داخل كل حجز - لا
+    // كامل طلبات الحجز لمجرد أن أحدها يقع في ذلك التاريخ.
+    if (selectedDate) {
+      result = result
+        .map((g) => {
+          const matchOrders = (list) => list.filter((o) => toDateKey(o.action_date) === selectedDate);
 
-    // الترتيب: المتأخر ثم اليوم ثم غدًا ثم القادم، وداخل كل مستوى بالتاريخ
-    // ثم برقم الحجز - ترتيب ثابت لا يتغير بين إعادتي رسم.
+          const allOrders = matchOrders(g.allOrders);
+          if (allOrders.length === 0) return null;
+
+          const ordersByType = {};
+          Object.entries(g.ordersByType).forEach(([type, orders]) => {
+            ordersByType[type] = matchOrders(orders);
+          });
+
+          const confirmable = allOrders.filter((o) => Number(o.type) !== 4);
+          const pendingOrders = confirmable.filter((o) => !isConfirmed(o));
+          const arrivedPendingOrders = pendingOrders.filter((o) => hasDateArrived(o, todayKey));
+          const dateKeys = allOrders.map((o) => toDateKey(o.action_date)).filter(Boolean).sort();
+          const pendingKeys = pendingOrders.map((o) => toDateKey(o.action_date)).filter(Boolean).sort();
+          const drivingKey = pendingKeys[0] || dateKeys[0] || null;
+
+          const buckets = pendingOrders.reduce(
+            (acc, order) => {
+              const level = urgencyOf(toDateKey(order.action_date), todayKey).level;
+              if (level === "overdue") acc.overdue += 1;
+              else if (level === "today") acc.today += 1;
+              else if (level === "tomorrow") acc.tomorrow += 1;
+              return acc;
+            },
+            { overdue: 0, today: 0, tomorrow: 0 }
+          );
+
+          return {
+            ...g,
+            allOrders,
+            ordersByType,
+            stats: {
+              ...g.stats,
+              total: allOrders.length,
+              confirmed: confirmable.filter(isConfirmed).length,
+              pending: pendingOrders.length,
+              pendingIds: pendingOrders.map((o) => o.id),
+              arrivedPendingIds: arrivedPendingOrders.map((o) => o.id),
+              arrivedPendingCount: arrivedPendingOrders.length,
+              overdue: buckets.overdue,
+              today: buckets.today,
+              tomorrow: buckets.tomorrow,
+              earliestKey: drivingKey,
+              urgency: urgencyOf(drivingKey, todayKey),
+            },
+          };
+        })
+        .filter(Boolean);
+    }
+
     return [...result].sort((a, b) => {
       const rank = URGENCY_RANK[a.stats.urgency.level] - URGENCY_RANK[b.stats.urgency.level];
       if (rank !== 0) return rank;
@@ -694,7 +729,7 @@ const customersList = customersResponse?.data ?? [];
       if (dateDiff !== 0) return dateDiff;
       return (a.bookingId ?? 0) - (b.bookingId ?? 0);
     });
-  }, [bookingGroups, orderType, selectedCustomerId, cityId, regionId, selectedDate]);
+  }, [bookingGroups, orderType, selectedCustomerId, cityId, regionId, selectedDate, todayKey]);
 
   const summary = useMemo(
     () =>
@@ -711,14 +746,11 @@ const customersList = customersResponse?.data ?? [];
     [filteredGroups]
   );
 
-  /* ==================== عدّاد غير المقروء ==================== */
   useEffect(() => {
     if (Array.isArray(data)) {
       setUnreadOrdersCount(data.filter((o) => !isConfirmed(o) && !viewedOrderIds.has(o.id)).length);
     }
   }, [data, viewedOrderIds]);
-
-  /* ==================== المعالجات ==================== */
 
   const handleConfirmOrders = useCallback(
     async (orderIds) => {
@@ -788,8 +820,6 @@ const customersList = customersResponse?.data ?? [];
     },
     [handleShow, setSelectedOrder, setOpenShow]
   );
-
-  /* ==================== العرض ==================== */
 
   const activeTypeLabel = orderType ? TYPE_BY_KEY[orderType]?.label ?? "" : "";
 

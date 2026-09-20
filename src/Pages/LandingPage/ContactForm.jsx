@@ -2,6 +2,7 @@ import React, { forwardRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Icon } from '@iconify/react';
 import { toast } from 'react-hot-toast';
+import { useSubmitContactRequestMutation } from '../../RtkQuery/Slice/Public/PublicContactApi';
 
 const ContactForm = forwardRef(({ inView, isDarkMode }, ref) => {
   const [formData, setFormData] = useState({
@@ -13,6 +14,7 @@ const ContactForm = forwardRef(({ inView, isDarkMode }, ref) => {
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitContactRequest] = useSubmitContactRequestMutation();
 
   const colors = {
     primary: {
@@ -80,73 +82,26 @@ const ContactForm = forwardRef(({ inView, isDarkMode }, ref) => {
     if (!validateForm()) return;
     
     setIsSubmitting(true);
-    
+
+    // إرسال تلقائي عبر الباك-إند (WAHA) بدل بناء رابط wa.me وفتحه يدويًا -
+    // الباك-إند يبني *نفس* نص الرسالة (نفس الحقول والتسميات) من بيانات
+    // النموذج الخام هذه، راجع App\Http\Controllers\Api\V1\PublicContactController.
     try {
-      // Format the message for WhatsApp
-      const serviceTypeMap = {
-        'billboard': 'إعلانات اللوحات',
-        'roadside': 'لافتات الطرق',
-        'bus-stop': 'إعلانات محطات الحافلات',
-        'vehicle': 'إعلانات المركبات',
-        'digital': 'الشاشات الرقمية',
-        'comprehensive': 'باقة شاملة'
-      };
+      const result = await submitContactRequest({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        serviceType: formData.serviceType,
+        budget: formData.budget,
+      }).unwrap();
 
-      const budgetMap = {
-        'basic': 'أساسي (أقل من $1,000)',
-        'standard': 'قياسي ($1,000 - $5,000)',
-        'premium': 'متميز ($5,000 - $15,000)',
-        'enterprise': 'شركات ($15,000+)',
-        'custom': 'عرض سعر مخصص'
-      };
-
-      const whatsappMessage = `🚀 *طلب عرض سعر جديد* 🚀
-
-👤 *الاسم:* ${formData.name}
-📧 *البريد الإلكتروني:* ${formData.email}
-📱 *رقم الهاتف:* ${formData.phone}
-🎯 *نوع الخدمة:* ${serviceTypeMap[formData.serviceType] || formData.serviceType}
-💰 *نطاق الميزانية:* ${budgetMap[formData.budget] || formData.budget}
-
-⏰ *تم إرسال الطلب بتاريخ:* ${new Date().toLocaleString('ar-SA', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })}
-
-✨ *شكرًا للاهتمام بخدماتنا!* ✨`;
-
-      // Encode the message for URL
-      const encodedMessage = encodeURIComponent(whatsappMessage);
-      
-      // WhatsApp number: 0981 888 977 (International format: +963981888977)
-      const whatsappNumber = '+963981888977'; // Syria country code is +963
-      
-      // Create WhatsApp URL
-      const whatsappURL = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
-      
-      // Show success message first
-      toast.success('جاري فتح واتساب لإرسال الطلب...');
-      
-      // Small delay for toast to show
-      setTimeout(() => {
-        // Open WhatsApp in a new tab
-        window.open(whatsappURL, '_blank');
-        
-        // Reset form after a moment
-        setTimeout(() => {
-          toast.success('تم إرسال الطلب إلى واتساب بنجاح!');
-          setIsSubmitting(false);
-          setFormData({ name: '', email: '', phone: '', serviceType: '', budget: '' });
-        }, 1000);
-      }, 1500);
-      
+      toast.success(result?.message || 'تم إرسال طلبك بنجاح عبر واتساب!');
+      setFormData({ name: '', email: '', phone: '', serviceType: '', budget: '' });
     } catch (error) {
-      console.error('Error opening WhatsApp:', error);
+      console.error('Error submitting contact request:', error);
+      toast.error(error?.message || 'حدث خطأ. يرجى المحاولة مرة أخرى أو التواصل مباشرة عبر واتساب.');
+    } finally {
       setIsSubmitting(false);
-      toast.error('حدث خطأ. يرجى المحاولة مرة أخرى أو التواصل مباشرة عبر واتساب.');
     }
   };
 
@@ -181,7 +136,7 @@ const ContactForm = forwardRef(({ inView, isDarkMode }, ref) => {
             <p className={`text-lg sm:text-xl ${
               isDarkMode ? 'text-gray-300' : 'text-gray-600'
             }`}>
-              املأ النموذج أدناه وسيتم فتح واتساب لإرسال الطلب تلقائيًا
+              املأ النموذج أدناه وسيتم إرسال طلبك عبر واتساب تلقائيًا
             </p>
            
           </motion.div>
@@ -359,7 +314,7 @@ const ContactForm = forwardRef(({ inView, isDarkMode }, ref) => {
                   >
                     <Icon icon="mdi:loading" className="text-lg sm:text-xl" />
                   </motion.div>
-                  <span>جاري فتح واتساب...</span>
+                  <span>جاري إرسال طلبك عبر واتساب...</span>
                 </>
               ) : (
                 <>

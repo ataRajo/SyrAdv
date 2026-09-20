@@ -668,6 +668,8 @@ const ExtendBooking = () => {
           setCurrentMoveSignId(null);
         }}
         booking={booking}
+          newEndDate={newEndDate}          // ✅ added
+
         selectedRoadSigns={selectedRoadSigns}
         allRoadSigns={allRoadSigns}
         isRoadSignsFetching={isRoadSignsFetching}

@@ -148,15 +148,17 @@ const SignRow = memo(({
         </Button>
       </TableCell>
       <TableCell className="text-sm">
-        <span className={`px-2 py-1 rounded ${
-          isAdded
-            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-            : sign.panels_number === 0
-            ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-            : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-        }`}>
-          {isAdded ? "مضاف" : sign.panels_number === 0 ? "غير متاح" : "غير مضاف"}
-        </span>
+        <div className="flex flex-col items-start gap-1">
+          <span className={`px-2 py-1 rounded ${
+            isAdded
+              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+              : sign.panels_number === 0
+              ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+              : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+          }`}>
+            {isAdded ? "مضاف" : sign.panels_number === 0 ? "غير متاح" : "غير مضاف"}
+          </span>
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -359,17 +361,17 @@ const groupedRoadSigns = useMemo(() => {
         signs: [],
         totalAvailable: 0,
         totalPanels: 0,
-        similarSignsCount: 0
+        similarSignsCount: 0,
       };
       groups.set(key, group);
     }
-    
+
     group.signs.push(sign);
-    
+
     // ✅ IMPORTANT: API already returns only available signs
     // So available panels = sign.panels_number (NO SUBTRACTION)
     const availablePanels = sign.panels_number;
-    
+
     group.totalAvailable += availablePanels;
     group.totalPanels += sign.panels_number;
     group.similarSignsCount += 1;

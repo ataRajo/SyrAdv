@@ -6,7 +6,9 @@ import { useGetOneBookingsQuery } from "../../RtkQuery/Slice/Booking/BookingApi"
 import { styles } from "./ContractStyle";
 import DOMPurify from "dompurify";
 import BookingDocumentButtons from "./BookingDocumentButtons";
-
+import startImg from "../../assets/images/start.jpg";
+import endImg from "../../assets/images/end.jpg";
+import Sac from "../../assets/images/Sac.jpeg";
 const BookingType = {
   1: "مؤقت",  
   2: "دائم",  
@@ -427,9 +429,27 @@ const CommonPrintingInfo = () => {
     </table>
   );
 
+
+  // 1. مكون الغلاف (الصفحة الأولى)
+const FirstPageCover = () => (
+  <div style={{ pageBreakAfter: "always", textAlign: "center", width: "100%" }}>
+    <img src={startImg} alt="Start Cover" style={{ width: "100%", height: "auto" }} />
+  </div>
+);
+
+// 2. مكون الخاتمة (الصفحة الأخيرة)
+const LastPageCover = () => (
+  <div style={{ pageBreakBefore: "always", textAlign: "center", width: "100%" }}>
+    <img src={endImg} alt="End Cover" style={{ width: "100%", height: "auto" }} />
+  </div>
+);
+
+
   // Temporary Contract Component
   const TemporaryContract = () => (
     <div style={styles.contractPage} ref={contentRef}>
+      <FirstPageCover />
+
       <div style={styles.header}>
         <img style={styles.logo} src={logo} alt="logo" />
         <h1 className="text-2xl" style={styles.headerH1}>عرض فني ومالي</h1>
@@ -545,12 +565,14 @@ const CommonPrintingInfo = () => {
           <p>الفريق الثاني: {contractDetails.secondParty.name}</p>
         </div>
       </div>
+      <LastPageCover />
     </div>
   );
 
   // Permanent Contract Component
   const PermanentContract = () => (
     <div style={styles.contractPage} ref={contentRef}>
+      <FirstPageCover />
       <div style={styles.header}>
         <img style={styles.logo} src={logo} alt="logo" />
         <h1 style={styles.headerH1}>عقد إعلاني دائم</h1>
@@ -658,12 +680,13 @@ const CommonPrintingInfo = () => {
           <p>الفريق الثاني: {contractDetails.secondParty.name}</p>
         </div>
       </div>
-      
       {/* Footer contact info */}
       <p className="mt-6">دمشق 09393333336 - حلب 0992400040</p>
       <span>www.syrianco.com /</span> 
       <span>info@syrianco.com</span> 
       <p>الشركة السورية للإعلان</p>
+      <LastPageCover />
+
     </div>
   );
 

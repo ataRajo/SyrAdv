@@ -76,13 +76,14 @@ export const AuthProvider = ({ children }) => {
   // Distinct name to avoid collision with RTK mutation
   const loginUser = (authResponse) => {
     try {
-      // If you reset RTK Query caches, do it safely
-      try {
-        dispatch(templateApi.util.resetApiState?.());
-        dispatch(modelApi.util.resetApiState?.());
-      } catch (e) {
-        console.warn("RTK reset skipped:", e);
-      }
+      // ⚠️ FIXED (وُجد أثناء ربط صلاحيات الورشات): كان هذا يستدعي templateApi/
+      // modelApi بلا استيرادهما إطلاقًا في هذا الملف - ReferenceError في كل
+      // تسجيل دخول، يُبتلَع بصمت بواسطة catch أدناه فيسجّل تحذيرًا فقط دون
+      // أي أثر فعلي فعليًا - لم يكن يُفرِّغ أي ذاكرة تخزين مؤقت (cache) قط.
+      // أُزيل بدل تركه كسطر ميت يوحي بعمل لا يحدث. إن احتجتم لاحقًا تفريغ
+      // كل ذاكرة RTK Query المؤقتة عند تسجيل دخول مستخدم مختلف على نفس
+      // الجهاز (مهم تحديدًا لأجهزة عمال الورشة المشتركة)، استوردوا كل
+      // reducerPath من store.jsx وأضيفوا استدعاءات resetApiState() هنا.
 
       // Normalize token and user
       const token = authResponse?.token || authResponse?.user?.token;
@@ -94,10 +95,27 @@ export const AuthProvider = ({ children }) => {
         console.warn("loginUser: token not found in response, proceeding with state set");
       }
 
-      const permissionsArr =
-        authResponse?.user?.roles?.[0]?.permissions ||
-        authResponse?.permissions ||
-        [];
+      // ⚠️ FIXED: كان يُقرأ فقط roles[0].permissions (صلاحيات الدور)، فتُتجاهَل
+      // تمامًا أي صلاحية مباشرة مُسنَدة للموظف نفسه (عبر checkboxes "الصلاحيات"
+      // عند إنشائه/تعديله - انظر EmployeePermissionsPicker/UserService::syncPermissions).
+      // النتيجة: تحديد صلاحيات ضيقة لموظف كان بلا أي أثر ظاهري في الواجهة
+      // (تظهر كل التابات المسموحة لدوره فقط، بصرف النظر عمّا اخُتير له تحديدًا)
+      // - راجع أيضًا AuthService::login() الذي عُدِّل ليُحمِّل 'permissions:name'
+      // (الصلاحيات المباشرة) لا roles.permissions فقط.
+      //
+      // الصلاحيات الفعلية لأي مستخدم في Spatie = اتحاد (union) صلاحيات دوره
+      // + صلاحياته المباشرة، فيجب دمج المصدرين هنا لا الاكتفاء بأحدهما.
+      const rolePermissions = authResponse?.user?.roles?.[0]?.permissions || [];
+      const directPermissions = authResponse?.user?.permissions || [];
+      const seenPermissionNames = new Set();
+      const permissionsArr = [...rolePermissions, ...directPermissions, ...(authResponse?.permissions || [])].filter(
+        (p) => {
+          const name = p?.name;
+          if (!name || seenPermissionNames.has(name)) return false;
+          seenPermissionNames.add(name);
+          return true;
+        }
+      );
 
       // Persist and update reactive state
       localStorage.setItem(
@@ -125,9 +143,17 @@ export const AuthProvider = ({ children }) => {
 
   const isAuthenticated = () => !!user;
 
-  const hasPermission = (permission) =>
-    Array.isArray(permissions) &&
-    permissions.some((p) => p?.name === permission);
+  const hasPermission = (permission) => {
+    if (!Array.isArray(permissions)) return false;
+    // بعض عناصر القائمة الجانبية (مثال: "الورشات") يجب أن تظهر لأكثر من
+    // دور بصلاحيات مختلفة (مسؤول عبر view-orders، أو عامل ورشة عبر
+    // view-workshop-orders) - بلا كسر كل الاستدعاءات الحالية بمعامل نصي
+    // واحد، يقبل الآن أيضًا مصفوفة (يكفي تحقق واحد منها).
+    if (Array.isArray(permission)) {
+      return permission.some((perm) => permissions.some((p) => p?.name === perm));
+    }
+    return permissions.some((p) => p?.name === permission);
+  };
 
   const debugStorage = () => {
     console.log("🔍 Storage Debug Info:");

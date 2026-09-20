@@ -1,18 +1,48 @@
 // components/NotificationsModal.jsx
 import React, { useEffect, useState } from "react";
-import { Bell, X, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Bell, X, ChevronDown, ChevronUp, ExternalLink, MessageCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { messaging } from "@/firebase";
 import { getToken } from "firebase/messaging";
+import toast from "react-hot-toast";
+import {
+  useGetNotificationsQuery,
+  useSendOverdueBalanceWhatsappMutation,
+} from "../../RtkQuery/Slice/Booking/BookingApi";
 
-const NotificationsModal = ({ 
-  isOpen, 
+// طلب صريح: فلترة الإشعارات حسب نوع المحتوى (تنبيهات عامة/طلبات/مالية) -
+// راجع App\Enums\NotificationType على الباك-إند لنفس القيم بالضبط.
+const NOTIFICATION_TYPE_TABS = [
+  { value: null, label: "الكل" },
+  { value: "general", label: "عام" },
+  { value: "order", label: "الطلبات" },
+  { value: "financial", label: "مالية" },
+];
+
+const NotificationsModal = ({
+  isOpen,
   onClose,
   notifications = [],
-  unreadCount = 0 
+  unreadCount = 0
 }) => {
   const [expandedId, setExpandedId] = useState(null);
+  const [typeFilter, setTypeFilter] = useState(null);
+  const [sendWhatsapp, { isLoading: isSendingWhatsapp }] = useSendOverdueBalanceWhatsappMutation();
+  const [sendingBookingId, setSendingBookingId] = useState(null);
+
+  // جلب مستقل بحسب نوع الفلتر المختار (لا يُشغَّل إلا والنافذة مفتوحة) -
+  // فلترة الأدوار (من يرى إشعارات الطلبات أصلًا) يطبّقها السيرفر دومًا بصرف
+  // النظر عن هذا الاختيار. عند "الكل" نستخدم قائمة notifications الممرَّرة
+  // من الأعلى مباشرةً (تفادي استعلام مكرر لنفس البيانات غير المفلترة).
+  const { data: filteredData } = useGetNotificationsQuery(
+    { type: typeFilter },
+    { skip: !isOpen || !typeFilter }
+  );
+
+  const displayedNotifications = typeFilter
+    ? (filteredData?.data || [])
+    : notifications;
 
   useEffect(() => {
     if (isOpen) {
@@ -59,6 +89,21 @@ const NotificationsModal = ({
     onClose();
   };
 
+  // إرسال تلقائي فوري عبر واتساب (WAHA) - يستبدل فتح رابط wa.me اليدوي
+  // السابق. نفس نص الرسالة (whatsapp_message من الباك-إند)، لكن يُرسَل
+  // فعليًا بدل أن يُفتَح للموظف ليضغط "إرسال" يدويًا في واتساب.
+  const handleSendOverdueBalanceWhatsapp = async (bookingId) => {
+    setSendingBookingId(bookingId);
+    try {
+      const result = await sendWhatsapp(bookingId).unwrap();
+      toast.success(result?.message || "تم إرسال رسالة واتساب للعميل بنجاح");
+    } catch (err) {
+      toast.error(err?.message || "تعذّر إرسال رسالة واتساب");
+    } finally {
+      setSendingBookingId(null);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100]">
       <div 
@@ -92,15 +137,34 @@ const NotificationsModal = ({
             </button>
           </div>
 
+          {/* Content-type filter tabs (طلب صريح: تصفية الإشعارات حسب نوع المحتوى) */}
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
+            {NOTIFICATION_TYPE_TABS.map((tab) => (
+              <button
+                key={tab.value ?? "all"}
+                type="button"
+                onClick={() => setTypeFilter(tab.value)}
+                className={cn(
+                  "shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                  typeFilter === tab.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           {/* Notifications list */}
           <div className="overflow-y-auto max-h-[60vh]">
-            {notifications.length === 0 ? (
+            {displayedNotifications.length === 0 ? (
               <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 لا توجد إشعارات
               </div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {notifications.map((notification) => {
+                {displayedNotifications.map((notification) => {
                   const isExpanded = expandedId === notification.id;
                   const hasData = notification.data && Object.keys(notification.data).length > 0;
 
@@ -201,6 +265,58 @@ const NotificationsModal = ({
                                 </div>
                               )}
                             </div>
+
+                            {/* تنبيه "رصيد متأخر قبل منتصف مدة العقد" (طلب
+                                العميل) - كل عقد مع زر واتساب يُرسِل الرسالة
+                                تلقائيًا عبر الباك-إند (WAHA)، راجع
+                                BookingOverdueBalanceAlertService::sendWhatsapp(). */}
+                            {notification.data?.type === "booking_overdue_balance" && (
+                              <div className="mt-2 space-y-2">
+                                {(notification.data.bookings || []).map((b) => (
+                                  <div
+                                    key={b.booking_id}
+                                    className="flex items-center justify-between gap-2 bg-white dark:bg-gray-900 rounded p-2 border border-amber-200 dark:border-amber-900"
+                                  >
+                                    <div className="text-xs">
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                                        {b.booking_number ? `عقد #${b.booking_number}` : `عقد #${b.booking_id}`} - {b.customer_name}
+                                      </div>
+                                      <div className="text-gray-500 dark:text-gray-400">
+                                        متبقٍ: {Number(b.remaining).toLocaleString()} - منتصف المدة: {b.midpoint_date}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleNavigateToBooking(b.booking_id); }}
+                                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                                      >
+                                        العقد
+                                      </button>
+                                      {b.whatsapp_link ? (
+                                        <button
+                                          type="button"
+                                          disabled={isSendingWhatsapp && sendingBookingId === b.booking_id}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSendOverdueBalanceWhatsapp(b.booking_id);
+                                          }}
+                                          className="flex items-center gap-1 text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900 disabled:opacity-50"
+                                        >
+                                          {isSendingWhatsapp && sendingBookingId === b.booking_id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <MessageCircle className="h-3 w-3" />
+                                          )}
+                                          واتساب
+                                        </button>
+                                      ) : (
+                                        <span className="text-[11px] text-gray-400">لا يوجد رقم هاتف</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -214,7 +330,7 @@ const NotificationsModal = ({
           {/* Footer */}
           <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
             <div className="flex justify-between">
-              <span>المجموع: {notifications.length}</span>
+              <span>المجموع: {displayedNotifications.length}</span>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 rounded-full bg-blue-500"></div>

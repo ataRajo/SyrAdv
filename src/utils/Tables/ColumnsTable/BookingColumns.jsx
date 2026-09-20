@@ -482,12 +482,11 @@ export const BookingColumns = [
 */
 {
   header: "نوع العمل",
-  accessor: "customer.work_type_id",
+  accessor: "customer.work.type",
   prefixIcon: "mdi:briefcase",
-  format: (value) => {
-    // value here is customer.work_type_id
-    if (value !== null && value !== undefined) {
-      return value; // Display the ID number directly
+  format: (value, row) => {
+    if (row?.customer?.work?.type) {
+      return row.customer.work.type;
     }
     return "—";
   },

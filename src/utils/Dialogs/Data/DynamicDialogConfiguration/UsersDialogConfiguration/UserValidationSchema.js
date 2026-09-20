@@ -16,5 +16,16 @@ export const userValidationSchema = Yup.object({
     .required("البريد الإلكتروني مطلوب"),
   roles: Yup.string().required("الدور مطلوب"),
   department: Yup.string().required("القسم مطلوب"),
+  // ✅ الراتب (طلب صريح): اختياري - خانة فارغة تعني "بلا راتب معرَّف بعد"
+  // (عند الإضافة) أو "بلا تغيير على الراتب الحالي" (عند التعديل). عند
+  // إدخال قيمة يجب أن تكون رقمًا موجبًا - transform يحوّل "" إلى undefined
+  // كي لا يفشل الفحص العددي أمام خانة فارغة تمامًا.
+  salary: Yup.number()
+    .transform((value, originalValue) =>
+      String(originalValue).trim() === "" ? undefined : value
+    )
+    .typeError("الراتب يجب أن يكون رقمًا")
+    .positive("الراتب يجب أن يكون أكبر من صفر")
+    .nullable(),
 
 });

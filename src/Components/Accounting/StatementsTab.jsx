@@ -10,11 +10,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Icon } from "@iconify/react";
+import { useNavigate } from "react-router";
 import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
 
 const fmt = (n) => Number(n ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 });
 
 const StatementLines = ({ statement, isLoading, onPrintVoucher, emptyLabel }) => {
+  const navigate = useNavigate();
   if (isLoading) return <p className="text-sm text-muted-foreground p-4">جارٍ التحميل...</p>;
   if (!statement) return <p className="text-sm text-muted-foreground p-4">{emptyLabel}</p>;
 
@@ -48,6 +50,7 @@ const StatementLines = ({ statement, isLoading, onPrintVoucher, emptyLabel }) =>
               <th className="text-center p-1">التاريخ</th>
               <th className="text-center p-1">رقم السند</th>
               <th className="text-center p-1">البيان</th>
+              <th className="text-center p-1">الحجز</th>
               <th className="text-center p-1">مدين</th>
               <th className="text-center p-1">دائن</th>
               <th className="text-center p-1">الرصيد</th>
@@ -56,13 +59,29 @@ const StatementLines = ({ statement, isLoading, onPrintVoucher, emptyLabel }) =>
           </thead>
           <tbody>
             {lines.length === 0 && (
-              <tr><td colSpan={7} className="p-3 text-center text-muted-foreground">لا توجد حركات ضمن هذه الفترة</td></tr>
+              <tr><td colSpan={8} className="p-3 text-center text-muted-foreground">لا توجد حركات ضمن هذه الفترة</td></tr>
             )}
             {lines.map((line) => (
               <tr key={line.id} className="border-b border-border/50">
                 <td className="p-1 text-center">{line.entry_date}</td>
                 <td className="p-1 font-mono text-center">{line.entry_number}</td>
                 <td className="p-1 max-w-[200px] truncate text-center" title={line.description}>{line.description}</td>
+                <td className="p-1 text-center">
+                  {line.booking_id ? (
+                    <Button
+                      size="sm"
+                      variant="link"
+                      className="h-6 px-1 font-mono text-xs"
+                      title="فتح/تحويل هذا الحجز إلى عقد"
+                      onClick={() => navigate(`/dashboard/booking/${line.booking_id}`)}
+                    >
+                      #{line.booking_id}
+                      <Icon icon="mdi:file-sign" className="w-3.5 h-3.5 mr-1" />
+                    </Button>
+                  ) : (
+                    "-"
+                  )}
+                </td>
                 <td className="p-1 font-mono text-center">{line.debit ? fmt(line.debit) : "-"}</td>
                 <td className="p-1 font-mono text-center">{line.credit ? fmt(line.credit) : "-"}</td>
                 <td className="p-1 font-mono text-center">{fmt(line.balance_after)}</td>

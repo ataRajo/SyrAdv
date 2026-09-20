@@ -13,7 +13,9 @@ import {
   IconFlag  ,
   IconBriefcase,
   IconFlag2Off,
-  Icon24Hours
+  Icon24Hours,
+  IconTruckDelivery,
+  IconBrandWhatsapp
 } from "@tabler/icons-react";
 
 export const BookingType = {
@@ -58,7 +60,7 @@ export const Permissions = {
   CreateBrokers: "create-brokers",
   CreateCities: "create-cities",
   CreateCustomers: "create-customers",
-  // CreateOrders: "create-orders",
+  CreateOrders: "create-orders",
   CreatePayments: "create-payments",
   CreateProducts: "create-products",
   CreateRegions: "create-regions",
@@ -75,6 +77,7 @@ export const Permissions = {
   DeleteUsers: "delete-users",
   DeleteBookings: "delete-bookings",
   DeletePayments: "delete-payments",
+  DeleteOrders: "delete-orders",
 
 
 
@@ -95,6 +98,13 @@ export const Permissions = {
   ViewCustomers: "view-customers", //
   ViewOrders: "view-orders", //
   ViewPayments: "view-payments", //
+  // مسارات عامل الورشة نفسه (workshop-orders/*) - راجع WorkshopController
+  // ودور 'workshop' في RolePermissionSeeder. مختلفة عمدًا عن ViewOrders/
+  // EditOrders أعلاه (تلك للوحة الإدارية الكاملة).
+  ViewWorkshopOrders: "view-workshop-orders",
+  ExecuteWorkshopOrders: "execute-workshop-orders",
+  // مدير الورشة - يرى أوامر ورشته ويُسنِدها لعامل بعينه ضمن فريقه.
+  ManageWorkshopTeam: "manage-workshop-team",
   ViewRegions: "view-regions", //
   ViewRoadSigns: "view-road-signs",
   ViewTemplates: "view-templates",
@@ -143,6 +153,15 @@ export const navLinkSidebar = [
     url: "/dashboard/payments",
     icon: IconCash,
     permission: Permissions.ViewPayments,
+  },
+  {
+    // طلب صريح: "اضافة عنصر جديد الى ال side bar اسمه الموردين تاخذنا الى
+    // صفحة الموردين" - تبويب الموردين موجود أصلًا ضمن AccountingPanel
+    // (?tab=suppliers يفتحه مباشرة - راجع AccountingPanel.jsx).
+    title: "الموردين",
+  url: "/dashboard/administration-page/accounting?tab=suppliers",
+    icon: IconTruckDelivery,
+    permission: Permissions.ViewFinancials,
   },
   {
     title: "النماذج",
@@ -203,6 +222,33 @@ export const navLinkSidebar = [
     icon:Icon24Hours , 
     permission:Permissions.ViewRegions ,
    
+  },
+  {
+    // نظام الورشات (فك/تركيب ميداني) - راجع DEVELOPER_GUIDE.md الجزء
+    // الثالث والثامن. يظهر لمسؤول الورشة (view-orders، يرى كل التبويبات
+    // الإدارية) أو لعامل الورشة (view-workshop-orders، يرى تبويبَي "أوامري"
+    // و"إنجازي" فقط) - WorkshopsPanel.jsx يفرّق بينهما داخليًا.
+    title: "الورشات",
+    url: "/dashboard/workshops",
+    icon: IconFlag2Off,
+    permission: [Permissions.ViewOrders, Permissions.ViewWorkshopOrders],
+  },
+  {
+    // لوحة تحكم السوبر أدمن بإشعارات واتساب (طلب صريح) - تفعيل/تعطيل كل
+    // نوع رسالة تلقائية وتعديل نصها. الحماية الفعلية على الباك-إند فقط
+    // (RoleMiddleware::using('super admin') في WhatsappSettingsController)
+    // - permission هنا تقريبية لإخفاء الرابط عن الموظفين العاديين في
+    // الواجهة، نفس نمط رابط "الموردين" أعلاه.
+    title: "إعدادات واتساب",
+    url: "/dashboard/settings/whatsapp",
+    icon: IconBrandWhatsapp,
+    permission: Permissions.ViewUsers,
+  },
+  {
+    title: "رسائل واتساب الجماعية",
+    url: "/dashboard/settings/whatsapp-bulk",
+    icon: IconBrandWhatsapp,
+    permission: Permissions.ViewUsers,
   }
 
 ];
@@ -250,6 +296,17 @@ export const navLinksAdministrationPage = [
     to: "box",
     text: "  الصندوق",
     mobileText: "الصندوق ",
+    permission: Permissions.ViewFinancials,
+  },
+  {
+    // ⚠️ FIXED: المسار accounting/* موجود فعليًا في App.jsx (AccountingPanel)
+    // لكن لم يكن له أي رابط تنقّل هنا - الوحدة كاملة (دليل حسابات، سندات،
+    // كشوفات، رواتب، موردون، فواتير شراء، عمولات وسطاء، تقارير مالية،
+    // ميزان مراجعة، والسلف الجديدة) كانت غير قابلة للوصول إلا بكتابة
+    // الرابط يدويًا في المتصفح.
+    to: "accounting",
+    text: "المحاسبة والصندوق",
+    mobileText: "المحاسبة",
     permission: Permissions.ViewFinancials,
   },
   {

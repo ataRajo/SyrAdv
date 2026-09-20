@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Icon } from "@iconify/react";
 import { useGetOffersQuery, useAssignOfferToCustomerMutation } from "../../RtkQuery/Slice/Offers/offersApiSlice";
+import { useSendWhatsappMessageMutation } from "../../RtkQuery/Slice/Whatsapp/WhatsappApi";
 import toast from "react-hot-toast";
 
 // Country codes data
@@ -81,6 +82,7 @@ const ContactCustomerModal = ({
   });
 
   const [assignOffer, { isLoading: isAssigning }] = useAssignOfferToCustomerMutation();
+  const [sendWhatsappMessage, { isLoading: isSendingWhatsapp }] = useSendWhatsappMessageMutation();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -122,10 +124,18 @@ const ContactCustomerModal = ({
 
     const fullMessage = `السادة شركة ${formData.companyName} المحترمين\n\n${formData.message}\n\nنرفق لكم عرض باللوحات التالية: ${formData.roadsigns}${offerText}`;
 
-    const encodedMessage = encodeURIComponent(fullMessage);
-    const whatsappUrl = `https://wa.me/${fullPhoneNumber}?text=${encodedMessage}`;
-
-    window.open(whatsappUrl, "_blank");
+    // إرسال تلقائي عبر الباك-إند (WAHA) بدل فتح واتساب يدويًا - نفس نص
+    // الرسالة الذي كان يُبنى أعلاه تمامًا بلا أي تغيير.
+    try {
+      const result = await sendWhatsappMessage({
+        phoneNumber: fullPhoneNumber,
+        message: fullMessage,
+      }).unwrap();
+      toast.success(result?.message || "تم إرسال الرسالة عبر واتساب بنجاح");
+    } catch (err) {
+      toast.error(err?.message || "فشل في إرسال الرسالة عبر واتساب");
+      return; // لا تُغلق النافذة أو تُصفّر الحقول إن فشل الإرسال
+    }
 
     setFormData({
       companyName: companyName || "",
@@ -150,7 +160,7 @@ const ContactCustomerModal = ({
     onClose();
   };
 
-  const isSubmitting = isAssigning;
+  const isSubmitting = isAssigning || isSendingWhatsapp;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -291,7 +301,7 @@ const ContactCustomerModal = ({
           <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
             <p className="text-xs text-blue-700 dark:text-blue-300">
               <Icon icon="mdi:information" className="inline-block mr-1" />
-              سيتم تعيين العرض للعميل ثم فتح محادثة واتساب مع الرسالة جاهزة
+              سيتم تعيين العرض للعميل ثم إرسال الرسالة تلقائيًا عبر واتساب
             </p>
           </div>
         </div>

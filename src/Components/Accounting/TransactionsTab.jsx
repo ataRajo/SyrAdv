@@ -19,7 +19,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
+import { useNavigate } from "react-router";
 import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import { useGetBookingQuery } from "../../RtkQuery/Slice/Booking/BookingApi";
 import CurrencyAmountField from "./CurrencyAmountField";
 
 const TYPE_LABELS = {
@@ -43,7 +45,27 @@ const TYPE_FILTER_OPTIONS = [
 
 // ---------------------------------------------------------------------------
 
-const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
+const PARTY_TYPE_OPTIONS = [
+  { value: "customer", label: "عميل" },
+  { value: "supplier", label: "مورد" },
+  { value: "employee", label: "موظف" },
+  { value: "account", label: "حساب آخر" },
+];
+
+/**
+ * سند قبض عام - طلب العميل: "تفعيل سندات القبض ... لكل أنواع الحسابات
+ * الموجودة في النظام" (مثاله الصريح: سند قبض من موظف إلى الصندوق). طرف
+ * السند واحد من أربعة (راجع RecordIncomingTransactionRequest/
+ * TransactionController::incoming() على الباك-إند لمنطق التوجيه الكامل):
+ *  - عميل: السلوك الأصلي دون أي تغيير، مع إمكانية ربط عقد/حجز.
+ *  - مورد: قبض مباشر على حساب المورد نفسه (استرجاع/مرتجع نقدي).
+ *  - موظف: تحصيل من سلفته المستحقة حصرًا (لا "حساب" مستقل للموظف) - يُعرض
+ *    رصيده المستحق فور اختياره، ولا يمكن تجاوزه (نفس ضمان AdvancesTab
+ *    تمامًا، فقط من داخل شاشة المعاملات العامة).
+ *  - حساب آخر: أي حساب غير مرتبط بعميل/مورد/سلف (مثال: إيرادات أخرى).
+ */
+const IncomingForm = ({ cashAccounts, suppliers, employees, postableAccounts, getEmployeeAdvanceBalance, onCancel, onSave, isSaving }) => {
+  const [partyType, setPartyType] = useState("customer");
   const [customerSearch, setCustomerSearch] = useState("");
   const { data: customersResponse } = useGetCustomersQuery({
     page: 1,
@@ -53,7 +75,8 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
   const customers = customersResponse?.data ?? [];
 
   const [form, setForm] = useState({
-    customer_id: "",
+    party_id: "",
+    booking_id: "",
     amount: "",
     exchange_rate: "",
     date: "",
@@ -63,11 +86,49 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
   });
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
+  const [employeeOutstanding, setEmployeeOutstanding] = useState(null);
+  const [isLoadingEmployeeOutstanding, setIsLoadingEmployeeOutstanding] = useState(false);
+
+  // طلب العميل: عند تسجيل سند قبض مرتبط بقيمة عقد/حجز، تُتاح إمكانية
+  // اختيار العقد المرتبط به - يُعرض هنا فقط بعد اختيار العميل، ويُستبعد
+  // العقود المنتهية/المؤرشفة (is_archived) لأنه لا معنى لربط سند قبض
+  // جديد بعقد سبق أن انتهى (راجع BookingService::extendBooking - العقد
+  // القديم بعد التمديد يبقى فقط كسجل تاريخي).
+  const { data: customerBookingsResponse, isFetching: isFetchingBookings } = useGetBookingQuery(
+    { customer_id: partyType === "customer" ? form.party_id : "", is_archived: false, per_page: 50 },
+    { skip: partyType !== "customer" || !form.party_id }
+  );
+  const customerBookings = customerBookingsResponse?.data ?? [];
+
+  const handlePartyTypeChange = (value) => {
+    setPartyType(value);
+    setForm((f) => ({ ...f, party_id: "", booking_id: "" }));
+    setEmployeeOutstanding(null);
+  };
+
+  const handlePartyIdChange = async (value) => {
+    setForm((f) => ({ ...f, party_id: value, booking_id: "" }));
+    if (partyType === "employee" && value && getEmployeeAdvanceBalance) {
+      setEmployeeOutstanding(null);
+      setIsLoadingEmployeeOutstanding(true);
+      const balance = await getEmployeeAdvanceBalance(Number(value));
+      setIsLoadingEmployeeOutstanding(false);
+      setEmployeeOutstanding(balance?.outstanding_balance ?? 0);
+    }
+  };
+
+  const amountNumber = Number(form.amount || 0);
+  const exceedsEmployeeOutstanding =
+    partyType === "employee" && employeeOutstanding !== null && amountNumber > employeeOutstanding + 0.01;
+
+  const partyField = { customer: "customer_id", supplier: "supplier_id", employee: "employee_id", account: "account_id" }[partyType];
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave({
-      customer_id: Number(form.customer_id),
-      amount: Number(form.amount),
+      [partyField]: Number(form.party_id),
+      amount: amountNumber,
+      ...(partyType === "customer" && form.booking_id ? { booking_id: Number(form.booking_id) } : {}),
       ...(form.exchange_rate ? { exchange_rate: Number(form.exchange_rate) } : {}),
       ...(form.date ? { date: form.date } : {}),
       ...(form.description ? { description: form.description } : {}),
@@ -76,29 +137,132 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
     });
   };
 
+  const nonCashPostableAccounts = (postableAccounts ?? []).filter((a) => !a.is_cash_account);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label>العميل</Label>
-        <Input
-          placeholder="ابحث عن عميل..."
-          value={customerSearch}
-          onChange={(e) => setCustomerSearch(e.target.value)}
-          className="mb-2"
-        />
-        <Select value={form.customer_id} onValueChange={set("customer_id")}>
+        <Label>طرف السند</Label>
+        <Select value={partyType} onValueChange={handlePartyTypeChange}>
           <SelectTrigger>
-            <SelectValue placeholder="اختر العميل" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {customers.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.company_name || c.full_name}
-              </SelectItem>
+            {PARTY_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
+
+      {partyType === "customer" && (
+        <div className="space-y-2">
+          <Label>العميل</Label>
+          <Input
+            placeholder="ابحث عن عميل..."
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            className="mb-2"
+          />
+          <Select value={form.party_id} onValueChange={handlePartyIdChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="اختر العميل" />
+            </SelectTrigger>
+            <SelectContent>
+              {customers.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.company_name || c.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {partyType === "supplier" && (
+        <div className="space-y-2">
+          <Label>المورد</Label>
+          <Select value={form.party_id} onValueChange={handlePartyIdChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="اختر المورد" />
+            </SelectTrigger>
+            <SelectContent>
+              {(suppliers ?? []).map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {partyType === "employee" && (
+        <div className="space-y-2">
+          <Label>الموظف</Label>
+          <Select value={form.party_id} onValueChange={handlePartyIdChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="اختر الموظف" />
+            </SelectTrigger>
+            <SelectContent>
+              {(employees ?? []).map((e) => (
+                <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {form.party_id && (
+            <p className="text-xs text-muted-foreground">
+              {isLoadingEmployeeOutstanding
+                ? "جارٍ جلب رصيد السلفة المستحق..."
+                : employeeOutstanding !== null
+                ? `رصيد السلفة المستحق على هذا الموظف حاليًا: ${employeeOutstanding.toLocaleString("ar-SY", { minimumFractionDigits: 2 })}`
+                : null}
+            </p>
+          )}
+          {exceedsEmployeeOutstanding && (
+            <p className="text-xs text-destructive">لا يمكن تحصيل أكثر من الرصيد المستحق على الموظف.</p>
+          )}
+        </div>
+      )}
+
+      {partyType === "account" && (
+        <div className="space-y-2">
+          <Label>الحساب</Label>
+          <Select value={form.party_id} onValueChange={handlePartyIdChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="اختر الحساب" />
+            </SelectTrigger>
+            <SelectContent>
+              {nonCashPostableAccounts.map((a) => (
+                <SelectItem key={a.id} value={String(a.id)}>{a.code} - {a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {partyType === "customer" && form.party_id && (
+        <div className="space-y-2">
+          <Label>العقد / الحجز المرتبط (اختياري - إن كان السند مقابل قيمة عقد)</Label>
+          <Select
+            value={form.booking_id}
+            onValueChange={set("booking_id")}
+            disabled={isFetchingBookings}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={isFetchingBookings ? "جارٍ التحميل..." : "بلا عقد مرتبط"} />
+            </SelectTrigger>
+            <SelectContent>
+              {customerBookings.map((b) => (
+                <SelectItem key={b.id} value={String(b.id)}>
+                  عقد #{b.id} {b.number ? `- ${b.number}` : ""} ({b.start_date} → {b.end_date})
+                </SelectItem>
+              ))}
+              {!isFetchingBookings && customerBookings.length === 0 && (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد عقود سارية لهذا العميل</div>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>الصندوق / البنك (اختياري - الافتراضي: الصندوق - دولار)</Label>
@@ -142,7 +306,7 @@ const IncomingForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>إلغاء</Button>
-        <Button type="submit" disabled={isSaving || !form.customer_id}>
+        <Button type="submit" disabled={isSaving || !form.party_id || !form.amount || exceedsEmployeeOutstanding}>
           {isSaving ? "جارٍ الحفظ..." : "تسجيل قيد القبض"}
         </Button>
       </DialogFooter>
@@ -352,6 +516,9 @@ const TransactionsTab = ({ accounting }) => {
     setTransactionFilters,
     cashAccounts,
     postableAccounts,
+    suppliers,
+    payrollEmployees,
+    getEmployeeAdvanceBalance,
     incomingDialogOpen,
     setIncomingDialogOpen,
     outgoingDialogOpen,
@@ -370,6 +537,8 @@ const TransactionsTab = ({ accounting }) => {
     isReversing,
     handleOpenVoucher,
   } = accounting;
+
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-4">
@@ -431,6 +600,7 @@ const TransactionsTab = ({ accounting }) => {
         <th className="p-2 text-center">النوع</th>
         <th className="p-2 text-center">التاريخ</th>
         <th className="p-2 text-center">البيان</th>
+        <th className="p-2 text-center">العقد</th>
         <th className="p-2 text-center">الموظف</th>
         <th className="p-2 text-center">مدين</th>
         <th className="p-2 text-center">دائن</th>
@@ -439,10 +609,10 @@ const TransactionsTab = ({ accounting }) => {
     </thead>
     <tbody>
       {isFetchingTransactions && (
-        <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+        <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
       )}
       {!isFetchingTransactions && transactions.length === 0 && (
-        <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">لا توجد معاملات</td></tr>
+        <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">لا توجد معاملات</td></tr>
       )}
       {transactions.map((tx) => (
         <tr key={tx.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -455,6 +625,22 @@ const TransactionsTab = ({ accounting }) => {
           </td>
           <td className="p-2 text-xs text-center">{tx.entry_date}</td>
           <td className="p-2 max-w-[220px] truncate text-center" title={tx.description}>{tx.description}</td>
+          <td className="p-2 text-center">
+            {tx.booking_id ? (
+              <Button
+                size="sm"
+                variant="link"
+                className="h-6 px-1 font-mono text-xs"
+                title="فتح عقد الحجز"
+                onClick={() => navigate(`/dashboard/booking/${tx.booking_id}`)}
+              >
+                #{tx.booking_id}
+                <Icon icon="mdi:file-sign" className="w-3.5 h-3.5 mr-1" />
+              </Button>
+            ) : (
+              "-"
+            )}
+          </td>
           <td className="p-2 text-xs text-muted-foreground text-center">{tx.created_by_name || "-"}</td>
           <td className="p-2 font-mono text-center">{Number(tx.total_debit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
           <td className="p-2 font-mono text-center">{Number(tx.total_credit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
@@ -519,6 +705,10 @@ const TransactionsTab = ({ accounting }) => {
           <DialogHeader><DialogTitle>تسجيل قيد قبض (سند قبض)</DialogTitle></DialogHeader>
           <IncomingForm
             cashAccounts={cashAccounts}
+            suppliers={suppliers}
+            employees={payrollEmployees}
+            postableAccounts={postableAccounts}
+            getEmployeeAdvanceBalance={getEmployeeAdvanceBalance}
             onCancel={() => setIncomingDialogOpen(false)}
             onSave={handleRecordIncoming}
             isSaving={isRecordingIncoming}

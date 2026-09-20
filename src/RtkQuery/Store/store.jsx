@@ -17,6 +17,11 @@ import {offersApiSlice} from "../Slice/Offers/offersApiSlice"
 import { SearchSlice } from "../Slice/SearchApi/SearchApi";
 import {accountingApi} from "../Slice/Accounting/AccountingApi"
 import {bookingDocumentsApi} from "../Slice/Bookings/BookingDocumentsApi"
+import { workshopsApi } from "../Slice/Workshops/WorkshopsApi"
+import { whatsappApiSlice } from "../Slice/Whatsapp/WhatsappApi"
+import { publicContactApiSlice } from "../Slice/Public/PublicContactApi"
+import { WhatsappSettingsSlice } from "../Slice/Whatsapp/WhatsappSettingsApi"
+import { WhatsappBulkSlice } from "../Slice/Whatsapp/WhatsappBulkApi"
 
 const store = configureStore({
   reducer: {
@@ -37,7 +42,12 @@ const store = configureStore({
     [offersApiSlice.reducerPath] :offersApiSlice.reducer ,
     [SearchSlice.reducerPath]: SearchSlice.reducer,
     [accountingApi.reducerPath] :accountingApi.reducer ,
-    [bookingDocumentsApi.reducerPath]:bookingDocumentsApi.reducer
+    [bookingDocumentsApi.reducerPath]:bookingDocumentsApi.reducer,
+    [workshopsApi.reducerPath]: workshopsApi.reducer,
+    [whatsappApiSlice.reducerPath]: whatsappApiSlice.reducer,
+    [publicContactApiSlice.reducerPath]: publicContactApiSlice.reducer,
+    [WhatsappSettingsSlice.reducerPath]: WhatsappSettingsSlice.reducer,
+    [WhatsappBulkSlice.reducerPath]: WhatsappBulkSlice.reducer
 
   },
   middleware: (getDefaultMiddleware) =>
@@ -59,7 +69,12 @@ const store = configureStore({
       offersApiSlice.middleware ,
       SearchSlice.middleware,
       accountingApi.middleware, 
-      bookingDocumentsApi.middleware
+      bookingDocumentsApi.middleware,
+      workshopsApi.middleware,
+      whatsappApiSlice.middleware,
+      publicContactApiSlice.middleware,
+      WhatsappSettingsSlice.middleware,
+      WhatsappBulkSlice.middleware
     ),
 });
 

@@ -20,48 +20,73 @@ const HistoryTab = ({ history, permission }) => {
     regions,
   } = useMangeOrders();
 
-  const { data: customersList = [] } = useGetCustomersQuery();
-  
+  // ✅ fetch ALL customers (was: default page-1-only, so most customers
+  // never appeared in the dropdown and couldn't be filtered by at all)
+  const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
+    per_page: 1000,
+  });
+  const customersList = customersResponse?.data ?? [];
+
   const [selectedCustomerIdHistory, setSelectedCustomerIdHistory] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
 
   const sortedHistory = useMemo(() => {
     if (!history || !Array.isArray(history)) return [];
-    
+
     let filteredHistory = [...history];
-    
+
     if (selectedCustomerIdHistory) {
       filteredHistory = filteredHistory.filter(order => {
         if (order.customer_id && order.customer_id.toString() === selectedCustomerIdHistory.toString()) {
           return true;
         }
-        
+
         if (order.customer?.id && order.customer.id.toString() === selectedCustomerIdHistory.toString()) {
           return true;
         }
-        
+
         if (order.customer_new?.id && order.customer_new.id.toString() === selectedCustomerIdHistory.toString()) {
           return true;
         }
-        
+
         return false;
       });
     }
-    
+
+    // ✅ date filter (was completely missing before — selectedDate was
+    // tracked in state and shown in the UI, but never applied to the list).
+    // action_date is a plain "YYYY-MM-DD" string, same format the <input
+    // type="date"> produces, so an exact string match is a 100% reliable
+    // match with no timezone conversion needed.
+    if (selectedDate) {
+      filteredHistory = filteredHistory.filter(order => {
+        const orderDate = order.action_date ? order.action_date.slice(0, 10) : null;
+        return orderDate === selectedDate;
+      });
+    }
+
+    if (orderType) {
+      const typeMap = { release: 1, installation: 2, both: 3 };
+      const typeValue = typeMap[orderType];
+      if (typeValue) {
+        filteredHistory = filteredHistory.filter(order => Number(order.type) === typeValue);
+      }
+    }
+
     if (cityId) {
-      filteredHistory = filteredHistory.filter(order => 
+      filteredHistory = filteredHistory.filter(order =>
         order.road_sign?.city?.id?.toString() === cityId.toString()
       );
     }
-    
+
     if (regionId) {
-      filteredHistory = filteredHistory.filter(order => 
+      filteredHistory = filteredHistory.filter(order =>
         order.road_sign?.region?.id?.toString() === regionId.toString()
       );
     }
-    
+
     return filteredHistory.sort((a, b) => new Date(b.action_date) - new Date(a.action_date));
-  }, [history, selectedCustomerIdHistory, cityId, regionId]);
+  }, [history, selectedCustomerIdHistory, selectedDate, orderType, cityId, regionId]);
 
   return (
     <div className="p-4 sm:p-6 max-w-full mx-auto space-y-6 bg-background rounded-lg shadow-sm dark:shadow-gray-800">
@@ -71,8 +96,8 @@ const HistoryTab = ({ history, permission }) => {
           إجمالي الطلبات المؤرشفة : {sortedHistory.length}
         </div>
       </div>
-      
-      <OrderFilters 
+
+      <OrderFilters
         selectedCustomerId={selectedCustomerIdHistory}
         setSelectedCustomerId={setSelectedCustomerIdHistory}
         orderType={orderType}
@@ -84,11 +109,12 @@ const HistoryTab = ({ history, permission }) => {
         regionId={regionId}
         setRegionId={setRegionId}
         customersList={customersList}
+        isLoadingCustomers={isLoadingCustomers}
         cities={cities}
         regions={regions}
         isHistoryTab={true}
       />
-      
+
       {selectedCustomerIdHistory && (
         <div className="mb-4 p-4 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -127,7 +153,7 @@ const HistoryTab = ({ history, permission }) => {
           </div>
         </div>
       )}
-      
+
       <DynamicTable
         data={sortedHistory}
         columns={HistoryOrdersColumns}

@@ -21,6 +21,7 @@ import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import MapDialog from "../../MapDialog";
 import { useAddNewCityMutation } from "../../../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi";
+import EmployeePermissionsPicker from "./EmployeePermissionsPicker";
 
 const DynamicDialog = ({
   show,
@@ -418,6 +419,15 @@ case "map":
     </div>
   );
 
+      case "permissions-picker":
+        return (
+          <EmployeePermissionsPicker
+            key={field.name}
+            value={formik.values[field.name] || []}
+            onChange={(names) => formik.setFieldValue(field.name, names)}
+          />
+        );
+
       default:
         return (
           <div key={field.name} className="space-y-2">
@@ -531,8 +541,13 @@ case "map":
           {(formik) => (
             <Form className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                {fields.map((field) => renderField(field, formik))}
+                {fields
+                  .filter((field) => field.type !== "permissions-picker")
+                  .map((field) => renderField(field, formik))}
               </div>
+              {fields
+                .filter((field) => field.type === "permissions-picker")
+                .map((field) => renderField(field, formik))}
               <DialogFooter className="mt-6">
   <Button 
     type="button" 

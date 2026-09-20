@@ -7,5 +7,8 @@ export const userInitialValues = {
   address: "",
   email: "",
   roles: "",
-  department: "", 
+  department: "",
+  permissions: [],
+  // ✅ الراتب (طلب صريح) - راجع UserFields.js وDialogEditUser.jsx.
+  salary: "",
 };

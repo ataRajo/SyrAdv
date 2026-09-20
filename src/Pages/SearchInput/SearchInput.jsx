@@ -35,6 +35,10 @@ import {
   CalendarClock,
   Wallet,
   Handshake,
+  Percent,
+  Tag,
+  Truck,
+  Package,
 } from "lucide-react";
 import { useLazyGlobalSearchQuery } from "../../RtkQuery/Slice/SearchApi/SearchApi";
 import { cn } from "@/lib/utils";
@@ -81,6 +85,28 @@ const fetchPrintingTypes = async () => {
   return response.json();
 };
 
+// API call for calculating booking amount (advertising/printing/total/discounted prices)
+const fetchCalculatedAmount = async (payload) => {
+  const response = await fetch(`${BASE_URL}/get-calculate-Amount`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to calculate booking amount");
+  }
+  return response.json();
+};
+
+// Discount type options for the booking
+const discountTypeOptions = [
+  { value: "1", label: "نسبة مئوية %" },
+  { value: "2", label: "قيمة ثابتة" },
+];
+
 const SEARCH_CATEGORIES = [
   { id: "templates", label: "النماذج", icon: Table2Icon, color: "text-purple-500", bgColor: "bg-purple-500/10" },
   { id: "roadsigns", label: "لوحات طرقية", icon: MapPin, color: "text-blue-500", bgColor: "bg-blue-500/10" },
@@ -88,8 +114,142 @@ const SEARCH_CATEGORIES = [
   { id: "employees", label: "الموظفون", icon: Briefcase, color: "text-purple-500", bgColor: "bg-purple-500/10" },
   { id: "bookings", label: "الحجوزات", icon: Calendar, color: "text-orange-500", bgColor: "bg-orange-500/10" },
   { id: "payments", label: "المدفوعات", icon: CreditCard, color: "text-red-500", bgColor: "bg-red-500/10" },
+  { id: "suppliers", label: "الموردين", icon: Truck, color: "text-teal-500", bgColor: "bg-teal-500/10" },
+  { id: "materials", label: "المواد", icon: Package, color: "text-amber-500", bgColor: "bg-amber-500/10" },
   { id: "administration", label: "الإدارة", icon: LayoutDashboard, color: "text-indigo-500", bgColor: "bg-indigo-500/10" },
 ];
+
+// Small requestAnimationFrame-based counter so the total price "counts up"
+// instead of just popping to the new value.
+const useAnimatedNumber = (target, duration = 700) => {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = Number(target) || 0;
+    const start = performance.now();
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    const tick = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(from + (to - from) * eased);
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = to;
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => rafRef.current && cancelAnimationFrame(rafRef.current);
+  }, [target, duration]);
+
+  return Math.round(display);
+};
+
+// Animated total price + per-roadsign details summary
+const PriceSummary = ({
+  isDark,
+  isCalculating,
+  advertisingPrice,
+  printingPrice,
+  totalPrice,
+  totalPriceBeforeDiscount,
+  discountType,
+  discountedAdvertisingPrice,
+  priceDetails,
+}) => {
+  const animatedTotal = useAnimatedNumber(totalPrice);
+  const hasDiscount = discountType && totalPriceBeforeDiscount > totalPrice;
+
+  return (
+    <div
+      className={cn(
+        "mt-4 rounded-xl border overflow-hidden",
+        isDark ? "bg-gray-700/40 border-gray-700" : "bg-gray-50 border-gray-200"
+      )}
+    >
+      <div className="p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-6 flex-wrap">
+          <div className="text-sm">
+            <span className={isDark ? "text-gray-400" : "text-gray-500"}>سعر الإعلان: </span>
+            <span className="font-semibold">{advertisingPrice.toLocaleString("en-US")}</span>
+          </div>
+          <div className="text-sm">
+            <span className={isDark ? "text-gray-400" : "text-gray-500"}>سعر الطباعة: </span>
+            <span className="font-semibold">{printingPrice.toLocaleString("en-US")}</span>
+          </div>
+          {hasDiscount && (
+            <div className="text-sm">
+              <span className={isDark ? "text-gray-400" : "text-gray-500"}>بعد الخصم: </span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {discountedAdvertisingPrice.toLocaleString("en-US")}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-baseline gap-2">
+          {hasDiscount && (
+            <span className="text-sm line-through text-gray-400">
+              {totalPriceBeforeDiscount.toLocaleString("en-US")}
+            </span>
+          )}
+          <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
+            الإجمالي:
+          </span>
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={isCalculating ? "loading" : totalPrice}
+              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+              className="text-2xl font-extrabold text-primary tabular-nums"
+            >
+              {isCalculating ? (
+                <Loader2 className="h-6 w-6 animate-spin inline" />
+              ) : (
+                animatedTotal.toLocaleString("en-US")
+              )}
+            </motion.span>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {priceDetails.length > 0 && (
+        <div
+          className={cn(
+            "border-t px-4 py-3 space-y-1.5",
+            isDark ? "border-gray-700" : "border-gray-200"
+          )}
+        >
+          <div className={cn("text-xs font-semibold mb-1", isDark ? "text-gray-400" : "text-gray-500")}>
+            تفاصيل اللوحات
+          </div>
+          {priceDetails.map((detail, idx) => (
+            <div
+              key={detail.road_sign_id ?? idx}
+              className="flex items-center justify-between text-xs"
+            >
+              <span className={isDark ? "text-gray-300" : "text-gray-600"}>
+                لوحة #{detail.road_sign_id}
+                {detail.template_model && ` — ${detail.template_model}`}
+              </span>
+              <span className="font-semibold">
+                {Number(detail.face_price ?? 0).toLocaleString("en-US")}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SearchInput = () => {
   const goBack = () => window.history.back();
@@ -136,6 +296,19 @@ const SearchInput = () => {
   const [printingTypeFilter, setPrintingTypeFilter] = useState("all");
   const [customerPage, setCustomerPage] = useState(1);
   const [customerSearch, setCustomerSearch] = useState("");
+
+  // Discount inputs for the booking
+  const [discountType, setDiscountType] = useState("");
+  const [discountValue, setDiscountValue] = useState("");
+
+  // Prices returned from /get-calculate-Amount, sent as-is to /bookings
+  const [advertisingPrice, setAdvertisingPrice] = useState(0);
+  const [printingPrice, setPrintingPrice] = useState(0);
+  const [totalPrice, setTotalPrice] = useState(0);
+  const [totalPriceBeforeDiscount, setTotalPriceBeforeDiscount] = useState(0);
+  const [priceDetails, setPriceDetails] = useState([]);
+  const [discountedAdvertisingPrice, setDiscountedAdvertisingPrice] = useState(0);
+  const [isCalculatingAmount, setIsCalculatingAmount] = useState(false);
 
   const inputRef = useRef(null);
   const [triggerSearch] = useLazyGlobalSearchQuery();
@@ -196,7 +369,6 @@ const SearchInput = () => {
     const results = [];
 
     navLinksAdministrationPage.forEach((link) => {
-      // Check if the search query matches the text or mobileText
       const textMatch = link.text?.toLowerCase().includes(lowerQuery);
       const mobileTextMatch = link.mobileText?.toLowerCase().includes(lowerQuery);
       
@@ -247,7 +419,6 @@ const SearchInput = () => {
     const CategoryIcon = categoryInfo?.icon || Search || HelpCircle;
     const data = item.data || item;
 
-    // Handle administration page items
     if (model === "administration") {
       return {
         icon: item.icon || CategoryIcon,
@@ -422,6 +593,38 @@ const SearchInput = () => {
           category: "المدفوعات",
         };
 
+      case "suppliers":
+        return {
+          icon: CategoryIcon,
+          color: categoryInfo?.color || "text-gray-500",
+          bgColor: categoryInfo?.bgColor || "bg-gray-500/10",
+          title: data.name || "مورد بدون اسم",
+          subtitle: data.category?.name || data.phone || "",
+          details: [
+            data.phone && `📞 ${data.phone}`,
+            data.address && `📍 ${data.address}`,
+            data.category?.name && `🏷️ ${data.category.name}`,
+          ].filter(Boolean),
+          to: `/dashboard/accounting?tab=suppliers`,
+          badge: data.is_active === false ? "غير نشط" : "مورد",
+          badgeColor: "bg-teal-500/20 text-teal-600 dark:text-teal-400",
+          category: "الموردين",
+        };
+
+      case "materials":
+        return {
+          icon: CategoryIcon,
+          color: categoryInfo?.color || "text-gray-500",
+          bgColor: categoryInfo?.bgColor || "bg-gray-500/10",
+          title: data.name || "مادة بدون اسم",
+          subtitle: data.unit || "",
+          details: [data.unit && `الوحدة: ${data.unit}`].filter(Boolean),
+          to: `/dashboard/accounting?tab=materials`,
+          badge: data.is_active === false ? "غير نشطة" : "مادة",
+          badgeColor: "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+          category: "المواد",
+        };
+
       default:
         return {
           icon: CategoryIcon,
@@ -487,7 +690,6 @@ const SearchInput = () => {
   const handleSearch = useCallback(
     async (targetPage = page) => {
       if (!query.trim() && !startDate && !endDate) {
-        // Still search administration pages even without API query
         const adminResults = searchAdministrationPages(query);
         if (adminResults.length > 0) {
           setResults(adminResults);
@@ -503,12 +705,11 @@ const SearchInput = () => {
       try {
         const models =
           selectedCategory === "all"
-            ? ["templates", "roadsigns", "customers", "employees", "bookings", "payments"]
-            : selectedCategory === "administration" 
-              ? [] // Don't call API for administration category
+            ? ["templates", "roadsigns", "customers", "employees", "bookings", "payments", "suppliers", "materials"]
+            : selectedCategory === "administration"
+              ? []
               : [selectedCategory];
 
-        // If category is administration, only search local admin pages
         if (selectedCategory === "administration") {
           const adminResults = searchAdministrationPages(query);
           setResults(adminResults);
@@ -517,7 +718,6 @@ const SearchInput = () => {
           return;
         }
 
-        // Build search params for API call
         const searchParams = {
           model: models,
           query: query.trim() || "",
@@ -525,7 +725,6 @@ const SearchInput = () => {
           per_page: 15,
         };
 
-        // Add date filters
         if (startDate) {
           searchParams.start_date = startDate;
         }
@@ -533,7 +732,6 @@ const SearchInput = () => {
           searchParams.end_date = endDate;
         }
 
-        // Add road signs filters (only if roadsigns category is selected)
         if (selectedCategory === "roadsigns" || selectedCategory === "all") {
           if (customerFilter && customerFilter !== "all") {
             searchParams.customer_id = customerFilter;
@@ -569,7 +767,6 @@ const SearchInput = () => {
           }
         }
 
-        // Also search administration pages and merge results
         const adminResults = searchAdministrationPages(query);
         allResults = [...allResults, ...adminResults];
 
@@ -588,7 +785,6 @@ const SearchInput = () => {
         }
       } catch (error) {
         console.error("Search API Error:", error);
-        // If API fails, still search administration pages
         const adminResults = searchAdministrationPages(query);
         setResults(adminResults);
         setHasMore(false);
@@ -599,7 +795,6 @@ const SearchInput = () => {
     [query, selectedCategory, page, startDate, endDate, triggerSearch, customerFilter, bookingTypeFilter, periodFilter, productTypeFilter, printingTypeFilter]
   );
 
-  // Update the auto-search useEffect
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query.trim().length >= 2 || startDate || endDate) {
@@ -613,6 +808,75 @@ const SearchInput = () => {
 
     return () => clearTimeout(timer);
   }, [query, selectedCategory, startDate, endDate, customerFilter, bookingTypeFilter, periodFilter, productTypeFilter, printingTypeFilter, handleSearch]);
+
+  // Calculate advertising/printing/total/discounted prices whenever the
+  // inputs that affect the price change.
+  const calculateBookingAmount = useCallback(async () => {
+    if (selectedRoadSigns.length === 0 || !startDate || !endDate) {
+      setAdvertisingPrice(0);
+      setPrintingPrice(0);
+      setTotalPrice(0);
+      setTotalPriceBeforeDiscount(0);
+      setDiscountedAdvertisingPrice(0);
+      setPriceDetails([]);
+      return;
+    }
+
+    setIsCalculatingAmount(true);
+    try {
+      const roadsignsPayload = selectedRoadSigns.map((item) => ({
+        road_sign_id: item.data?.id || item.id,
+        booking_faces: 1,
+        number_of_reserved_panels: 1,
+        start_date: startDate,
+        end_date: endDate,
+      }));
+
+      const payload = {
+        product_type: parseInt(productTypeFilter) || 1,
+        printing_id: parseInt(printingTypeFilter) || 1,
+        start_date: startDate,
+        end_date: endDate,
+        is_extend: false,
+        roadsigns: roadsignsPayload,
+      };
+
+      if (discountType) {
+        payload.discount_type = parseInt(discountType);
+      }
+      if (discountValue !== "" && discountValue !== null) {
+        payload.value = parseFloat(discountValue);
+      }
+
+      const response = await fetchCalculatedAmount(payload);
+      // The real payload is nested under `amount`, not top-level
+      const amount = response?.amount ?? {};
+
+      setAdvertisingPrice(amount.total_advertising_price ?? 0);
+      setPrintingPrice(amount.total_printing_price ?? 0);
+      setTotalPrice(amount.total_price ?? 0);
+      setTotalPriceBeforeDiscount(
+        amount.total_price_befor_discount ?? amount.total_price ?? 0
+      );
+      setDiscountedAdvertisingPrice(
+        amount.discounted_advertising_price ?? amount.total_advertising_price ?? 0
+      );
+      setPriceDetails(Array.isArray(amount.details) ? amount.details : []);
+    } catch (error) {
+      console.error("Calculate amount error:", error);
+      toast.error("تعذّر حساب سعر الحجز");
+    } finally {
+      setIsCalculatingAmount(false);
+    }
+  }, [selectedRoadSigns, startDate, endDate, productTypeFilter, printingTypeFilter, discountType, discountValue]);
+
+  // Debounced recalculation (mirrors the pattern of the existing search debounce)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      calculateBookingAmount();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [calculateBookingAmount]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -649,6 +913,8 @@ const SearchInput = () => {
       setPrintingTypeFilter("all");
       setCustomerPage(1);
       setCustomerSearch("");
+      setDiscountType("");
+      setDiscountValue("");
     }
   };
 
@@ -668,7 +934,6 @@ const SearchInput = () => {
   };
 
   const handleCreateBooking = async () => {
-    // Validate required fields
     if (!startDate || !endDate) {
       toast.error("يرجى تحديد تاريخ البداية والنهاية");
       return;
@@ -706,13 +971,13 @@ const SearchInput = () => {
         product_type: parseInt(productTypeFilter) || 1,
         printing_id: parseInt(printingTypeFilter) || 1,
         roadsigns: roadsigns,
-        advertising_price: 0,
-        printing_price: 0,
-        total_price: 0,
-        discounted_advertising_price: 0,
+        advertising_price: advertisingPrice,
+        printing_price: printingPrice,
+        total_price: totalPrice,
+        discounted_advertising_price: discountedAdvertisingPrice,
         notes: null,
-        discount_type: null,
-        value: null,
+        discount_type: discountType ? parseInt(discountType) : null,
+        value: discountValue !== "" && discountValue !== null ? parseFloat(discountValue) : null,
       };
 
       console.log("Booking Data:", bookingData);
@@ -721,10 +986,16 @@ const SearchInput = () => {
       
       toast.success(`تم إنشاء الحجز بنجاح لـ ${selectedRoadSigns.length} لوحة/لوحات!`);
       
-      // Clear selected road signs
       setSelectedRoadSigns([]);
+      setDiscountType("");
+      setDiscountValue("");
+      setAdvertisingPrice(0);
+      setPrintingPrice(0);
+      setTotalPrice(0);
+      setTotalPriceBeforeDiscount(0);
+      setDiscountedAdvertisingPrice(0);
+      setPriceDetails([]);
       
-      // Navigate to booking details
       setTimeout(() => {
         window.location.href = `/dashboard/bookings/${response.data?.id || ''}`;
       }, 1500);
@@ -745,6 +1016,8 @@ const SearchInput = () => {
     setPrintingTypeFilter("all");
     setCustomerPage(1);
     setCustomerSearch("");
+    setDiscountType("");
+    setDiscountValue("");
   };
 
   const filteredResults =
@@ -1134,7 +1407,60 @@ const SearchInput = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <label className={cn("block text-sm font-medium mb-2", isDark ? "text-gray-300" : "text-gray-700")}>
+                  <Tag className="h-3.5 w-3.5 inline ml-1 text-primary" />
+                  نوع الخصم
+                </label>
+                <Select
+                  onValueChange={(value) => setDiscountType(value === "none" ? "" : value)}
+                  value={discountType || "none"}
+                >
+                  <SelectTrigger className="w-full text-right">
+                    <SelectValue placeholder="بدون خصم" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون خصم</SelectItem>
+                    {discountTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className={cn("block text-sm font-medium mb-2", isDark ? "text-gray-300" : "text-gray-700")}>
+                  <Percent className="h-3.5 w-3.5 inline ml-1 text-primary" />
+                  قيمة الخصم
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  disabled={!discountType}
+                  className="w-full text-right"
+                />
+              </div>
             </div>
+
+            {selectedRoadSigns.length > 0 && startDate && endDate && (
+              <PriceSummary
+                isDark={isDark}
+                isCalculating={isCalculatingAmount}
+                advertisingPrice={advertisingPrice}
+                printingPrice={printingPrice}
+                totalPrice={totalPrice}
+                totalPriceBeforeDiscount={totalPriceBeforeDiscount}
+                discountType={discountType}
+                discountedAdvertisingPrice={discountedAdvertisingPrice}
+                priceDetails={priceDetails}
+              />
+            )}
           </div>
         )}
 
@@ -1185,7 +1511,6 @@ const SearchInput = () => {
                     (sign) => (sign.data?.id || sign.id) === itemId
                   );
 
-                  // Handle administration page items
                   if (item.type === "administration") {
                     return (
                       <a
@@ -1274,7 +1599,6 @@ const SearchInput = () => {
                     );
                   }
 
-                  // Handle road signs items
                   if (item.type === "roadsigns") {
                     return (
                       <motion.div
@@ -1390,6 +1714,33 @@ const SearchInput = () => {
                                   {meta.category}
                                 </span>
                               </div>
+
+                              {/* تفاصيل الحجز: من تاريخ الى تاريخ ومن هو الزبون
+                                  (الشركة) صاحب الحجز - تُعرض سواء أُخذت
+                                  الفترة الافتراضية (اليوم -> +15 يوم) أو
+                                  حدَّد المستخدم تاريخًا مخصصًا. */}
+                              {meta.isBooked === true && Array.isArray(item.reservations) && item.reservations.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {item.reservations.map((res, resIdx) => (
+                                    <div
+                                      key={res.booking_id ?? resIdx}
+                                      className={cn(
+                                        "text-[11px] rounded-md px-2 py-1",
+                                        isDark ? "bg-rose-950/30 text-rose-300" : "bg-rose-50 text-rose-700"
+                                      )}
+                                    >
+                                      <span className="font-medium">
+                                        {res.customer_name || "زبون غير معروف"}
+                                      </span>
+                                      {res.start_date && res.end_date && (
+                                        <span className="mx-1">
+                                          — من {res.start_date} إلى {res.end_date}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1403,7 +1754,6 @@ const SearchInput = () => {
                     );
                   }
 
-                  // Handle all other items (customers, templates, bookings, etc.)
                   const isBooking = meta.isBooking === true;
                   const isTemplate = item.type === "templates";
 
@@ -1500,14 +1850,12 @@ const SearchInput = () => {
                         </div>
                       </a>
                       
-                      {/* Show Booking Actions for booking items */}
                       {isBooking && meta.bookingId && (
                         <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60 flex justify-end">
                           <BookingActions bookingId={meta.bookingId} />
                         </div>
                       )}
 
-                      {/* Show Template Actions for template items */}
                       {isTemplate && (
                         <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60 flex justify-end">
                           <Button

@@ -8,7 +8,7 @@ export const RoadSignsSlice = createApi({
   tagTypes: ["RoadSigns"],
   endpoints: (builder) => ({
     getRoadSigns: builder.query({
-      query: ({ start_date, end_date, city_id, region_id, direction, model, customer_id , is_ai ,template_id,template_size  } = {}) => {
+      query: ({ start_date, end_date, city_id, region_id, direction, model, customer_id , is_ai ,template_id,template_size, only_available  } = {}) => {
         const params = new URLSearchParams();
         if (start_date) params.append("start_date", start_date);
         if (end_date) params.append("end_date", end_date);
@@ -20,6 +20,11 @@ export const RoadSignsSlice = createApi({
         if (is_ai !== undefined) params.append("is_ai", is_ai);
         if (template_id) params.append("template_id", template_id);
         if (template_size) params.append("template_size", template_size);
+        // افتراضيًا true على الباك-إند (لا تغيير على أي استدعاء قديم لا
+        // يمرّر هذا الخيار) - false فقط من حوار تبديل اللوحات كي تظهر
+        // اللوحات المحجوزة أيضًا بدل استبعادها بالكامل. راجع
+        // RoadSignService::getAll() للتفصيل الكامل.
+        if (only_available !== undefined) params.append("only_available", only_available ? 1 : 0);
 
         const queryString = params.toString();
         return `/road-signs${queryString ? `?${queryString}` : ""}`;

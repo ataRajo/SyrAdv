@@ -80,6 +80,9 @@ export const accountingApi = createApi({
     "PurchaseInvoice",
     "BrokerCommission",
     "Material",
+    "EmployeeAdvance",
+    "SupplierAdvance",
+    "SupplierStatement",
   ],
   endpoints: (builder) => ({
     // ---------------------------------------------------------------
@@ -93,9 +96,6 @@ export const accountingApi = createApi({
     getAccountsTree: builder.query({
       query: () => ({ url: "/accounting/accounts", params: { tree: 1 } }),
       transformResponse: (response) => {
-        console.log("Accounts Tree API Response:", response); // Debug log - remove once shape is confirmed
-        // Handle every shape we've seen this API return elsewhere:
-        // { data: [...] }, { data: { data: [...] } }, { status: true, data: [...] }, or a raw array.
         if (Array.isArray(response)) return response;
         if (Array.isArray(response?.data)) return response.data;
         if (Array.isArray(response?.data?.data)) return response.data.data;
@@ -127,8 +127,6 @@ export const accountingApi = createApi({
       query: (id) => ({ url: `/accounting/accounts/${id}`, method: "DELETE" }),
       invalidatesTags: ["Account"],
     }),
-
-    // GET /accounting/accounts/{id}/statement (generic - any account)
     getAccountStatement: builder.query({
       query: ({ id, ...params }) => ({
         url: `/accounting/accounts/${id}/statement`,
@@ -143,13 +141,11 @@ export const accountingApi = createApi({
     // ---------------------------------------------------------------
     // Transactions  (GET/POST /accounting/transactions)
     // ---------------------------------------------------------------
-
-getTransactions: builder.query({
-  query: (params = {}) => ({ url: "/accounting/transactions", params }),
-  transformResponse: parsePaginatedResponse,
-  providesTags: ["Transaction"],
-}),
-
+    getTransactions: builder.query({
+      query: (params = {}) => ({ url: "/accounting/transactions", params }),
+      transformResponse: parsePaginatedResponse,
+      providesTags: ["Transaction"],
+    }),
     getTransaction: builder.query({
       query: (id) => `/accounting/transactions/${id}`,
       transformResponse: (response) => response?.data,
@@ -289,12 +285,12 @@ getTransactions: builder.query({
     }),
     payEmployeeSalary: builder.mutation({
       query: (body) => ({ url: "/accounting/payroll/pay", method: "POST", body }),
-      invalidatesTags: ["Transaction", "Account", "CompanyStatement", "TrialBalance"],
+      invalidatesTags: ["Transaction", "Account", "CompanyStatement", "TrialBalance", "PayrollEmployee", "EmployeeAdvance"],
     }),
-getPayrollHistory: builder.query({
-  query: (params = {}) => ({ url: "/accounting/payroll/history", params }),
-  transformResponse: parsePaginatedResponse,
-}),
+    getPayrollHistory: builder.query({
+      query: (params = {}) => ({ url: "/accounting/payroll/history", params }),
+      transformResponse: parsePaginatedResponse,
+    }),
 
     // ---------------------------------------------------------------
     // Financial statements (قائمة الدخل، الميزانية العمومية)
@@ -342,6 +338,20 @@ getPayrollHistory: builder.query({
       query: (body) => ({ url: "/accounting/suppliers", method: "POST", body }),
       invalidatesTags: ["Supplier", "Account"],
     }),
+    // طلب صريح: "إضافة خيار حذف المورد" - مسموح فقط إن لم يكن للمورد فواتير
+    // شراء أو سلف مسجَّلة (راجع SupplierController::destroy على الباك-إند).
+    deleteSupplier: builder.mutation({
+      query: (id) => ({ url: `/accounting/suppliers/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Supplier", "Account"],
+    }),
+    getSupplierStatement: builder.query({
+      query: ({ supplierId, ...params }) => ({
+        url: `/accounting/suppliers/${supplierId}/statement`,
+        params,
+      }),
+      transformResponse: (response) => response?.data ?? response,
+      providesTags: (result, error, { supplierId }) => [{ type: "SupplierStatement", id: supplierId }],
+    }),
 
     // ---------------------------------------------------------------
     // Purchase invoices (فواتير الشراء) - كل فاتورة تُصدر سند دفع فورًا
@@ -350,6 +360,11 @@ getPayrollHistory: builder.query({
       query: (params = {}) => ({ url: "/accounting/purchase-invoices", params }),
       transformResponse: parsePaginatedResponse,
       providesTags: ["PurchaseInvoice"],
+    }),
+    getPurchaseInvoice: builder.query({
+      query: (id) => `/accounting/purchase-invoices/${id}`,
+      transformResponse: (response) => response?.data ?? null,
+      providesTags: (result, error, id) => [{ type: "PurchaseInvoice", id }],
     }),
     addPurchaseInvoice: builder.mutation({
       query: (body) => ({
@@ -385,7 +400,24 @@ getPayrollHistory: builder.query({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["PurchaseInvoice", "Account", "Transaction", "TrialBalance"],
+      invalidatesTags: ["PurchaseInvoice", "Supplier", "Account", "Transaction", "TrialBalance"],
+    }),
+    // إرفاق/إزالة صورة الفاتورة الخارجية (طلب صريح: أرشفة موثَّقة بالصورة
+    // للفواتير القادمة من خارج النظام) - راجع PurchaseInvoiceController.
+    uploadPurchaseInvoiceImage: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/accounting/purchase-invoices/${id}/image`,
+        method: "POST",
+        body, // FormData يحمل حقل "image"
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: "PurchaseInvoice", id }, "PurchaseInvoice"],
+    }),
+    removePurchaseInvoiceImage: builder.mutation({
+      query: (id) => ({
+        url: `/accounting/purchase-invoices/${id}/image`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: "PurchaseInvoice", id }, "PurchaseInvoice"],
     }),
 
     // ---------------------------------------------------------------
@@ -399,6 +431,25 @@ getPayrollHistory: builder.query({
     addMaterial: builder.mutation({
       query: (body) => ({ url: "/accounting/materials", method: "POST", body }),
       invalidatesTags: ["Material"],
+    }),
+
+    // ---------------------------------------------------------------
+    // تبويبة "المواد" المستقلة (طلب العميل: تسهيل البحث عن مادة وكميتها
+    // بدل تصفّح كل فاتورة شراء على حدة) - نفس فهرس المواد أعلاه، لكن مع
+    // إجماليات الشراء (الكمية/المبلغ/عدد الفواتير) لكل مادة.
+    // ---------------------------------------------------------------
+    getMaterialsWithStats: builder.query({
+      query: (params = {}) => ({
+        url: "/accounting/materials",
+        params: { ...params, with_stats: 1 },
+      }),
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["Material"],
+    }),
+    getMaterialPurchases: builder.query({
+      query: (params = {}) => ({ url: "/accounting/material-purchases", params }),
+      transformResponse: parsePaginatedResponse,
+      providesTags: ["Material"],
     }),
 
     // ---------------------------------------------------------------
@@ -424,6 +475,76 @@ getPayrollHistory: builder.query({
       }),
       transformResponse: parsePaginatedResponse,
       providesTags: ["BrokerCommission"],
+    }),
+
+    // ---------------------------------------------------------------
+    // سلف الموظفين والموردين (Employee & Supplier Advances)
+    // ---------------------------------------------------------------
+    giveEmployeeAdvance: builder.mutation({
+      query: ({ userId, ...body }) => ({
+        url: `/accounting/employees/${userId}/advances`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["EmployeeAdvance"],
+    }),
+    settleEmployeeAdvance: builder.mutation({
+      query: ({ userId, ...body }) => ({
+        url: `/accounting/employees/${userId}/advances/settle`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["EmployeeAdvance", "Transaction", "Account", "CompanyStatement", "TrialBalance"],
+    }),
+    getEmployeeAdvanceBalance: builder.query({
+      query: (userId) => `/accounting/employees/${userId}/advances/balance`,
+      transformResponse: (response) => response?.data ?? response,
+      providesTags: (result, error, userId) => [{ type: "EmployeeAdvance", id: userId }],
+    }),
+    getEmployeeAdvancesHistory: builder.query({
+      query: (params = {}) => ({
+        url: "/accounting/employee-advances/history",
+        params,
+      }),
+      transformResponse: parsePaginatedResponse,
+      providesTags: ["EmployeeAdvance"],
+    }),
+    getEmployeeStatement: builder.query({
+      query: ({ userId, ...params }) => ({
+        url: `/accounting/employees/${userId}/statement`,
+        params,
+      }),
+      transformResponse: (response) => response?.data ?? response,
+      providesTags: (result, error, { userId }) => [{ type: "EmployeeAdvance", id: `statement-${userId}` }],
+    }),
+    giveSupplierAdvance: builder.mutation({
+      query: ({ supplierId, ...body }) => ({
+        url: `/accounting/suppliers/${supplierId}/advances`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["SupplierAdvance", "Supplier"],
+    }),
+    settleSupplierAdvance: builder.mutation({
+      query: ({ supplierId, ...body }) => ({
+        url: `/accounting/suppliers/${supplierId}/advances/settle`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["SupplierAdvance", "Supplier", "Transaction", "Account", "CompanyStatement", "TrialBalance"],
+    }),
+    getSupplierAdvanceBalance: builder.query({
+      query: (supplierId) => `/accounting/suppliers/${supplierId}/advances/balance`,
+      transformResponse: (response) => response?.data ?? response,
+      providesTags: (result, error, supplierId) => [{ type: "SupplierAdvance", id: supplierId }],
+    }),
+    getSupplierAdvancesHistory: builder.query({
+      query: (params = {}) => ({
+        url: "/accounting/supplier-advances/history",
+        params,
+      }),
+      transformResponse: parsePaginatedResponse,
+      providesTags: ["SupplierAdvance"],
     }),
   }),
 });
@@ -464,15 +585,34 @@ export const {
   useAddSupplierCategoryMutation,
   useGetSuppliersQuery,
   useAddSupplierMutation,
+  useDeleteSupplierMutation,
+  useGetSupplierStatementQuery,
+  useLazyGetSupplierStatementQuery,
   useGetPurchaseInvoicesQuery,
+  useGetPurchaseInvoiceQuery,
   useAddPurchaseInvoiceMutation,
   useArchivePurchaseInvoiceMutation,
   useUnarchivePurchaseInvoiceMutation,
   usePayPurchaseInvoiceMutation,
+  useUploadPurchaseInvoiceImageMutation,
+  useRemovePurchaseInvoiceImageMutation,
   useGetMaterialsQuery,
   useLazyGetMaterialsQuery,
   useAddMaterialMutation,
+  useGetMaterialsWithStatsQuery,
+  useGetMaterialPurchasesQuery,
   usePayBrokerCommissionMutation,
   useGetBrokerCommissionHistoryQuery,
   useLazyGetBrokerCommissionHistoryQuery,
+  useGiveEmployeeAdvanceMutation,
+  useSettleEmployeeAdvanceMutation,
+  useLazyGetEmployeeAdvanceBalanceQuery,
+  useGetEmployeeAdvancesHistoryQuery,
+  useLazyGetEmployeeAdvancesHistoryQuery,
+  useLazyGetEmployeeStatementQuery,
+  useGiveSupplierAdvanceMutation,
+  useSettleSupplierAdvanceMutation,
+  useLazyGetSupplierAdvanceBalanceQuery,
+  useGetSupplierAdvancesHistoryQuery,
+  useLazyGetSupplierAdvancesHistoryQuery,
 } = accountingApi;

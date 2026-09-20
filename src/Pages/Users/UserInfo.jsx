@@ -13,6 +13,8 @@ import DetailCard from "../../utils/DetailCard";
 import SkeletonLoader from "../../utils/SkeletonLoader";
 import useUsers from "../../hooks/useUsers";
 import { useGetActivitiesQuery } from '../../RtkQuery/Slice/Users/UsersApi';
+import { useLazyGetEmployeeStatementQuery } from '../../RtkQuery/Slice/Accounting/AccountingApi';
+import EmployeeStatementDialog from '../../Components/Accounting/EmployeeStatementDialog';
 
 const UserInfo = () => {
   const {
@@ -105,6 +107,35 @@ const UserInfo = () => {
     }
   };
 
+  // كشف حساب الموظف (المطلب الخامس: عرضه داخل صفحة معلومات الموظف) -
+  // نفس مكوّن EmployeeStatementDialog المستخدَم أصلًا في PayrollTab،
+  // ونفس نقطة GET /accounting/employees/{id}/statement، لكن بحالة محلية
+  // خفيفة هنا بدل الاعتماد على useAccounting() الثقيل بكل تبويباته.
+  const [statementEmployeeId, setStatementEmployeeId] = React.useState(null);
+  const [fetchEmployeeStatement, { data: employeeStatement, isFetching: isFetchingEmployeeStatement }] =
+    useLazyGetEmployeeStatementQuery();
+
+  const openEmployeeStatement = () => {
+    if (!user?.id) return;
+    setStatementEmployeeId(user.id);
+    fetchEmployeeStatement({ userId: user.id });
+  };
+
+  const closeEmployeeStatement = () => setStatementEmployeeId(null);
+
+  const loadEmployeeStatement = (filters = {}) => {
+    if (!statementEmployeeId) return;
+    fetchEmployeeStatement({ userId: statementEmployeeId, ...filters });
+  };
+
+  const employeeStatementAccounting = {
+    statementEmployeeId,
+    closeEmployeeStatement,
+    employeeStatement,
+    isFetchingEmployeeStatement,
+    loadEmployeeStatement,
+  };
+
   React.useEffect(() => {
     if (activitiesData && openActivities) {
       console.log('Original data:', activitiesData);
@@ -170,6 +201,18 @@ const UserInfo = () => {
               </>
             )}
           </Button>
+
+          {hasPermission(Permissions.ViewFinancials) && (
+            <Button
+              onClick={openEmployeeStatement}
+              variant="outline"
+              className="gap-2 cursor-pointer"
+              disabled={!user?.id}
+            >
+              <Icon icon="mdi:file-document-outline" className="text-lg" />
+              كشف الحساب
+            </Button>
+          )}
         </div>
       </div>
 
@@ -288,9 +331,11 @@ const UserInfo = () => {
   handleClose={() => setOpenActivities(false)}
   data={decodeActivityText(activitiesData) || []} // ✅ FIXed
   arrayKey="activities" // Tell DialogShow to use activities mode
-  arrayFields={ActivityFieldsShow} 
+  arrayFields={ActivityFieldsShow}
   loading={isFetchingActivities}
 />
+
+<EmployeeStatementDialog accounting={employeeStatementAccounting} />
     </div>
   );
 };
