@@ -56,6 +56,8 @@ export const DialogEditUser = ({ show, handleClose, initData }) => {
     // تُترك فارغة (لا 0) حتى لا يُفسَّر "بلا راتب" كـ"راتب صفري" عند
     // الحفظ (UserService::update يتجاهل salary=0 عن قصد).
     salary: initData?.current_salary?.amount ?? "",
+    // نوع الراتب الحالي (شهري/أسبوعي/يومي) - الافتراضي شهري.
+    salary_type: initData?.current_salary?.salary_type ?? "monthly",
   };
 
   const onSubmitTransform = (values) => ({

@@ -115,15 +115,15 @@ const WhatsappBulkMessagesPage = () => {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-8">
-      <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+      <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
         <Icon icon="mdi:whatsapp" className="text-green-600" width={28} />
         رسائل واتساب الجماعية
       </h1>
 
-      <div className="border rounded-lg p-4 space-y-4 bg-white shadow-sm">
+      <div className="border border-border rounded-lg p-4 space-y-4 bg-card text-card-foreground shadow-sm">
         {/* نوع الحملة */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">نوع الرسالة</label>
+          <label className="block text-sm font-medium text-foreground mb-1">نوع الرسالة</label>
           <div className="flex gap-2 flex-wrap">
             {Object.entries(TYPE_LABELS).map(([value, label]) => (
               <button
@@ -136,7 +136,7 @@ const WhatsappBulkMessagesPage = () => {
                 className={`px-4 py-2 rounded-md text-sm border ${
                   type === value
                     ? "bg-green-600 text-white border-green-600"
-                    : "bg-white text-gray-700 border-gray-300"
+                    : "bg-background text-foreground border-border"
                 }`}
               >
                 {label}
@@ -147,20 +147,20 @@ const WhatsappBulkMessagesPage = () => {
 
         {type === "occasion" && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">اسم المناسبة</label>
+            <label className="block text-sm font-medium text-foreground mb-1">اسم المناسبة</label>
             <input
               type="text"
               value={occasionLabel}
               onChange={(e) => setOccasionLabel(e.target.value)}
               placeholder="مثال: عيد الفطر"
-              className="w-full border rounded-md p-2 text-sm"
+              className="w-full border border-border rounded-md p-2 text-sm bg-background text-foreground"
             />
           </div>
         )}
 
         {/* الفئة المستهدفة */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">الفئة المستهدفة</label>
+          <label className="block text-sm font-medium text-foreground mb-1">الفئة المستهدفة</label>
           <div className="flex gap-2 flex-wrap items-center">
             <button
               type="button"
@@ -168,7 +168,7 @@ const WhatsappBulkMessagesPage = () => {
               className={`px-4 py-2 rounded-md text-sm border ${
                 segment === "all"
                   ? "bg-green-600 text-white border-green-600"
-                  : "bg-white text-gray-700 border-gray-300"
+                  : "bg-background text-foreground border-border"
               }`}
             >
               كل العملاء
@@ -179,7 +179,7 @@ const WhatsappBulkMessagesPage = () => {
               className={`px-4 py-2 rounded-md text-sm border ${
                 segment === "work_type"
                   ? "bg-green-600 text-white border-green-600"
-                  : "bg-white text-gray-700 border-gray-300"
+                  : "bg-background text-foreground border-border"
               }`}
             >
               حسب نوع العمل
@@ -189,7 +189,7 @@ const WhatsappBulkMessagesPage = () => {
               <select
                 value={workTypeId}
                 onChange={(e) => setWorkTypeId(e.target.value)}
-                className="border rounded-md p-2 text-sm"
+                className="border border-border rounded-md p-2 text-sm bg-background text-foreground"
               >
                 <option value="">اختر نوع العمل...</option>
                 {workTypes.map((wt) => (
@@ -201,7 +201,7 @@ const WhatsappBulkMessagesPage = () => {
             )}
           </div>
 
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-muted-foreground mt-2">
             {isPreviewLoading ? (
               "جارِ حساب عدد المستلمين..."
             ) : recipientsCount !== null ? (
@@ -216,7 +216,7 @@ const WhatsappBulkMessagesPage = () => {
 
         {/* نص الرسالة */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">نص الرسالة</label>
+          <label className="block text-sm font-medium text-foreground mb-1">نص الرسالة</label>
           <textarea
             value={message}
             onChange={(e) => {
@@ -225,10 +225,10 @@ const WhatsappBulkMessagesPage = () => {
             }}
             rows={5}
             dir="rtl"
-            className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full border border-border rounded-md p-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="نص الرسالة..."
           />
-          <p className="text-xs text-gray-400 mt-1">يمكن استخدام {"{customer_name}"} داخل النص.</p>
+          <p className="text-xs text-muted-foreground mt-1">يمكن استخدام {"{customer_name}"} داخل النص.</p>
         </div>
 
         <div className="flex justify-end">
@@ -246,19 +246,19 @@ const WhatsappBulkMessagesPage = () => {
       {/* سجل الحملات السابقة */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800">سجل الحملات السابقة</h2>
+          <h2 className="text-lg font-semibold text-foreground">سجل الحملات السابقة</h2>
           <button
             onClick={() => refetchCampaigns()}
-            className="text-sm text-gray-500 flex items-center gap-1 hover:text-gray-700"
+            className="text-sm text-muted-foreground flex items-center gap-1 hover:text-foreground"
           >
             <Icon icon="mdi:refresh" className={isCampaignsLoading ? "animate-spin" : ""} width={18} />
             تحديث
           </button>
         </div>
 
-        <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
+        <div className="overflow-x-auto border border-border rounded-lg bg-card text-card-foreground shadow-sm">
           <table className="w-full text-sm text-right">
-            <thead className="bg-gray-50 text-gray-600">
+            <thead className="bg-muted text-muted-foreground">
               <tr>
                 <th className="p-3">النوع</th>
                 <th className="p-3">الفئة</th>
@@ -272,13 +272,13 @@ const WhatsappBulkMessagesPage = () => {
             <tbody>
               {campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-4 text-center text-gray-400">
+                  <td colSpan={7} className="p-4 text-center text-muted-foreground">
                     لا توجد حملات سابقة
                   </td>
                 </tr>
               ) : (
                 campaigns.map((c) => (
-                  <tr key={c.id} className="border-t">
+                  <tr key={c.id} className="border-t border-border">
                     <td className="p-3">
                       {TYPE_LABELS[c.type] || c.type}
                       {c.occasion_label ? ` - ${c.occasion_label}` : ""}
@@ -290,7 +290,7 @@ const WhatsappBulkMessagesPage = () => {
                     <td className="p-3 text-green-600">{c.sent_count}</td>
                     <td className="p-3 text-red-500">{c.failed_count}</td>
                     <td className="p-3">{STATUS_LABELS[c.status] || c.status}</td>
-                    <td className="p-3 text-gray-500">
+                    <td className="p-3 text-muted-foreground">
                       {c.created_at ? new Date(c.created_at).toLocaleString("ar-EG") : "-"}
                     </td>
                   </tr>

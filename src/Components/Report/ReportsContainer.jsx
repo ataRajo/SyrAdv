@@ -7,6 +7,7 @@ import { ReportPdf } from "./ReportPdf";
 import { productTypeOptions } from "../../Static/StaticData";
 import { Label } from "@/components/ui/label";
 import useReports from "../../hooks/useReports";
+import CustomerSearchSelect from "../Common/CustomerSearchSelect";
 import { Button } from "@/components/ui/button";
 
 const ReportsContainer = () => {
@@ -644,49 +645,15 @@ const handleExportWord = () => {
           >
             الزبون
           </Label>
-          <select
+          <CustomerSearchSelect
             id="customer"
-            value={selectedCustomerId}
+            value={selectedCustomerId || ""}
             onChange={handleCustomerChange}
-            disabled={isCustomersLoading || customersError}
-            className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg 
-                     bg-white dark:bg-gray-800 
-                     text-gray-900 dark:text-gray-100
-                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                     disabled:bg-gray-100 dark:disabled:bg-gray-700 
-                     disabled:text-gray-500 dark:disabled:text-gray-400
-                     disabled:cursor-not-allowed
-                     transition-colors duration-200"
-          >
-            <option value="" className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
-              جميع الزبائن
-            </option>
-            
-            {customersError ? (
-              <option value="" disabled className="text-red-500 bg-white dark:bg-gray-800">
-                خطأ في تحميل الزبائن
-              </option>
-            ) : isCustomersLoading ? (
-              <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
-                جاري تحميل الزبائن...
-              </option>
-            ) : customersData && customersData.length > 0 ? (
-              customersData.map((customer) => (
-                <option
-                  key={customer.id}
-                  value={customer.id}
-                  className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 
-                           hover:bg-blue-50 dark:hover:bg-gray-700"
-                >
-                  {customer.company_name || customer.full_name || customer.email || `زبون #${customer.id}`}
-                </option>
-              ))
-            ) : (
-              <option value="" disabled className="text-gray-500 bg-white dark:bg-gray-800">
-                لا يوجد زبائن
-              </option>
-            )}
-          </select>
+            selectedCustomer={customersData?.[0] || null}
+            allowAll
+            allValue=""
+            allLabel="جميع الزبائن"
+          />
           
           {customersError && (
             <div className="mt-2 flex items-center text-red-500 dark:text-red-400 text-sm">

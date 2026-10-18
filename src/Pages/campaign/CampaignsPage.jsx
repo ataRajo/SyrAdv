@@ -20,7 +20,7 @@ import {
 } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { CreateSimilarCampaign } from "../../components/Campaign/CreateSimilarCampaign";
 import axios from "axios";
-import { BASE_URL } from "../../Api/baseUrl";
+import { BASE_URL, getPublicMapUrl } from "../../Api/baseUrl";
 
 export default function CampaignsPage() {
   // Pagination state
@@ -203,7 +203,7 @@ useEffect(() => {
   };
 
   const handleOpenMap = (campaignId) => {
-    const mapLink = `https://tsyr.addresses.sy/public-map/${campaignId}`;
+    const mapLink = getPublicMapUrl(campaignId);
     window.open(mapLink, "_blank");
   };
 

@@ -2,13 +2,21 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Loader, FileText, Printer } from "lucide-react";
 import toast from "react-hot-toast";
-import { 
-  formatArabicDate, 
+import {
+  formatArabicDate,
   calculateTotalAdvertisingSpace,
   getAllTemplateNames,
-  getAllCustomers 
+  getAllCustomers
 } from './ReportUtils';
 import { detailsPDFStyles, weeklyPDFStyles } from './styles';
+import { getSacLogoBase64 } from '../../utils/branding/sacBrand';
+import {
+  sacLetterheadStyles,
+  sacLetterheadHeader,
+  sacLetterheadFooter,
+  sacLetterheadWatermark,
+  sacRestyleHeader,
+} from '../../utils/branding/pdfLetterheadHtml';
 
 const ExportSection = ({
   isWeeklyReport,
@@ -26,17 +34,19 @@ const ExportSection = ({
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isGeneratingWord, setIsGeneratingWord] = useState(false);
 
-  const handleExportDetailsPDF = () => {
+  const handleExportDetailsPDF = async () => {
     setIsGeneratingPDF(true);
-    
+
     const printWindow = window.open('', '_blank');
-    
+
     if (!printWindow) {
       alert('يرجى السماح بالنوافذ المنبثقة لهذا الموقع');
       setIsGeneratingPDF(false);
       return;
     }
-    
+
+    const logoBase64 = await getSacLogoBase64();
+
     const printData = currentData;
     const reportType = `تفاصيل اللوحات ${activeTab === "available" ? 'المتاحة' : 'المحجوزة'}`;
     const statusType = activeTab === "available" ? 'المتاحة' : 'المحجوزة';
@@ -78,9 +88,13 @@ const ExportSection = ({
         <style>
           ${detailsPDFStyles.mediaPrint}
           ${detailsPDFStyles.body.replace(/{activeTab === "available" \? '([^']+)' : '([^']+)'}/g, activeTab === "available" ? '$1' : '$2')}
+          ${sacLetterheadStyles()}
+          ${sacRestyleHeader('.report-header')}
         </style>
       </head>
       <body>
+        ${sacLetterheadWatermark()}
+        ${sacLetterheadHeader({ logoBase64 })}
         <div class="report-container">
           <!-- Report Header -->
           <div class="report-header">
@@ -183,7 +197,8 @@ const ExportSection = ({
             <p style="margin-top: 10px;">© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
           </div>
         </div>
-        
+        ${sacLetterheadFooter()}
+
         <script>
           window.onload = function() {
             setTimeout(() => {
@@ -197,7 +212,7 @@ const ExportSection = ({
       </body>
       </html>
     `;
-    
+
     printWindow.document.open();
     printWindow.document.write(printContent);
     printWindow.document.close();
@@ -210,17 +225,19 @@ const ExportSection = ({
 
 
 
-const handleExportWeeklyPDF = () => {
+const handleExportWeeklyPDF = async () => {
   setIsGeneratingPDF(true);
-  
+
   const printWindow = window.open('', '_blank');
-  
+
   if (!printWindow) {
     alert('يرجى السماح بالنوافذ المنبثقة لهذا الموقع');
     setIsGeneratingPDF(false);
     return;
   }
-  
+
+  const logoBase64 = await getSacLogoBase64();
+
   const printData = currentData;
   const reportType = 'تقرير الحجوزات الأسبوعي';
   
@@ -570,14 +587,19 @@ const handleExportWeeklyPDF = () => {
           border: 1px solid #b3d7ff;
           font-weight: bold;
         }
+
+        ${sacLetterheadStyles()}
+        ${sacRestyleHeader('.report-header')}
       </style>
     </head>
     <body>
+      ${sacLetterheadWatermark()}
+      ${sacLetterheadHeader({ logoBase64 })}
       <div class="report-container">
         <!-- Report Header -->
         <div class="report-header">
           <h1>${reportType}</h1>
-          
+
           <!-- Date Range Section -->
           <div class="date-range-section">
             ${startDate || endDate ? `
@@ -749,7 +771,8 @@ const handleExportWeeklyPDF = () => {
           © ${new Date().getFullYear()} جميع الحقوق محفوظة
         </div>
       </div>
-      
+      ${sacLetterheadFooter()}
+
       <script>
         window.onload = function() {
           document.querySelectorAll('.customer-section').forEach((section, index) => {
@@ -780,10 +803,11 @@ const handleExportWeeklyPDF = () => {
 };
 
 
-const handleExportWord = () => {
+const handleExportWord = async () => {
   setIsGeneratingWord(true);
-  
+
   try {
+    const logoBase64 = await getSacLogoBase64();
     const exportData = currentData;
     const reportType = 'تقرير الحجوزات الأسبوعي';
     
@@ -1299,9 +1323,14 @@ const handleExportWord = () => {
                 page-break-before: always;
             }
         }
+
+        ${sacLetterheadStyles({ mode: 'word' })}
+        ${sacRestyleHeader('.report-header')}
     </style>
 </head>
 <body>
+    ${sacLetterheadWatermark({ mode: 'word' })}
+    ${sacLetterheadHeader({ logoBase64 })}
     <div class="report-container">
         <!-- Report Header -->
         <div class="report-header">
@@ -1462,6 +1491,7 @@ const handleExportWord = () => {
             © ${new Date().getFullYear()} جميع الحقوق محفوظة
         </div>
     </div>
+    ${sacLetterheadFooter({ mode: 'word' })}
 </body>
 </html>`;
     

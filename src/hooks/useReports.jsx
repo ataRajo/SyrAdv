@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useGetRoadSignBookingByDateQuery, useGetRoadSignBookingByWeekQuery, useGetSoadSignDontHaveBookingQuery } from '../RtkQuery/Slice/Report/ReportApi';
 import { useGetRoadSignsModelQuery } from '../RtkQuery/Slice/RoadSings/RoadSingsApi';
 import { useGetActiveRegionsByCityMutation, useGetCitiesQuery } from '../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi';
-import { useGetCustomersQuery } from '../RtkQuery/Slice/Customers/CustomersApi';
 
 const useReports = () => {
   const getDefaultDates = () => {
@@ -34,30 +33,12 @@ const useReports = () => {
     setCustomerType(e.target.value);
   }, []);
 
-  const { 
-    data: customersData, 
-    isLoading: isCustomersLoading,
-    error: customersError 
-  } = useGetCustomersQuery();
-  
-  const getCustomersArray = () => {
-    if (!customersData) return [];
-    
-    if (Array.isArray(customersData)) {
-      return customersData;
-    } else if (Array.isArray(customersData.data)) {
-      return customersData.data;
-    } else if (Array.isArray(customersData.customers)) {
-      return customersData.customers;
-    } else if (Array.isArray(customersData.items)) {
-      return customersData.items;
-    } else if (customersData.data && Array.isArray(customersData.data.data)) {
-      return customersData.data.data;
-    }
-    
-    console.warn("Unknown customers data structure:", customersData);
-    return [];
-  };
+  // فلتر الزبون عبر CustomerSearchSelect (بحث من الخادم + تمرير لا نهائي) -
+  // كان يجلب الصفحة الأولى فقط (20 زبونًا) فلا يظهر باقي الزبائن إطلاقًا.
+  const [selectedCustomerObj, setSelectedCustomerObj] = useState(null);
+  const isCustomersLoading = false;
+  const customersError = null;
+  const getCustomersArray = () => (selectedCustomerObj ? [selectedCustomerObj] : []);
 
   const {
     data,
@@ -84,14 +65,6 @@ const useReports = () => {
     }
   }, [cityId, getActiveRegionsByCity]);
 
-  useEffect(() => {
-    if (customersData) {
-      console.log("Customers API Response:", customersData);
-    }
-    if (customersError) {
-      console.error("Customers API Error:", customersError);
-    }
-  }, [customersData, customersError]);
 
   // Fetch data for bookings this week WITH DATES
   const {
@@ -142,8 +115,11 @@ const useReports = () => {
     setModel(e.target.value);
   }, []);
 
-  const handleCustomerChange = useCallback((e) => {
-    setSelectedCustomerId(e.target.value);
+  // يقبل حدث select تقليدي أو (id, customer) من CustomerSearchSelect.
+  const handleCustomerChange = useCallback((eOrId, customer) => {
+    const id = eOrId && typeof eOrId === "object" && "target" in eOrId ? eOrId.target.value : eOrId;
+    setSelectedCustomerId(id || "");
+    setSelectedCustomerObj(customer || null);
   }, []);
 
   return {

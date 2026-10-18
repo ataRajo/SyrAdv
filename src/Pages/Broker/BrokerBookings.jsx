@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getPublicMapUrl } from "../../Api/baseUrl";
 import { useNavigate } from "react-router";
 import {
   Calendar,
@@ -55,7 +56,7 @@ const APPROVE_STATUS_MAP = {
 // ShareMapButton Component for the modal
 const ShareMapButton = ({ bookingId }) => {
   const handleOpenMap = () => {
-    const mapLink = `https://tsyr.addresses.sy/public-map/${bookingId}`;
+    const mapLink = getPublicMapUrl(bookingId);
     console.log("Opening map link:", mapLink);
     
     // Try multiple methods for mobile compatibility
@@ -70,7 +71,7 @@ const ShareMapButton = ({ bookingId }) => {
   };
 
   const handleCopyLink = () => {
-    const mapLink = `https://tsyr.addresses.sy/public-map/${bookingId}`;
+    const mapLink = getPublicMapUrl(bookingId);
     
     navigator.clipboard.writeText(mapLink).then(() => {
       toast.success("تم نسخ رابط الخريطة! ✅", {

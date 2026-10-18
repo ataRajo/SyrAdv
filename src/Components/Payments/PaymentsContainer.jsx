@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeleteDialog } from "../../utils/Dialogs/DeleteDialog/DeleteDialog";
 import { Permissions } from "../../Static/StaticData";
 import InvoiceExcel from "./InvoiceExcel";
+import { openPaymentReceipt } from "../../utils/branding/voucherDocument";
+import { fetchAllPages } from "../../utils/export/fetchAllPages";
 import useMangePayments from "../../hooks/useMangePayments";
 import { ViewImageDialog } from "./ViewImageDialog";
 import { useGetPaymentsQuery } from "../../RtkQuery/Slice/Payments/PaymentsApi";
@@ -26,6 +28,11 @@ import { useAuth } from "../../Context/AuthProvider";
 import Logo from "../../assets/images/adv_syrian.png"
 import { BASE_URL } from "../../Api/baseUrl";
 import AccountingPanel from "../../Components/Accounting/AccountingPanel";
+import { openPaymentReminderWhatsapp } from "../../utils/whatsappLink";
+import { showToast } from "../../utils/Notifictions/showToast";
+import CustomerSearchSelect, { customerDisplayName } from "../Common/CustomerSearchSelect";
+import DocumentUploadDialog from "../Common/DocumentUploadDialog";
+import { useDocumentPaymentMutation } from "../../RtkQuery/Slice/Payments/PaymentsApi";
 
 const STATUS_FILTER_OPTIONS = [
   { label: "الكل", value: "all" },
@@ -71,21 +78,32 @@ const RemainingBalanceBadge = ({ count, overdueCount }) => {
 const PaymentsContainer = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [customerFilter, setCustomerFilter] = useState("all");
+  // الزبون المختار كاملًا (من CustomerSearchSelect) - للتصدير والعناوين.
+  const [selectedCustomerObj, setSelectedCustomerObj] = useState(null);
+  // توثيق الدفعات: all | pending (بانتظار التوثيق) | documented
+  const [documentFilter, setDocumentFilter] = useState("all");
+  const [documentTarget, setDocumentTarget] = useState(null);
+  const [documentPayment, { isLoading: isDocumentingPayment }] = useDocumentPaymentMutation();
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [customerSearch, setCustomerSearch] = useState("");
 
-  const { user } = useAuth(); 
+  const { user, hasPermission, hasRole } = useAuth(); 
   
-const { data: paymentsResponse, isLoading: isFetchingPayments } = useGetPaymentsQuery({
+// الفلترة بالزبون/الحالة/التوثيق من الخادم مباشرة - كانت تتم على الصفحة
+// المحمَّلة فقط، فتختفي دفعات الزبون الموجودة في صفحات أخرى.
+const { data: paymentsResponse, isFetching: isFetchingPayments } = useGetPaymentsQuery({
   page: currentPage,
-  per_page: itemsPerPage
+  per_page: itemsPerPage,
+  customer_id: customerFilter !== "all" ? customerFilter : undefined,
+  status: statusFilter !== "all" ? statusFilter : undefined,
+  is_documented: documentFilter === "all" ? undefined : documentFilter === "documented",
 });
 
 useEffect(() => {
   setCurrentPage(1);
-}, [statusFilter, customerFilter]);
+}, [statusFilter, customerFilter, documentFilter]);
 
 const payments = paymentsResponse?.data || [];
 const paginationMeta = {
@@ -95,57 +113,39 @@ const paginationMeta = {
   perPage: paymentsResponse?.per_page || 20,
 };
 
-const [customersPage, setCustomersPage] = useState(1);
-const [allCustomers, setAllCustomers] = useState([]);
-
-const { data: customersResponse, isLoading: isFetchingCustomers } = useGetCustomersQuery({
-  page: customersPage,
-  per_page: 60  ,
-});
-
-useEffect(() => {
-  if (customersResponse?.data) {
-    setAllCustomers(prev => {
-      // If it's page 1, replace the array
-      if (customersPage === 1) {
-        return customersResponse.data;
-      }
-      // For subsequent pages, only add new customers that don't already exist
-      const existingIds = new Set(prev.map(c => c.id));
-      const newCustomers = customersResponse.data.filter(c => !existingIds.has(c.id));
-      return [...prev, ...newCustomers];
-    });
-  }
-}, [customersResponse, customersPage]);
+// ملاحظة: لم تعد الصفحة تحمّل أول 60 زبونًا لقائمة الفلترة - الاختيار يتم
+// عبر CustomerSearchSelect (بحث من الخادم + تمرير لا نهائي) مهما كبر العدد.
+const isFetchingCustomers = false;
 
 
-
-const customers = useMemo(() => {
-  const uniqueMap = new Map();
-  allCustomers.forEach(customer => {
-    if (!uniqueMap.has(customer.id)) {
-      uniqueMap.set(customer.id, customer);
-    }
+  // كل الزبائن الذين عليهم رصيد متبقٍّ (من الخادم مباشرة، لا فقط أول 60
+  // زبونًا المحمَّلين لقائمة الفلترة) - طلب صريح: "ما في داعي ينعرض زباين
+  // يلي رصيدن صفر".
+  const { data: debtorsResponse } = useGetCustomersQuery({
+    has_remaining: 1,
+    per_page: 1000,
   });
-  return Array.from(uniqueMap.values());
-}, [allCustomers]);
-
+  const debtorCustomers = useMemo(
+    () => (Array.isArray(debtorsResponse?.data) ? debtorsResponse.data : []),
+    [debtorsResponse]
+  );
 
   const customersWithRemainingBalance = useMemo(() => {
-    if (!customers || customers.length === 0) {
+    const source = debtorCustomers;
+    if (!source || source.length === 0) {
       return [];
     }
     
     const result = [];
     let counter = 0;
     
-    (Array.isArray(customers) ? customers : []).forEach(customer => {
+    (Array.isArray(source) ? source : []).forEach(customer => {
       const remaining = parseFloat(customer.remaining) || 0;
-      const hasRemaining = remaining > 0;
+      const hasRemaining = remaining > 0.009;
       
-      if (hasRemaining) {
-        counter++;
-      }
+      // الزبائن الذين رصيدهم صفر (أو دائن) لا يُعرَضون إطلاقًا.
+      if (!hasRemaining) return;
+      counter++;
       
       const customerPayments = payments?.filter(p => p.customer_id === customer.id) || [];
       
@@ -185,10 +185,92 @@ const customers = useMemo(() => {
       });
     });
     
-    console.log(`عدد العملاء الذين لديهم رصيد متبقي: ${counter} من ${customers.length}`);
-    
     return result.sort((a, b) => b.remaining - a.remaining);
-  }, [customers, payments]);
+  }, [debtorCustomers, payments]);
+
+  // زر واتساب "عليك دفع" - رابط wa.me مجاني (بلا أي خدمة مدفوعة).
+  const sendPaymentReminder = (customerLike) => {
+    const ok = openPaymentReminderWhatsapp({
+      phone: customerLike?.phone_number ?? customerLike?.phone,
+      name: customerLike?.company_name || customerLike?.full_name || customerLike?.companyName || customerLike?.name,
+      remaining: customerLike?.remaining,
+    });
+    if (!ok) showToast("error", "لا يوجد رقم هاتف صالح لهذا الزبون");
+  };
+
+  // عمود واتساب في جداول الدفعات - يظهر فقط إن كان على الزبون مبلغ متبقٍّ.
+  const paymentsColumnsWithWhatsapp = useMemo(
+    () => [
+      ...PaymentsColumns,
+      {
+        // توثيق الدفعة (طلب صريح) - لا تؤثر على الرصيد/الحسابات قبله.
+        header: "التوثيق",
+        accessor: "is_documented",
+        className: "min-w-[130px] text-center",
+        priority: 6,
+        cell: ({ row }) =>
+          row?.is_documented ? (
+            <div className="flex items-center justify-center gap-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <Icon icon="mdi:check-decagram" className="h-3.5 w-3.5" /> موثَّقة
+              </span>
+              {row.documentation_image && (
+                <a
+                  href={row.documentation_image}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded p-1 text-muted-foreground hover:bg-muted"
+                  title="عرض صورة السند الموقَّع"
+                >
+                  <Icon icon="mdi:image-outline" className="h-4 w-4" />
+                </a>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDocumentTarget(row);
+              }}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+              title="الدفعة لا تؤثر على رصيد الزبون ولا على الحسابات حتى تُوثَّق"
+            >
+              <Icon icon="mdi:file-upload-outline" className="h-4 w-4" /> توثيق
+            </button>
+          ),
+      },
+      {
+        header: "تذكير واتساب",
+        accessor: "whatsapp",
+        className: "min-w-[90px] text-center",
+        priority: 7,
+        cell: ({ row }) => {
+          const customer = row?.customer;
+          const remaining = parseFloat(customer?.remaining) || 0;
+          if (!customer || remaining <= 0.009) {
+            return <span className="text-xs text-muted-foreground">—</span>;
+          }
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                sendPaymentReminder(customer);
+              }}
+              className="inline-flex items-center justify-center p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400"
+              title={`إرسال تذكير واتساب: عليه ${remaining.toFixed(2)} $`}
+            >
+              <Icon icon="mdi:whatsapp" className="w-5 h-5" />
+            </button>
+          );
+        },
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const statistics = useMemo(() => {
     const allCustomers = customersWithRemainingBalance;
@@ -242,23 +324,13 @@ const customers = useMemo(() => {
     return !restrictedRoles.includes(userRole);
   }, [user]);
 
-  // Accounting/cashbox tab - fixed to handle "super admin" role properly
+  // تبويب المحاسبة والصندوق: بالصلاحية لا بالدور (طلب صريح: باكج المحاسبة
+  // يُمنح لأي موظف عبر الصلاحيات) - view-financials.
   const showAccountingTab = useMemo(() => {
     if (!user) return false;
-    
-    // Get the user's role from various possible locations
-    const userRole = user.role?.toLowerCase() || 
-                    user.roles?.[0]?.name?.toLowerCase() || 
-                    "";
-    
-    // Allowed roles (handle both "super admin" and "super_admin")
-    const allowedRoles = ["super_admin", "admin", "administrator", "accountant", "super admin"];
-    
-    const hasAccess = allowedRoles.includes(userRole);
-    console.log('Accounting tab access - Role:', userRole, 'Has access:', hasAccess);
-    
-    return hasAccess;
-  }, [user]);
+    return hasPermission("view-financials") || hasRole("super admin");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, hasPermission]);
 
 
   // Accounting/cashbox tab: only for staff whose role should carry the
@@ -345,6 +417,20 @@ console.log(token)
 
     const contentType = response.headers.get("content-type");
     console.log("Content-Type received:", contentType);
+
+    // سند القبض بالتصميم الرسمي للشركة (resources/views/receipt.blade.php) -
+    // نفس سند "المحاسبة والصندوق": صفحة HTML تُفتح في تبويب جديد للطباعة / حفظ PDF.
+    if (contentType && contentType.includes("text/html")) {
+      const html = await response.text();
+      const htmlBlob = new Blob([html], { type: "text/html" });
+      const htmlUrl = URL.createObjectURL(htmlBlob);
+      const win = window.open(htmlUrl, "_blank");
+      if (!win) {
+        downloadFile(htmlUrl, `سند_قبض_${paymentId}.html`);
+      }
+      setTimeout(() => URL.revokeObjectURL(htmlUrl), 60000);
+      return;
+    }
 
     const isWord = contentType && (
       contentType.includes("application/msword") ||
@@ -497,24 +583,34 @@ const downloadFile = (fileUrl, fileName) => {
     }
   }, [showFilteredNotifications, filteredNotifications, storedNotifications, allNotifications]);
 
-  const customerOptions = useMemo(() => {
-    const options = [...CUSTOMER_FILTER_OPTIONS];
-    (Array.isArray(customers) ? customers : []).forEach(customer => {
-      if (customer.company_name || customer.full_name) {
-        options.push({
-          label: customer.company_name || customer.full_name || `عميل #${customer.id}`,
-          value: customer.id.toString(),
-          customerData: customer
-        });
-      }
-    });
-    return options;
-  }, [customers]);
-
   const selectedCustomerData = useMemo(() => {
     if (customerFilter === "all") return null;
-    return customerOptions.find(opt => opt.value === customerFilter)?.customerData || null;
-  }, [customerFilter, customerOptions]);
+    return selectedCustomerObj && String(selectedCustomerObj.id) === String(customerFilter)
+      ? selectedCustomerObj
+      : { id: parseInt(customerFilter, 10) };
+  }, [customerFilter, selectedCustomerObj]);
+
+  const selectedCustomerLabel = customerDisplayName(selectedCustomerData);
+
+  const applyCustomerFilter = (id, customer) => {
+    setCustomerFilter(id && id !== "" ? String(id) : "all");
+    setSelectedCustomerObj(customer || null);
+  };
+
+  // توثيق دفعة (رفع صورة سند القبض الموقَّع) - طلب صريح.
+  const handleDocumentPayment = async (file) => {
+    if (!documentTarget) return false;
+    try {
+      const body = new FormData();
+      body.append("image", file);
+      await documentPayment({ id: documentTarget.id, body }).unwrap();
+      showToast("success", "تم توثيق الدفعة - طُبِّقت على رصيد الزبون والحسابات");
+      return true;
+    } catch (error) {
+      showToast("error", error?.data?.message || "تعذّر توثيق الدفعة");
+      return false;
+    }
+  };
 
    const filteredPayments = useMemo(() => {
     let filtered = Array.isArray(payments) ? payments : [];
@@ -542,6 +638,28 @@ const downloadFile = (fileUrl, fileName) => {
       id: selectedCustomerData.id,
     };
   }, [selectedCustomerData, filteredPayments, dataInvoicePdf]);
+
+  // ⚠️ FIXED (ملف الدفعات كان يخرج فارغًا): بدون زبون محدد كان يُمرَّر
+  // كائن الـ paginator الخام ({ data: [...] }) بدل مصفوفة الدفعات. الآن
+  // تُجلب كل الدفعات (كل الصفحات، لا الصفحة المعروضة فقط) بنفس الفلاتر.
+  const exportAllPayments = async () => {
+    const list = await fetchAllPages("/payments", {
+      customer_id: selectedCustomerData?.id,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+    });
+    const filtered = list.filter(
+      (p) =>
+        (statusFilter === "all" || p.status === parseInt(statusFilter)) &&
+        (!selectedCustomerData || p.customer_id === selectedCustomerData.id)
+    );
+    if (!selectedCustomerData) return { payments: filtered };
+    return {
+      ...selectedCustomerData,
+      payments: filtered,
+      company_name: selectedCustomerData.company_name || selectedCustomerData.full_name,
+      id: selectedCustomerData.id,
+    };
+  };
 
 const handleExportWord = async () => {
   if (filteredPayments.length === 0) {
@@ -579,7 +697,7 @@ const handleExportWord = async () => {
       ? STATUS_FILTER_OPTIONS.find(opt => opt.value === statusFilter)?.label 
       : 'الكل';
     const customerLabel = customerFilter !== "all" 
-      ? customerOptions.find(opt => opt.value === customerFilter)?.label 
+      ? selectedCustomerLabel
       : 'جميع العملاء';
 
     let wordContent = `
@@ -955,6 +1073,7 @@ const handleExportWord = async () => {
             <div className="flex gap-3 justify-start">
               <InvoicePdf
                 customer={pdfCustomerData}
+                loadData={exportAllPayments}
                 showCustomerTable={!!selectedCustomerData}
                 showCustomerPaymentsTable={true}
                 disabled={!filteredPayments.length}
@@ -963,6 +1082,7 @@ const handleExportWord = async () => {
               
               <InvoiceExcel
                 customer={pdfCustomerData}
+                loadData={exportAllPayments}
                 showCustomerTable={false}
                 showCustomerPaymentsTable={true}
                 disabled={!filteredPayments.length}
@@ -1000,21 +1120,28 @@ const handleExportWord = async () => {
             </div>
 
             <div className="flex gap-4 justify-end mb-4 flex-wrap">
-              <div className="min-w-[200px]">
-                <Select
+              <div className="min-w-[260px]">
+                <CustomerSearchSelect
                   value={customerFilter}
-                  onValueChange={(val) => setCustomerFilter(val)}
-                  disabled={isFetchingCustomers}
-                >
+                  onChange={applyCustomerFilter}
+                  selectedCustomer={selectedCustomerObj}
+                  allowAll
+                  allValue="all"
+                  allLabel="جميع العملاء"
+                  showRemaining
+                  triggerClassName="bg-white dark:bg-background"
+                />
+              </div>
+
+              <div className="min-w-[180px]">
+                <Select value={documentFilter} onValueChange={setDocumentFilter}>
                   <SelectTrigger className="w-full bg-white border text-right">
-                    <SelectValue placeholder="تصفية حسب العميل" />
+                    <SelectValue placeholder="حالة التوثيق" />
                   </SelectTrigger>
                   <SelectContent>
-                    {customerOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="all">كل الدفعات (التوثيق)</SelectItem>
+                    <SelectItem value="pending">بانتظار التوثيق</SelectItem>
+                    <SelectItem value="documented">موثَّقة</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1037,13 +1164,14 @@ const handleExportWord = async () => {
                 </Select>
               </div>
               
-              {(statusFilter !== "all" || customerFilter !== "all") && (
+              {(statusFilter !== "all" || customerFilter !== "all" || documentFilter !== "all") && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
                     setStatusFilter("all");
-                    setCustomerFilter("all");
+                    applyCustomerFilter("all", null);
+                    setDocumentFilter("all");
                   }}
                   className="h-10"
                 >
@@ -1073,7 +1201,7 @@ const handleExportWord = async () => {
                       {customerFilter !== "all" && (
                         <span className="inline-flex items-center gap-1 bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 px-3 py-1.5 rounded-full text-xs font-medium">
                           <Icon icon="mdi:account" className="w-3 h-3" />
-                          {customerOptions.find(opt => opt.value === customerFilter)?.label}
+                          {selectedCustomerLabel}
                         </span>
                       )}
                     </div>
@@ -1083,7 +1211,8 @@ const handleExportWord = async () => {
                     size="sm"
                     onClick={() => {
                       setStatusFilter("all");
-                      setCustomerFilter("all");
+                      applyCustomerFilter("all", null);
+                      setDocumentFilter("all");
                     }}
                     className="h-8 px-3 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800 hover:text-blue-700 dark:hover:text-blue-300"
                   >
@@ -1096,12 +1225,12 @@ const handleExportWord = async () => {
 
             <DynamicTable
               data={filteredPayments}
-              columns={PaymentsColumns}
+              columns={paymentsColumnsWithWhatsapp}
               isLoading={isFetchingPayments || isFetchingCustomers}
               onShow={onShow}
               permissions={permissions}
               onDelete={handleDelete}
-              onReceipt={(payment) => handleReceipt(payment.id)}
+              onReceipt={(payment) => openPaymentReceipt(payment)}
  
 
             />
@@ -1199,13 +1328,13 @@ const handleExportWord = async () => {
               
               <DynamicTable
                 data={filteredNotReceivedPayments}
-                columns={PaymentsColumns}
+                columns={paymentsColumnsWithWhatsapp}
                 isLoading={isFetchingPaymentsNotReceived}
                 onShow={onShow}
                 onDelete={handleDelete}
                 onConfirmOrder={onConfirmPayment}
                 permissions={permissions}
-                onReceipt={(payment) => handleReceipt(payment.id)}
+                onReceipt={(payment) => openPaymentReceipt(payment)}
  
               />
             </div>
@@ -1217,12 +1346,12 @@ const handleExportWord = async () => {
             <div className="w-full mx-auto space-y-6 overflow-x-auto">
               <DynamicTable
                 data={paymentIsReceived || []}
-                columns={PaymentsColumns}
+                columns={paymentsColumnsWithWhatsapp}
                 isLoading={isFetchingPaymentsReceived}
                 onShow={onShow}
                 permissions={permissions}
                 onDelete={handleDelete}
-                onReceipt={(payment) => handleReceipt(payment.id)}
+                onReceipt={(payment) => openPaymentReceipt(payment)}
  
               />
               
@@ -1248,6 +1377,21 @@ const handleExportWord = async () => {
         titleLoading="جاري التأكيد"
         onConfirm={handleConfirm}
         loading={isLoadingConfirm}
+      />
+
+      <DocumentUploadDialog
+        open={Boolean(documentTarget)}
+        onClose={() => setDocumentTarget(null)}
+        onSubmit={handleDocumentPayment}
+        isLoading={isDocumentingPayment}
+        title={`توثيق الدفعة رقم ${documentTarget?.payment_number ?? documentTarget?.id ?? ""}`}
+        subtitle={
+          documentTarget
+            ? `${documentTarget.customer?.company_name || documentTarget.customer?.full_name || ""} - ${Number(documentTarget.paid || 0).toLocaleString("en-US")} $`
+            : undefined
+        }
+        warning="الدفعة لا تُخصم من رصيد الزبون المتبقي ولا تُرحَّل على شجرة الحسابات إلا بعد رفع صورة سند القبض الموقَّع."
+        confirmLabel="أؤكد أن الصورة هي سند القبض الموقَّع لهذه الدفعة"
       />
 
       <ViewImageDialog
@@ -1286,9 +1430,9 @@ const handleExportWord = async () => {
                     <Icon icon="mdi:account-cash" className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
                   <div>
-                    <h2 className="text-lg sm:text-xl font-bold">جميع العملاء والرصيد المتبقي لهم</h2>
+                    <h2 className="text-lg sm:text-xl font-bold">العملاء الذين عليهم رصيد متبقٍّ</h2>
                     <p className="text-blue-100 text-xs sm:text-sm mt-1">
-                      {statistics.totalCustomers} عميل • {statistics.customersWithRemainingCount} عميل لديهم رصيد متبقي • إجمالي المبلغ المتبقي: {statistics.totalOutstandingBalance.toFixed(2)} $
+                      {statistics.customersWithRemainingCount} عميل لديهم رصيد متبقي • إجمالي المبلغ المتبقي: {statistics.totalOutstandingBalance.toFixed(2)} $
                     </p>
                   </div>
                 </div>
@@ -1473,8 +1617,15 @@ const handleExportWord = async () => {
                               
                               <div className="flex justify-end gap-2">
                                 <button
+                                  onClick={() => sendPaymentReminder(customer.customerData)}
+                                  className="p-1.5 sm:p-2 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-800 transition-colors"
+                                  title="إرسال رسالة واتساب: عليك دفع المبلغ المتبقي"
+                                >
+                                  <Icon icon="mdi:whatsapp" className="w-4 h-4 sm:w-5 sm:h-5" />
+                                </button>
+                                <button
                                   onClick={() => {
-                                    setCustomerFilter(customer.id.toString());
+                                    applyCustomerFilter(customer.id.toString(), customer.customerData);
                                     setShowCustomerModal(false);
                                   }}
                                   className="p-1.5 sm:p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors"

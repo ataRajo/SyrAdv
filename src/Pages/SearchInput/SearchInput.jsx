@@ -50,7 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import CustomerSearchSelect from "../../Components/Common/CustomerSearchSelect";
 import { useAddNewBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { typeOptions, productTypeOptions, periodOptions, navLinksAdministrationPage } from "../../Static/StaticData";
 import { motion, AnimatePresence } from "framer-motion";
@@ -314,11 +314,6 @@ const SearchInput = () => {
   const [triggerSearch] = useLazyGlobalSearchQuery();
   const [addNewBooking] = useAddNewBookingMutation();
 
-  const { data: customersData, isLoading: isLoadingCustomers } = useGetCustomersQuery({
-    page: customerPage,
-    per_page: 20,
-    ...(customerSearch && { search: customerSearch })
-  });
 
   // Fetch printing types
   useEffect(() => {
@@ -1267,48 +1262,14 @@ const SearchInput = () => {
                 <label className={cn("block text-sm font-medium mb-2", isDark ? "text-gray-300" : "text-gray-700")}>
                   الزبون
                 </label>
-                <Select
-                  onValueChange={(value) => setCustomerFilter(value)}
+                {/* بحث من الخادم + تمرير لا نهائي (بدل "تحميل المزيد") */}
+                <CustomerSearchSelect
                   value={customerFilter}
-                >
-                  <SelectTrigger className="w-full text-right">
-                    <SelectValue placeholder="اختر الزبون" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    <div className="sticky top-0 bg-white dark:bg-gray-800 p-2 border-b dark:border-gray-700">
-                      <Input
-                        placeholder="بحث عن زبون..."
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="w-full text-right"
-                      />
-                    </div>
-                    <SelectItem value="all">الكل</SelectItem>
-                    {isLoadingCustomers ? (
-                      <div className="p-2 text-center text-sm text-gray-500">جاري التحميل...</div>
-                    ) : (
-                      customersData?.data?.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id.toString()}>
-                          {customer.company_name || customer.full_name || customer.username}
-                          {customer.phone_number && ` - ${customer.phone_number}`}
-                        </SelectItem>
-                      ))
-                    )}
-                    {customersData?.data?.length > 0 && customersData?.current_page < customersData?.last_page && (
-                      <div className="sticky bottom-0 bg-white dark:bg-gray-800 p-2 border-t dark:border-gray-700">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => setCustomerPage(prev => prev + 1)}
-                          disabled={isLoadingCustomers}
-                        >
-                          تحميل المزيد
-                        </Button>
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
+                  onChange={(id) => setCustomerFilter(id || "all")}
+                  allowAll
+                  allValue="all"
+                  allLabel="الكل"
+                />
               </div>
 
               <div>

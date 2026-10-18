@@ -14,6 +14,8 @@ const OffersTable = ({
   isLoading,
   isFetching,
   onDelete,
+  onEdit,
+  onToggleStatus,
 }) => {
   if (isLoading) {
     return (
@@ -77,14 +79,46 @@ const OffersTable = ({
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDelete(offer.id)}
-                      className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <Icon icon="mdi:delete" className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {/* تعديل العرض - "يغير فيه شي" */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEdit?.(offer)}
+                        title="تعديل العرض"
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <Icon icon="mdi:pencil" className="w-4 h-4" />
+                      </Button>
+
+                      {/* تفعيل/تعطيل العرض - "يفعّلو نفسو" */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onToggleStatus?.(offer)}
+                        title={offer.status === "active" ? "تعطيل العرض" : "إعادة تفعيل العرض"}
+                        className={
+                          offer.status === "active"
+                            ? "text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                            : "text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20"
+                        }
+                      >
+                        <Icon
+                          icon={offer.status === "active" ? "mdi:pause-circle-outline" : "mdi:play-circle-outline"}
+                          className="w-4 h-4"
+                        />
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDelete(offer.id)}
+                        title="حذف العرض"
+                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Icon icon="mdi:delete" className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

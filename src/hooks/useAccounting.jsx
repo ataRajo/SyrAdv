@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
+import { useAuth } from "../Context/AuthProvider";
 import toast from "react-hot-toast";
 import { BASE_URL } from "../Api/baseUrl";
+import { openJournalEntryVoucher } from "../utils/branding/voucherDocument";
 import {
   useGetAccountsQuery,
   useGetAccountsTreeQuery,
@@ -8,11 +10,17 @@ import {
   useAddAccountMutation,
   useUpdateAccountMutation,
   useDeleteAccountMutation,
+  useManualAdjustAccountMutation,
+  useGetAccountManualAdjustmentsQuery,
   useGetTransactionsQuery,
   useRecordIncomingMutation,
   useRecordOutgoingMutation,
   useTransferFundsMutation,
   useReverseTransactionMutation,
+  useDocumentTransactionMutation,
+  useUpdateSupplierMutation,
+  usePostTransactionMutation,
+  usePostTransactionsBatchMutation,
   useGetCustomerStatementQuery,
   useSendCustomerStatementMutation,
   useGetCompanyStatementQuery,
@@ -30,6 +38,7 @@ import {
   useGetSelectableAccountsQuery,
   useGetSupplierCategoriesQuery,
   useAddSupplierCategoryMutation,
+  useDeleteSupplierCategoryMutation,
   useGetSuppliersQuery,
   useAddSupplierMutation,
   useDeleteSupplierMutation,
@@ -39,6 +48,7 @@ import {
   useArchivePurchaseInvoiceMutation,
   useUnarchivePurchaseInvoiceMutation,
   usePayPurchaseInvoiceMutation,
+  useDeletePurchaseInvoiceMutation,
   useUploadPurchaseInvoiceImageMutation,
   useRemovePurchaseInvoiceImageMutation,
   useLazyGetMaterialsQuery,
@@ -54,6 +64,8 @@ import {
   useSettleSupplierAdvanceMutation,
   useLazyGetSupplierAdvanceBalanceQuery,
   useGetSupplierAdvancesHistoryQuery,
+  useGetReconciliationLogsQuery,
+  useRunReconciliationMutation,
 } from "../RtkQuery/Slice/Accounting/AccountingApi";
 
 /**
@@ -77,13 +89,24 @@ const getToken = () => {
  * transaction's سند قبض / سند صرف voucher for printing.
  */
 export const useAccounting = () => {
+  // صلاحيات تبويبات المحاسبة (financials-tab-*) - طلب صريح. الاستعلامات التي
+  // يفرض الباك-إند عليها صلاحية التبويب تُتخطّى (skip) عند غيابها كي لا
+  // يُطلق موظف بصلاحيات محدودة طلبات تنتهي بـ 403 عند فتح الصفحة.
+  // المنطق مطابق لـ AccountingTabs::anyOf على الباك-إند (يكفي تبويب واحد).
+  const { hasPermission, isSuperAdmin } = useAuth();
+  const canAnyTab = (...keys) =>
+    isSuperAdmin() || hasPermission(keys.map((key) => `financials-tab-${key}`));
+
   // ---- Chart of Accounts -------------------------------------------------
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [deleteAccountTarget, setDeleteAccountTarget] = useState(null);
 
+  // "عدم ظهور الزبائن يلي رصيدهن = 0 في الشجرة" (طلب صريح) - مخفيون
+  // افتراضيًا، والزر في دليل الحسابات يُظهرهم عند الحاجة.
+  const [showZeroCustomerAccounts, setShowZeroCustomerAccounts] = useState(false);
   const { data: accountsTree = [], isFetching: isFetchingAccountsTree } =
-    useGetAccountsTreeQuery();
+    useGetAccountsTreeQuery({ includeZeroCustomers: showZeroCustomerAccounts });
   const { data: accountsFlat = [], isFetching: isFetchingAccounts } =
     useGetAccountsQuery({});
 
@@ -92,6 +115,27 @@ export const useAccounting = () => {
     useUpdateAccountMutation();
   const [deleteAccount, { isLoading: isDeletingAccount }] =
     useDeleteAccountMutation();
+  const [manualAdjustAccountMutation, { isLoading: isManualAdjustingAccount }] =
+    useManualAdjustAccountMutation();
+
+  // "تعديل يدوي للحسابات من شجرة الحسابات (من السوبر ادمن فقط)" - راجع
+  // AccountController::manualAdjust على الباك-إند. reason إلزامي.
+  const manualAdjustAccount = useCallback(
+    async (id, data) => {
+      try {
+        await manualAdjustAccountMutation({ id, ...data }).unwrap();
+        toast.success("تم تعديل الحساب يدويًا بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل التعديل اليدوي للحساب");
+        return false;
+      }
+    },
+    [manualAdjustAccountMutation]
+  );
+
+  const { data: accountManualAdjustments = [], isFetching: isFetchingAccountManualAdjustments } =
+    useGetAccountManualAdjustmentsQuery(editingAccount?.id, { skip: !editingAccount?.id });
 
   // Cash/bank accounts only - used to populate the "from/to" selects for
   // incoming/outgoing/transfer forms.
@@ -169,7 +213,7 @@ export const useAccounting = () => {
     page: 1,
   });
   const { data: transactionsResponse, isFetching: isFetchingTransactions } =
-    useGetTransactionsQuery(transactionFilters);
+    useGetTransactionsQuery(transactionFilters, { skip: !canAnyTab("transactions") });
 
 const transactions = Array.isArray(transactionsResponse?.data) 
   ? transactionsResponse.data 
@@ -201,7 +245,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async (data) => {
       try {
         await recordIncoming(data).unwrap();
-        toast.success("تم تسجيل قيد القبض بنجاح");
+        toast.success("تم تسجيل قيد القبض بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         setIncomingDialogOpen(false);
         return true;
       } catch (error) {
@@ -216,7 +260,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async (data) => {
       try {
         await recordOutgoing(data).unwrap();
-        toast.success("تم تسجيل قيد الصرف بنجاح");
+        toast.success("تم تسجيل قيد الصرف بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         setOutgoingDialogOpen(false);
         return true;
       } catch (error) {
@@ -242,12 +286,77 @@ const transactions = Array.isArray(transactionsResponse?.data)
     [transferFunds]
   );
 
+  // توثيق السندات (طلب صريح) ----------------------------------------------
+  const [documentTarget, setDocumentTarget] = useState(null);
+  const [documentTransactionMutation, { isLoading: isDocumentingTransaction }] =
+    useDocumentTransactionMutation();
+
+  const handleDocumentTransaction = useCallback(
+    async (file) => {
+      if (!documentTarget) return false;
+      try {
+        const body = new FormData();
+        body.append("image", file);
+        const res = await documentTransactionMutation({ id: documentTarget.id, body }).unwrap();
+        const after = res?.data;
+        toast.success(
+          documentTarget.status !== "pending"
+            ? "تم إرفاق صورة السند"
+            : after?.status === "posted"
+              ? "تم توثيق السند وترحيله على شجرة الحسابات"
+              : "تم توثيق السند - بانتظار ترحيله من السوبر أدمن"
+        );
+        setDocumentTarget(null);
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "تعذّر توثيق السند");
+        return false;
+      }
+    },
+    [documentTarget, documentTransactionMutation]
+  );
+
+  // ترحيل دفتر اليومية (السوبر أدمن فقط - الخادم يرفض غيره) ---------------
+  const [postTransactionMutation, { isLoading: isPostingTransaction }] = usePostTransactionMutation();
+  const [postTransactionsBatchMutation, { isLoading: isPostingBatch }] = usePostTransactionsBatchMutation();
+
+  const handlePostTransaction = useCallback(
+    async (id) => {
+      try {
+        await postTransactionMutation(id).unwrap();
+        toast.success("تم ترحيل السند على شجرة الحسابات");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "تعذّر ترحيل السند");
+        return false;
+      }
+    },
+    [postTransactionMutation]
+  );
+
+  const handlePostTransactionsBatch = useCallback(
+    async (ids) => {
+      if (!ids?.length) return false;
+      try {
+        const res = await postTransactionsBatchMutation(ids).unwrap();
+        const failed = res?.data?.failed ?? [];
+        if (failed.length) toast.error(`${failed.length} سند تعذّر ترحيله: ${failed[0]?.message || ""}`);
+        toast.success(res?.message || "تم الترحيل");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "تعذّر الترحيل");
+        return false;
+      }
+    },
+    [postTransactionsBatchMutation]
+  );
+
   const handleReverse = useCallback(
     async (reason) => {
       if (!reverseTarget) return false;
       try {
         await reverseTransaction({ id: reverseTarget.id, reason }).unwrap();
-        toast.success("تم عكس القيد بنجاح");
+        toast.success(reverseTarget.status === "pending" ? "تم إلغاء السند" : "تم عكس القيد بنجاح");
         setReverseTarget(null);
         return true;
       } catch (error) {
@@ -266,45 +375,16 @@ const transactions = Array.isArray(transactionsResponse?.data)
    * manually (a plain <a href> can't carry a Bearer token) and hand the
    * browser a blob URL to open/print.
    */
-  const handleOpenVoucher = useCallback(async (journalEntryId) => {
+  const handleOpenVoucher = useCallback(async (journalEntryId, options = {}) => {
     if (!journalEntryId) {
       toast.error("رقم القيد مطلوب لعرض السند");
       return;
     }
     try {
-      const token = getToken();
-      const response = await fetch(
-        `${BASE_URL}/accounting/transactions/${journalEntryId}/voucher`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "text/html",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        let message = `تعذر عرض السند (${response.status})`;
-        try {
-          const data = await response.clone().json();
-          message = data?.message || message;
-        } catch {
-          // response wasn't JSON - keep the generic message
-        }
-        throw new Error(message);
-      }
-
-      const html = await response.text();
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, "_blank");
-      if (!win) {
-        toast.error("الرجاء السماح للنوافذ المنبثقة لعرض السند");
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      // السند يُولَّد بالواجهة بتصميم SAC الرسمي (voucherDocument.js)
+      await openJournalEntryVoucher(journalEntryId, options);
     } catch (error) {
-      toast.error(error.message || "تعذر عرض السند");
+      toast.error(error?.message || "تعذر عرض السند");
     }
   }, []);
 
@@ -428,7 +508,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
   // ---- Cash register closing (تقفيل الصندوق اليومي) --------------------------
   const [cashClosingFilters, setCashClosingFilters] = useState({ status: "pending", page: 1 });
   const { data: cashClosingsResponse, isFetching: isFetchingCashClosings } =
-    useGetCashClosingsQuery(cashClosingFilters);
+    useGetCashClosingsQuery(cashClosingFilters, { skip: !canAnyTab("cash-closing") });
   const cashClosings = cashClosingsResponse?.data ?? [];
   const cashClosingsMeta = cashClosingsResponse?.meta ?? {
     total: 0,
@@ -513,7 +593,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
 
   // ---- Payroll (الرواتب والأجور) ----------------------------------------
   const { data: payrollEmployees = [], isFetching: isFetchingPayrollEmployees } =
-    useGetPayrollEmployeesQuery();
+    useGetPayrollEmployeesQuery(undefined, { skip: !canAnyTab("payroll", "advances") });
 
   const [setEmployeeSalaryMutation, { isLoading: isSavingSalary }] =
     useSetEmployeeSalaryMutation();
@@ -557,11 +637,11 @@ const transactions = Array.isArray(transactionsResponse?.data)
         const payload = response?.data;
         if (payload?.had_outstanding_advance) {
           toast.success(
-            `تم صرف الراتب - خُصم من سلفة سابقة: ${Number(payload.advance_deducted ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}، الصافي المدفوع فعليًا: ${Number(payload.net_amount_paid ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}`,
+            `تم صرف الراتب - خُصم من سلفة سابقة: ${Number(payload.advance_deducted ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}، الصافي المدفوع فعليًا: ${Number(payload.net_amount_paid ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}${payload.advance_remaining_after != null ? `، المتبقي من السلفة: ${Number(payload.advance_remaining_after).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}` : ""}`,
             { duration: 6000 }
           );
         } else {
-          toast.success("تم تسجيل صرف الراتب بنجاح");
+          toast.success("تم تسجيل صرف الراتب بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         }
         return payload ?? true;
       } catch (error) {
@@ -610,13 +690,35 @@ const transactions = Array.isArray(transactionsResponse?.data)
   const { data: selectableAccounts = [], isFetching: isFetchingSelectableAccounts } =
     useGetSelectableAccountsQuery();
 
+  // ---- "والتأكد من جميع الحسابات" - راجع ReconciliationController --------
+  const {
+    data: reconciliationLogs = [],
+    isFetching: isFetchingReconciliationLogs,
+    refetch: refetchReconciliationLogs,
+  } = useGetReconciliationLogsQuery();
+  const [runReconciliationMutation, { isLoading: isRunningReconciliation }] =
+    useRunReconciliationMutation();
+
+  const runReconciliation = useCallback(async () => {
+    try {
+      const result = await runReconciliationMutation().unwrap();
+      toast.success("اكتمل التدقيق الشامل لكل الحسابات");
+      return result;
+    } catch (error) {
+      toast.error(error?.data?.message || "فشل تشغيل التدقيق الشامل");
+      return null;
+    }
+  }, [runReconciliationMutation]);
+
   // ---- Suppliers (الموردون) ------------------------------------------------
   const { data: supplierCategories = [], isFetching: isFetchingSupplierCategories } =
-    useGetSupplierCategoriesQuery();
+    useGetSupplierCategoriesQuery(undefined, { skip: !canAnyTab("suppliers", "purchase-invoices") });
   const [addSupplierCategoryMutation, { isLoading: isSavingSupplierCategory }] =
     useAddSupplierCategoryMutation();
+  const [deleteSupplierCategoryMutation, { isLoading: isDeletingSupplierCategory }] =
+    useDeleteSupplierCategoryMutation();
   const { data: suppliers = [], isFetching: isFetchingSuppliers } =
-    useGetSuppliersQuery();
+    useGetSuppliersQuery(undefined, { skip: !canAnyTab("suppliers", "purchase-invoices", "advances") });
   const [addSupplierMutation, { isLoading: isSavingSupplier }] =
     useAddSupplierMutation();
   const [deleteSupplierMutation, { isLoading: isDeletingSupplier }] =
@@ -634,6 +736,40 @@ const transactions = Array.isArray(transactionsResponse?.data)
       }
     },
     [addSupplierCategoryMutation]
+  );
+
+  // طلب صريح: "حذف فئات الموردين".
+  const deleteSupplierCategory = useCallback(
+    async (id) => {
+      try {
+        await deleteSupplierCategoryMutation(id).unwrap();
+        toast.success("تم حذف فئة الموردين بنجاح");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "تعذر حذف فئة الموردين");
+        return false;
+      }
+    },
+    [deleteSupplierCategoryMutation]
+  );
+
+  const [updateSupplierMutation, { isLoading: isUpdatingSupplier }] = useUpdateSupplierMutation();
+
+  // تعديل مورد + استكمال الثبوتية (طلب صريح). body: FormData.
+  const updateSupplier = useCallback(
+    async (id, body) => {
+      try {
+        await updateSupplierMutation({ id, body }).unwrap();
+        toast.success("تم تعديل بيانات المورد");
+        return true;
+      } catch (error) {
+        const errors = error?.data?.errors;
+        const first = errors ? Object.values(errors)?.[0]?.[0] : null;
+        toast.error(first || error?.data?.message || "فشل تعديل المورد");
+        return false;
+      }
+    },
+    [updateSupplierMutation]
   );
 
   const addSupplier = useCallback(
@@ -669,8 +805,11 @@ const transactions = Array.isArray(transactionsResponse?.data)
   // الباك-إند - لا حاجة لأي فعل هنا غير المنح والعرض.
   const [employeeAdvanceHistoryFilters, setEmployeeAdvanceHistoryFilters] = useState({});
   const { data: employeeAdvancesResponse, isFetching: isFetchingEmployeeAdvances } =
-    useGetEmployeeAdvancesHistoryQuery(employeeAdvanceHistoryFilters);
+    useGetEmployeeAdvancesHistoryQuery(employeeAdvanceHistoryFilters, {
+      skip: !canAnyTab("advances", "payroll"),
+    });
   const employeeAdvances = employeeAdvancesResponse?.data ?? [];
+  const employeeAdvancesTotalOutstanding = employeeAdvancesResponse?.meta?.total_outstanding;
 
   const [giveEmployeeAdvanceMutation, { isLoading: isGivingEmployeeAdvance }] =
     useGiveEmployeeAdvanceMutation();
@@ -680,7 +819,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async ({ userId, ...data }) => {
       try {
         const result = await giveEmployeeAdvanceMutation({ userId, ...data }).unwrap();
-        toast.success("تم تسجيل سلفة الموظف بنجاح");
+        toast.success("تم تسجيل سلفة الموظف بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         return result?.data ?? result;
       } catch (error) {
         toast.error(error?.data?.message || "فشل تسجيل سلفة الموظف");
@@ -713,7 +852,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async ({ userId, ...data }) => {
       try {
         const result = await settleEmployeeAdvanceMutation({ userId, ...data }).unwrap();
-        toast.success("تم تسجيل سند قبض تحصيل السلفة بنجاح");
+        toast.success("تم تسجيل سند قبض تحصيل السلفة بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         return result?.data ?? result;
       } catch (error) {
         toast.error(error?.data?.message || "فشل تحصيل السلفة");
@@ -761,8 +900,11 @@ const transactions = Array.isArray(transactionsResponse?.data)
 
   const [supplierAdvanceHistoryFilters, setSupplierAdvanceHistoryFilters] = useState({});
   const { data: supplierAdvancesResponse, isFetching: isFetchingSupplierAdvances } =
-    useGetSupplierAdvancesHistoryQuery(supplierAdvanceHistoryFilters);
+    useGetSupplierAdvancesHistoryQuery(supplierAdvanceHistoryFilters, {
+      skip: !canAnyTab("advances", "suppliers", "purchase-invoices"),
+    });
   const supplierAdvances = supplierAdvancesResponse?.data ?? [];
+  const supplierAdvancesTotalOutstanding = supplierAdvancesResponse?.meta?.total_outstanding;
 
   const [giveSupplierAdvanceMutation, { isLoading: isGivingSupplierAdvance }] =
     useGiveSupplierAdvanceMutation();
@@ -772,7 +914,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async ({ supplierId, ...data }) => {
       try {
         const result = await giveSupplierAdvanceMutation({ supplierId, ...data }).unwrap();
-        toast.success("تم تسجيل سلفة المورد بنجاح");
+        toast.success("تم تسجيل سلفة المورد بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         return result?.data ?? result;
       } catch (error) {
         toast.error(error?.data?.message || "فشل تسجيل سلفة المورد");
@@ -804,7 +946,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async ({ supplierId, ...data }) => {
       try {
         const result = await settleSupplierAdvanceMutation({ supplierId, ...data }).unwrap();
-        toast.success("تم تسجيل سند قبض تحصيل السلفة بنجاح");
+        toast.success("تم تسجيل سند قبض تحصيل السلفة بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         return result?.data ?? result;
       } catch (error) {
         toast.error(error?.data?.message || "فشل تحصيل السلفة");
@@ -851,7 +993,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
   // ---- Purchase invoices (فواتير الشراء) -----------------------------------
   const [purchaseInvoiceFilters, setPurchaseInvoiceFilters] = useState({ page: 1 });
   const { data: purchaseInvoicesResponse, isFetching: isFetchingPurchaseInvoices } =
-    useGetPurchaseInvoicesQuery(purchaseInvoiceFilters);
+    useGetPurchaseInvoicesQuery(purchaseInvoiceFilters, { skip: !canAnyTab("purchase-invoices") });
   const purchaseInvoices = purchaseInvoicesResponse?.data ?? [];
   const purchaseInvoicesMeta = purchaseInvoicesResponse?.meta ?? {
     total: 0,
@@ -865,8 +1007,14 @@ const transactions = Array.isArray(transactionsResponse?.data)
   const addPurchaseInvoice = useCallback(
     async (data) => {
       try {
-        await addPurchaseInvoiceMutation(data).unwrap();
-        toast.success("تم تسجيل فاتورة الشراء وإصدار سند الدفع بنجاح");
+        const response = await addPurchaseInvoiceMutation(data).unwrap();
+        const advanceDeducted = Number(response?.data?.advance_deducted || 0);
+        toast.success(
+          advanceDeducted > 0
+            ? `تم تسجيل فاتورة الشراء - خُصم من سلفة المورد: ${advanceDeducted.toLocaleString("ar-SY", { minimumFractionDigits: 2 })}$`
+            : "تم تسجيل فاتورة الشراء - سند الدفع (إن وُجد) بانتظار التوثيق",
+          { duration: 6000 }
+        );
         return true;
       } catch (error) {
         toast.error(error?.data?.message || "فشل تسجيل فاتورة الشراء");
@@ -887,7 +1035,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
         toast.error("لا يوجد سند دفع لهذه الفاتورة");
         return;
       }
-      handleOpenVoucher(invoice.payment_journal_entry_id);
+      handleOpenVoucher(invoice.payment_journal_entry_id, { title: "سند فاتورة" });
     },
     [handleOpenVoucher]
   );
@@ -925,6 +1073,23 @@ const transactions = Array.isArray(transactionsResponse?.data)
     [unarchivePurchaseInvoiceMutation]
   );
 
+  const [deletePurchaseInvoiceMutation, { isLoading: isDeletingPurchaseInvoice }] =
+    useDeletePurchaseInvoiceMutation();
+
+  const deletePurchaseInvoice = useCallback(
+    async (id) => {
+      try {
+        await deletePurchaseInvoiceMutation(id).unwrap();
+        toast.success("تم حذف الفاتورة وعكس قيودها المحاسبية");
+        return true;
+      } catch (error) {
+        toast.error(error?.data?.message || "فشل حذف الفاتورة");
+        return false;
+      }
+    },
+    [deletePurchaseInvoiceMutation]
+  );
+
   const [payPurchaseInvoiceMutation, { isLoading: isPayingPurchaseInvoice }] =
     usePayPurchaseInvoiceMutation();
 
@@ -932,7 +1097,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     async (id, data = {}) => {
       try {
         await payPurchaseInvoiceMutation({ id, ...data }).unwrap();
-        toast.success("تم تسجيل الدفعة بنجاح");
+        toast.success("تم تسجيل الدفعة بنجاح - بانتظار التوثيق (ارفع صورة السند من تبويب المعاملات لترحيله)");
         return true;
       } catch (error) {
         toast.error(error?.data?.message || "فشل تسجيل الدفعة");
@@ -1049,6 +1214,8 @@ const transactions = Array.isArray(transactionsResponse?.data)
   return {
     // Chart of accounts
     accountsTree,
+    showZeroCustomerAccounts,
+    setShowZeroCustomerAccounts,
     accountsFlat,
     cashAccounts,
     postableAccounts,
@@ -1064,6 +1231,11 @@ const transactions = Array.isArray(transactionsResponse?.data)
     setDeleteAccountTarget,
     handleDeleteAccount,
     isDeletingAccount,
+    // "تعديل يدوي للحسابات من شجرة الحسابات (من السوبر ادمن فقط)"
+    manualAdjustAccount,
+    isManualAdjustingAccount,
+    accountManualAdjustments,
+    isFetchingAccountManualAdjustments,
     inspectedAccountId,
     setInspectedAccountId,
     accountStatementFilters,
@@ -1093,6 +1265,14 @@ const transactions = Array.isArray(transactionsResponse?.data)
     isTransferring,
     handleReverse,
     isReversing,
+    documentTarget,
+    setDocumentTarget,
+    handleDocumentTransaction,
+    isDocumentingTransaction,
+    handlePostTransaction,
+    isPostingTransaction,
+    handlePostTransactionsBatch,
+    isPostingBatch,
     handleOpenVoucher,
 
     // Customer statement
@@ -1158,20 +1338,32 @@ const transactions = Array.isArray(transactionsResponse?.data)
     selectableAccounts,
     isFetchingSelectableAccounts,
 
+    // "والتأكد من جميع الحسابات"
+    reconciliationLogs,
+    isFetchingReconciliationLogs,
+    refetchReconciliationLogs,
+    runReconciliation,
+    isRunningReconciliation,
+
     // Suppliers
     supplierCategories,
     isFetchingSupplierCategories,
     addSupplierCategory,
     isSavingSupplierCategory,
+    deleteSupplierCategory,
+    isDeletingSupplierCategory,
     suppliers,
     isFetchingSuppliers,
     addSupplier,
     isSavingSupplier,
+    updateSupplier,
+    isUpdatingSupplier,
     deleteSupplier,
     isDeletingSupplier,
 
     // Employee & Supplier Advances
     employeeAdvances,
+    employeeAdvancesTotalOutstanding,
     isFetchingEmployeeAdvances,
     employeeAdvanceHistoryFilters,
     setEmployeeAdvanceHistoryFilters,
@@ -1191,6 +1383,7 @@ const transactions = Array.isArray(transactionsResponse?.data)
     loadEmployeeStatement,
 
     supplierAdvances,
+    supplierAdvancesTotalOutstanding,
     isFetchingSupplierAdvances,
     supplierAdvanceHistoryFilters,
     setSupplierAdvanceHistoryFilters,
@@ -1224,6 +1417,8 @@ const transactions = Array.isArray(transactionsResponse?.data)
     isUnarchivingPurchaseInvoice,
     payPurchaseInvoice,
     isPayingPurchaseInvoice,
+    deletePurchaseInvoice,
+    isDeletingPurchaseInvoice,
     uploadPurchaseInvoiceImage,
     isUploadingPurchaseInvoiceImage,
     removePurchaseInvoiceImage,

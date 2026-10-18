@@ -45,7 +45,7 @@ export const DynamicTable = ({
   onDesignChange , 
 
 }) => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isSuperAdmin } = useAuth();
   const [confirmBooking, { isLoading: isConfirming }] = useConfirmBookingMutation();
 
   // Function to handle booking confirmation
@@ -321,7 +321,10 @@ export const DynamicTable = ({
                         )}
 
                     {/* Edit Booking Button */}
-{onEditBooking && hasPermission(permissions?.edit) && row?.status == 1 && (
+{/* أيقونة التعديل تظهر مهما كان نوع الحجز/حالته (طلب صريح) - منع التعديل
+    للحجوزات المؤرشفة/المؤجلة يتم داخل onEditBooking نفسها (BookingContainer)
+    برسالة تنبيه، لا بإخفاء الأيقونة. */}
+{onEditBooking && hasPermission(permissions?.edit) && (
   <Button
     variant="outline"
     size="sm"
@@ -364,10 +367,12 @@ export const DynamicTable = ({
                             </Button>
                           )}
 
+                        {/* حذف الحجز: يظهر مهما كان نوع الحجز (مؤقت/دائم) أو حالته،
+                            ولكن للسوبر أدمن فقط (طلب صريح). الباك-إند يفرض القيد
+                            نفسه في BookingService::delete فلا يعتمد على إخفاء الزر. */}
                         {onDeleteBooking &&
                           !hideDeleteIcon &&
-                          hasPermission(permissions?.delete) &&
-                          row?.status == 1 && (
+                          isSuperAdmin() && (
                             <Button
                               variant="destructive"
                               size="sm"

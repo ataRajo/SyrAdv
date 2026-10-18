@@ -34,6 +34,7 @@ export const offersApiSlice = createApi({
         if (params.search) cleanParams.search = params.search;
         if (params.active !== undefined && params.active !== "") cleanParams.active = params.active;
         if (params.expired !== undefined && params.expired !== "") cleanParams.expired = params.expired;
+        if (params.work_type_id !== undefined && params.work_type_id !== "") cleanParams.work_type_id = params.work_type_id;
 
         return {
           url: "/offer",
@@ -83,6 +84,16 @@ export const offersApiSlice = createApi({
       invalidatesTags: ["offers"],
     }),
 
+    // 🆕 PUT update offer (تعديل عرض أو إعادة تفعيله)
+    updateOffer: builder.mutation({
+      query: ({ id, ...data }) => ({
+        url: `/offer/${id}`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: ["offers"],
+    }),
+
     // DELETE offer
     deleteOffer: builder.mutation({
       query: (id) => ({
@@ -124,6 +135,7 @@ export const {
   useGetOffersQuery,
   useGetCustomerOffersQuery,
   useCreateOfferMutation,
+  useUpdateOfferMutation,
   useDeleteOfferMutation,
   useAssignOfferToCustomerMutation,
 } = offersApiSlice;

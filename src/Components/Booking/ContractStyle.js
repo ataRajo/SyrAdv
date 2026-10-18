@@ -2,12 +2,25 @@
 export const styles = {
   contractPageContainer: {
     maxWidth: "800px",
+    width: "100%",
+    boxSizing: "border-box",
     margin: "20px auto",
-    padding: "0",
+    padding: "0 8px",
     position: "relative",
+  },
+  // شريط الأزرار/اللغة: في تدفق الصفحة (لا absolute) كي لا يتداخل مع العقد على الشاشات الصغيرة
+  toolbar: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "10px",
+    marginBottom: "12px",
   },
   logo: {
     width: "100px",
+    maxWidth: "100%",
+    height: "auto",
     margin: "0 auto",
     display: "block",
   },
@@ -27,14 +40,19 @@ export const styles = {
   },
   contractPage: {
     fontFamily: "Arial, sans-serif",
-    padding: "30px",
+    padding: "clamp(12px, 4vw, 30px)",
+    boxSizing: "border-box",
+    width: "100%",
+    maxWidth: "100%",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
     boxShadow: "0 0 10px rgba(0, 0, 0, 0.1)",
     backgroundColor: "#fff",
     lineHeight: "1.6",
     color: "#333",
     direction: "rtl",
     textAlign: "right",
-    marginTop: "40px",
+    marginTop: "0",
     fontSize: "16px",
   },
   header: {
@@ -76,11 +94,23 @@ export const styles = {
     fontSize: "1.3em",
     marginBottom: "15px",
   },
+  // غلاف الجدول: على الشاشات الضيقة يتمرر أفقيًا بدل أن يُقَصّ أو يتداخل.
+  // أثناء تصدير PDF يُلغى التمرير ويُثبَّت عرض الصفحة (راجع generatePdf).
+  tableScroll: {
+    width: "100%",
+    overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
+  },
   adTable: {
     width: "100%",
+    maxWidth: "100%",
     borderCollapse: "collapse",
     marginTop: "15px",
     fontSize: "0.7em",
+    tableLayout: "auto",
+  },
+  // الصف الواحد لا يُقسَم بين صفحتين، والجدول نفسه قد يمتد لعدة صفحات
+  adTableRow: {
     pageBreakInside: "avoid",
     breakInside: "avoid",
   },
@@ -88,7 +118,10 @@ export const styles = {
     border: "1px solid #ddd",
     padding: "6px",
     textAlign: "center",
-    width: "400px",
+    verticalAlign: "middle",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    boxSizing: "border-box",
   },
   adTableTh: {
     backgroundColor: "#f2f2f2",

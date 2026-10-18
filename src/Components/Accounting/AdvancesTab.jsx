@@ -17,6 +17,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
+import toast from "react-hot-toast";
+import { useAuth } from "../../Context/AuthProvider";
+import HardDeleteDialog from "./HardDeleteDialog";
+import {
+  useUpdateEmployeeAdvanceMutation,
+  useUpdateSupplierAdvanceMutation,
+  useLazyPreviewDeleteEmployeeAdvanceQuery,
+  useDeleteEmployeeAdvanceMutation,
+  useLazyPreviewDeleteSupplierAdvanceQuery,
+  useDeleteSupplierAdvanceMutation,
+} from "../../RtkQuery/Slice/Accounting/AccountingApi";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-SY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
@@ -199,69 +210,254 @@ const SettleAdvanceForm = ({ entityName, outstandingBalance, cashboxAccounts, on
   );
 };
 
-const AdvancesHistoryTable = ({ rows, isFetching, nameKey, emptyLabel, onSettle, isSettleLoading }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full text-sm text-center">
-      <thead>
-        <tr className="border-b border-border text-muted-foreground">
-          <th className="p-2 text-center">الاسم</th>
-          <th className="p-2 text-center">المبلغ الأصلي</th>
-          <th className="p-2 text-center">المتبقي</th>
-          <th className="p-2 text-center">ملاحظات</th>
-          <th className="p-2 text-center">التاريخ</th>
-          <th className="p-2 text-center">إجراءات</th>
-        </tr>
-      </thead>
-      <tbody>
-        {isFetching && (
-          <tr>
-            <td colSpan={6} className="p-4 text-center text-muted-foreground">
-              جارٍ التحميل...
-            </td>
+/**
+ * تعديل سلفة: الملاحظات دائمًا، والمبلغ فقط إن لم تُخصم منها أي دفعة ولم تُلغَ
+ * (الخادم يعكس سند المنح القديم ويُنشئ سندًا جديدًا بالمبلغ الجديد).
+ */
+const EditAdvanceDialog = ({ target, onClose }) => {
+  const { row, kind } = target || {};
+  const [amount, setAmount] = useState(String(row?.amount ?? ""));
+  const [notes, setNotes] = useState(row?.notes || "");
+  const [updateEmployee, { isLoading: l1 }] = useUpdateEmployeeAdvanceMutation();
+  const [updateSupplier, { isLoading: l2 }] = useUpdateSupplierAdvanceMutation();
+  const amountLocked = Boolean(row?.is_cancelled) || Number(row?.deducted_total || 0) > 0;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const body = { id: row.id, notes };
+    if (!amountLocked && Number(amount) !== Number(row.amount)) body.amount = Number(amount);
+    try {
+      await (kind === "employee" ? updateEmployee : updateSupplier)(body).unwrap();
+      toast.success("تم تعديل السلفة");
+      onClose();
+    } catch (err) {
+      toast.error(err?.data?.message || "فشل تعديل السلفة");
+    }
+  };
+
+  return (
+    <Dialog open={Boolean(row)} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl">
+        <DialogHeader>
+          <DialogTitle>تعديل السلفة</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>المبلغ</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              disabled={amountLocked}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
+            {amountLocked ? (
+              <p className="text-xs text-muted-foreground">
+                لا يمكن تغيير المبلغ لسلفة ملغاة أو خُصم منها شيء.
+              </p>
+            ) : (
+              <p className="text-xs text-amber-700">
+                تغيير المبلغ يعكس سند المنح القديم وينشئ سند منح جديدًا (الدفتر لا يُعدَّل مباشرة).
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>ملاحظات</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
+            <Button type="submit" disabled={l1 || l2}>{l1 || l2 ? "جارٍ الحفظ..." : "حفظ"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const DEDUCTION_TYPE_LABELS = {
+  salary: "خصم من راتب",
+  purchase: "خصم من فاتورة شراء",
+  settlement: "تحصيل نقدي",
+};
+
+const entryStatusBadge = (status) =>
+  status === "pending" ? (
+    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+      بانتظار التوثيق/الترحيل
+    </span>
+  ) : null;
+
+/**
+ * سجل السلف: الأصلي، المخصوم (من راتب/فاتورة/تحصيل)، المتبقي الفعلي، والحالة -
+ * مع تفصيل كل خصم (متى وكم ومن أي قيد/فاتورة). المتبقي = الأصلي - المخصوم،
+ * ويعود تلقائيًا عند عكس/إلغاء قيد الراتب أو حذف الفاتورة (راجع الباك-إند).
+ */
+const AdvancesHistoryTable = ({ rows, isFetching, nameKey, emptyLabel, onSettle, isSettleLoading, onEdit, onDelete }) => {
+  const [expandedId, setExpandedId] = useState(null);
+  const colSpan = 8;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm text-center min-w-[760px]">
+        <thead>
+          <tr className="border-b border-border text-muted-foreground">
+            <th className="p-2 text-center">الاسم</th>
+            <th className="p-2 text-center">المبلغ الأصلي</th>
+            <th className="p-2 text-center">المخصوم</th>
+            <th className="p-2 text-center">المتبقي</th>
+            <th className="p-2 text-center">الحالة</th>
+            <th className="p-2 text-center">ملاحظات</th>
+            <th className="p-2 text-center">التاريخ</th>
+            <th className="p-2 text-center">إجراءات</th>
           </tr>
-        )}
-        {!isFetching && (rows ?? []).length === 0 && (
-          <tr>
-            <td colSpan={6} className="p-4 text-center text-muted-foreground">
-              {emptyLabel}
-            </td>
-          </tr>
-        )}
-        {(rows ?? []).map((r) => (
-          <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30">
-            <td className="p-2 text-center">{r[nameKey] || "-"}</td>
-            <td className="p-2 font-mono text-center">{fmt(r.amount)}</td>
-            <td
-              className={`p-2 font-mono text-center ${
-                Number(r.remaining_balance) > 0 ? "text-amber-600 font-semibold" : "text-muted-foreground"
-              }`}
-            >
-              {fmt(r.remaining_balance)}
-            </td>
-            <td className="p-2 text-xs text-muted-foreground text-center">{r.notes || "-"}</td>
-            <td className="p-2 text-xs text-center">
-              {r.created_at ? new Date(r.created_at).toLocaleDateString("ar-SY") : "-"}
-            </td>
-            <td className="p-2 text-center">
-              {Number(r.remaining_balance) > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  disabled={isSettleLoading}
-                  onClick={() => onSettle(r)}
-                >
-                  <Icon icon="mdi:cash-check" className="w-3.5 h-3.5 ml-1" />
-                  تحصيل / تسوية
-                </Button>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+        </thead>
+        <tbody>
+          {isFetching && (
+            <tr>
+              <td colSpan={colSpan} className="p-4 text-center text-muted-foreground">
+                جارٍ التحميل...
+              </td>
+            </tr>
+          )}
+          {!isFetching && (rows ?? []).length === 0 && (
+            <tr>
+              <td colSpan={colSpan} className="p-4 text-center text-muted-foreground">
+                {emptyLabel}
+              </td>
+            </tr>
+          )}
+          {(rows ?? []).map((r) => {
+            const remaining = Number(r.remaining_balance || 0);
+            const deductions = Array.isArray(r.deductions) ? r.deductions : [];
+            const isOpen = expandedId === r.id;
+            return (
+              <React.Fragment key={r.id}>
+                <tr className={`border-b border-border/50 hover:bg-muted/30 ${r.is_cancelled ? "opacity-60" : ""}`}>
+                  <td className="p-2 text-center">{r[nameKey] || "-"}</td>
+                  <td className="p-2 font-mono text-center">{fmt(r.amount)}</td>
+                  <td className="p-2 font-mono text-center">
+                    {Number(r.deducted_total) > 0 ? (
+                      <button
+                        type="button"
+                        className="underline decoration-dotted text-primary"
+                        onClick={() => setExpandedId(isOpen ? null : r.id)}
+                        title="عرض تفاصيل الخصم"
+                      >
+                        {fmt(r.deducted_total)} ({deductions.length})
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">{fmt(0)}</span>
+                    )}
+                  </td>
+                  <td
+                    className={`p-2 font-mono text-center ${
+                      remaining > 0 && !r.is_cancelled ? "text-amber-600 font-semibold" : "text-muted-foreground"
+                    }`}
+                  >
+                    {fmt(remaining)}
+                  </td>
+                  <td className="p-2 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      {r.is_cancelled ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                          ملغاة (عُكس سند المنح)
+                        </span>
+                      ) : remaining <= 0 ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">
+                          مسدَّدة بالكامل
+                        </span>
+                      ) : Number(r.deducted_total) > 0 ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200">
+                          مسدَّدة جزئيًا
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                          قائمة
+                        </span>
+                      )}
+                      {!r.is_cancelled && entryStatusBadge(r.given_entry_status)}
+                    </div>
+                  </td>
+                  <td className="p-2 text-xs text-muted-foreground text-center">{r.notes || "-"}</td>
+                  <td className="p-2 text-xs text-center">
+                    {r.created_at ? new Date(r.created_at).toLocaleDateString("ar-SY") : "-"}
+                  </td>
+                  <td className="p-2 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                    {onEdit && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="تعديل" onClick={() => onEdit(r)}>
+                        <Icon icon="mdi:pencil-outline" className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {onDelete && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        title="حذف نهائي (بيانات تجريبية)"
+                        onClick={() => onDelete(r)}
+                      >
+                        <Icon icon="mdi:trash-can-outline" className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {remaining > 0 && !r.is_cancelled && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={isSettleLoading}
+                        onClick={() => onSettle(r)}
+                      >
+                        <Icon icon="mdi:cash-check" className="w-3.5 h-3.5 ml-1" />
+                        تحصيل / تسوية
+                      </Button>
+                    )}
+                    </div>
+                  </td>
+                </tr>
+                {isOpen && deductions.length > 0 && (
+                  <tr className="bg-muted/20 border-b border-border/50">
+                    <td colSpan={colSpan} className="p-3">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-muted-foreground">
+                            <th className="p-1 text-right">التاريخ</th>
+                            <th className="p-1 text-right">النوع</th>
+                            <th className="p-1 text-right">القيد / الفاتورة</th>
+                            <th className="p-1 text-right">البيان</th>
+                            <th className="p-1 text-left">المبلغ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {deductions.map((d) => (
+                            <tr key={d.id} className="border-t border-border/40">
+                              <td className="p-1 text-right">{d.date || "-"}</td>
+                              <td className="p-1 text-right">{DEDUCTION_TYPE_LABELS[d.type] || d.type}</td>
+                              <td className="p-1 text-right">
+                                {d.entry_number || (d.journal_entry_id ? `#${d.journal_entry_id}` : "-")}
+                                {d.purchase_invoice_number ? ` · فاتورة ${d.purchase_invoice_number}` : ""}{" "}
+                                {entryStatusBadge(d.entry_status)}
+                              </td>
+                              <td className="p-1 text-right text-muted-foreground">{d.description || "-"}</td>
+                              <td className="p-1 text-left font-mono">{fmt(d.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 /**
  * سلف الموظفين والموردين - كل سلفة تُخصَم تلقائيًا (FIFO) من أول راتب/فاتورة
@@ -283,6 +479,7 @@ const AdvancesTab = ({ accounting }) => {
     suppliers,
     selectableAccounts,
     employeeAdvances,
+    employeeAdvancesTotalOutstanding,
     isFetchingEmployeeAdvances,
     giveEmployeeAdvance,
     isGivingEmployeeAdvance,
@@ -290,6 +487,7 @@ const AdvancesTab = ({ accounting }) => {
     settleEmployeeAdvance,
     isSettlingEmployeeAdvance,
     supplierAdvances,
+    supplierAdvancesTotalOutstanding,
     isFetchingSupplierAdvances,
     giveSupplierAdvance,
     isGivingSupplierAdvance,
@@ -303,6 +501,12 @@ const AdvancesTab = ({ accounting }) => {
   const [settleEmployeeTarget, setSettleEmployeeTarget] = useState(null); // { id, name, outstanding }
   const [settleSupplierTarget, setSettleSupplierTarget] = useState(null);
   const [isLoadingSettleTarget, setIsLoadingSettleTarget] = useState(false);
+  const { hasRole, hasPermission } = useAuth();
+  const isSuper = hasRole("super admin");
+  const canEdit = isSuper || hasPermission("edit-financials");
+  const canHardDelete = isSuper || hasPermission("delete-financials");
+  const [editTarget, setEditTarget] = useState(null); // { kind, row }
+  const [deleteTarget, setDeleteTarget] = useState(null); // { kind, row }
 
   const cashboxAccounts = (selectableAccounts ?? []).filter((a) => a.is_cash_account);
   const employeeOptions = (payrollEmployees ?? []).map((e) => ({ id: e.id, name: e.name }));
@@ -310,6 +514,16 @@ const AdvancesTab = ({ accounting }) => {
 
   const employeeRows = (employeeAdvances ?? []).map((a) => ({ ...a, employee_name: a.user_name }));
   const supplierRows = (supplierAdvances ?? []).map((a) => ({ ...a, entity_name: a.supplier_name }));
+
+  // طلب صريح: "اظهار متبقي السلف" - إجمالي مباشر أعلى كل قائمة، بدل
+  // الاضطرار لجمع عمود "المتبقي" يدويًا سطرًا سطرًا. مجموع بسيط لكل الصفحة
+  // الحالية المحمَّلة فعليًا (نفس بيانات الجدول أسفله تمامًا، بلا استعلام
+  // إضافي).
+  // الإجمالي من الخادم (كل الصفحات، بلا الملغاة) - وإلا مجموع الصفحة المعروضة.
+  const pageRemaining = (rows) =>
+    rows.reduce((sum, r) => sum + (r.is_cancelled ? 0 : Number(r.remaining_balance || 0)), 0);
+  const totalEmployeeRemaining = employeeAdvancesTotalOutstanding ?? pageRemaining(employeeRows);
+  const totalSupplierRemaining = supplierAdvancesTotalOutstanding ?? pageRemaining(supplierRows);
 
   const openSettleEmployee = async (row) => {
     setIsLoadingSettleTarget(true);
@@ -338,12 +552,19 @@ const AdvancesTab = ({ accounting }) => {
   return (
     <div className="space-y-4">
       <div className="border border-border rounded-lg bg-card">
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-wrap gap-2">
           <h3 className="font-semibold">سلف الموظفين</h3>
-          <Button size="sm" onClick={() => setEmployeeDialogOpen(true)}>
-            <Icon icon="mdi:hand-coin-outline" className="w-4 h-4 ml-1" />
-            منح سلفة موظف
-          </Button>
+          <div className="flex items-center gap-3">
+            {totalEmployeeRemaining > 0 && (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 font-mono">
+                إجمالي المتبقي: {fmt(totalEmployeeRemaining)}
+              </span>
+            )}
+            <Button size="sm" onClick={() => setEmployeeDialogOpen(true)}>
+              <Icon icon="mdi:hand-coin-outline" className="w-4 h-4 ml-1" />
+              منح سلفة موظف
+            </Button>
+          </div>
         </div>
         <AdvancesHistoryTable
           rows={employeeRows}
@@ -352,16 +573,25 @@ const AdvancesTab = ({ accounting }) => {
           emptyLabel="لا يوجد سلف موظفين بعد"
           onSettle={openSettleEmployee}
           isSettleLoading={isLoadingSettleTarget}
+          onEdit={canEdit ? (row) => setEditTarget({ kind: "employee", row }) : undefined}
+          onDelete={canHardDelete ? (row) => setDeleteTarget({ kind: "employee", row }) : undefined}
         />
       </div>
 
       <div className="border border-border rounded-lg bg-card">
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-wrap gap-2">
           <h3 className="font-semibold">سلف الموردين</h3>
-          <Button size="sm" onClick={() => setSupplierDialogOpen(true)}>
-            <Icon icon="mdi:truck-fast-outline" className="w-4 h-4 ml-1" />
-            منح سلفة مورد
-          </Button>
+          <div className="flex items-center gap-3">
+            {totalSupplierRemaining > 0 && (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 font-mono">
+                إجمالي المتبقي: {fmt(totalSupplierRemaining)}
+              </span>
+            )}
+            <Button size="sm" onClick={() => setSupplierDialogOpen(true)}>
+              <Icon icon="mdi:truck-fast-outline" className="w-4 h-4 ml-1" />
+              منح سلفة مورد
+            </Button>
+          </div>
         </div>
         <AdvancesHistoryTable
           rows={supplierRows}
@@ -370,8 +600,31 @@ const AdvancesTab = ({ accounting }) => {
           emptyLabel="لا يوجد سلف موردين بعد"
           onSettle={openSettleSupplier}
           isSettleLoading={isLoadingSettleTarget}
+          onEdit={canEdit ? (row) => setEditTarget({ kind: "supplier", row }) : undefined}
+          onDelete={canHardDelete ? (row) => setDeleteTarget({ kind: "supplier", row }) : undefined}
         />
       </div>
+
+      {editTarget && (
+        <EditAdvanceDialog key={`${editTarget.kind}-${editTarget.row.id}`} target={editTarget} onClose={() => setEditTarget(null)} />
+      )}
+
+      <HardDeleteDialog
+        open={deleteTarget?.kind === "employee"}
+        onClose={() => setDeleteTarget(null)}
+        id={deleteTarget?.row?.id}
+        title="حذف نهائي - سلفة موظف"
+        usePreviewLazy={useLazyPreviewDeleteEmployeeAdvanceQuery}
+        useDelete={useDeleteEmployeeAdvanceMutation}
+      />
+      <HardDeleteDialog
+        open={deleteTarget?.kind === "supplier"}
+        onClose={() => setDeleteTarget(null)}
+        id={deleteTarget?.row?.id}
+        title="حذف نهائي - سلفة مورد"
+        usePreviewLazy={useLazyPreviewDeleteSupplierAdvanceQuery}
+        useDelete={useDeleteSupplierAdvanceMutation}
+      />
 
       <Dialog open={employeeDialogOpen} onOpenChange={setEmployeeDialogOpen}>
         <DialogContent>

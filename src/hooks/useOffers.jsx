@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import {
   useGetOffersQuery,
   useCreateOfferMutation,
+  useUpdateOfferMutation,
   useDeleteOfferMutation,
 } from "../RtkQuery/Slice/Offers/offersApiSlice";
 import toast from "react-hot-toast";
@@ -13,10 +14,13 @@ export const useOffers = (initialParams = {}) => {
     search: "",
     active: "",
     expired: "",
+    work_type_id: "",
     ...initialParams,
   });
 
   const [showModal, setShowModal] = useState(false);
+  // ← أضيف: العرض الجاري تعديله (null = وضع إضافة عرض جديد)
+  const [editingOffer, setEditingOffer] = useState(null);
 
   // Fetch offers
   const {
@@ -31,6 +35,7 @@ export const useOffers = (initialParams = {}) => {
 
   // Mutations
   const [createOffer, { isLoading: isCreating }] = useCreateOfferMutation();
+  const [updateOffer, { isLoading: isUpdating }] = useUpdateOfferMutation();
   const [deleteOffer, { isLoading: isDeleting }] = useDeleteOfferMutation();
 
   // ===== FILTER HANDLERS =====
@@ -49,6 +54,12 @@ export const useOffers = (initialParams = {}) => {
     setParams((prev) => ({ ...prev, expired: value, page: 1 }));
   }, []);
 
+  // ← أضيف: فلترة العروض حسب نوع العمل، حتى يقدر المستخدم يرجع للعروض
+  // اللي عملها لفئة معيّنة من الزبائن (طلب صريح).
+  const handleWorkTypeFilter = useCallback((workTypeId) => {
+    setParams((prev) => ({ ...prev, work_type_id: workTypeId, page: 1 }));
+  }, []);
+
   const clearFilters = useCallback(() => {
     setParams({
       page: 1,
@@ -56,17 +67,26 @@ export const useOffers = (initialParams = {}) => {
       search: "",
       active: "",
       expired: "",
+      work_type_id: "",
     });
   }, []);
 
   // ===== MODAL HANDLERS =====
 
   const openCreateModal = useCallback(() => {
+    setEditingOffer(null);
+    setShowModal(true);
+  }, []);
+
+  // ← أضيف: فتح المودال بوضع التعديل (يشمل إعادة تفعيل عرض منتهي)
+  const openEditModal = useCallback((offer) => {
+    setEditingOffer(offer);
     setShowModal(true);
   }, []);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
+    setEditingOffer(null);
   }, []);
 
   // ===== SUBMIT & DELETE =====
@@ -74,8 +94,13 @@ export const useOffers = (initialParams = {}) => {
   const handleSubmit = useCallback(
     async (formData) => {
       try {
-        await createOffer(formData).unwrap();
-        toast.success("تم إنشاء العرض بنجاح");
+        if (editingOffer) {
+          await updateOffer({ id: editingOffer.id, ...formData }).unwrap();
+          toast.success("تم تعديل العرض بنجاح");
+        } else {
+          await createOffer(formData).unwrap();
+          toast.success("تم إنشاء العرض بنجاح");
+        }
         closeModal();
         refetch();
         return { success: true };
@@ -85,7 +110,28 @@ export const useOffers = (initialParams = {}) => {
         return { success: false, error: errorMessage };
       }
     },
-    [createOffer, closeModal, refetch]
+    [createOffer, updateOffer, editingOffer, closeModal, refetch]
+  );
+
+  // ← أضيف: تفعيل/تعطيل العرض مباشرة من الجدول (بدون فتح المودال) -
+  // "يا بفعلو نفسو" من الطلب الأصلي.
+  const handleToggleStatus = useCallback(
+    async (offer) => {
+      const newStatus = offer.status === "active" ? "expired" : "active";
+      try {
+        await updateOffer({ id: offer.id, status: newStatus }).unwrap();
+        toast.success(
+          newStatus === "active" ? "تم تفعيل العرض بنجاح" : "تم تعطيل العرض بنجاح"
+        );
+        refetch();
+        return { success: true };
+      } catch (err) {
+        const errorMessage = err?.data?.message || "فشل في تغيير حالة العرض";
+        toast.error(errorMessage);
+        return { success: false, error: errorMessage };
+      }
+    },
+    [updateOffer, refetch]
   );
 
   const handleDelete = useCallback(
@@ -115,24 +161,30 @@ export const useOffers = (initialParams = {}) => {
 
     // Modal state
     showModal,
-    isSubmitting: isCreating,
+    editingOffer,
+    isSubmitting: isCreating || isUpdating,
+    isTogglingStatus: isUpdating,
 
     // Filter state
     filters: {
       search: params.search,
       active: params.active,
       expired: params.expired,
+      work_type_id: params.work_type_id,
     },
 
     // Actions
     setShowModal,
     openCreateModal,
+    openEditModal,
     closeModal,
     handleSubmit,
     handleDelete,
+    handleToggleStatus,
     handleSearch,
     handleActiveFilter,
     handleExpiredFilter,
+    handleWorkTypeFilter,
     clearFilters,
     refetch,
   };

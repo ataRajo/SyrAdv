@@ -47,6 +47,8 @@ const MoveSignDialog = ({
   const [isRoadSignsFetching, setIsRoadSignsFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSignDetails, setSelectedSignDetails] = useState(null);
+  // يزيد عند الضغط على «تحديث» أو دوريًا/عند العودة للتبويب فتُعاد جلب القائمة من السيرفر.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Helper functions to safely extract values from objects
   const getAreaName = (sign) => {
@@ -76,11 +78,25 @@ const MoveSignDialog = ({
     return region || 'غير محدد';
   };
 
-  // ✅ Matches the real API field: sign.is_booked (boolean), not a "status" enum
-  const isSignBooked = (sign) => !!sign?.is_booked;
+  // ✅ الحجز ضمن فترة التمديد نفسها: السيرفر يحسب is_booked_in_period بنفس منطق التوفر
+  // المعتمد عند الحجز (حجوزات دائمة، غير مؤرشفة، تقاطع صارم على تواريخ اللوحة).
+  // is_booked القديم يعني «يوجد حجز ساري اليوم أو أي حجز مستقبلي» فكان يُظهر لوحات
+  // متاحة فعليًا في فترة التمديد على أنها محجوزة ضمن عقد آخر - لذلك هو مجرد احتياط
+  // لو لم يرجع الحقل الجديد.
+  const isSignBooked = (sign) =>
+    typeof sign?.is_booked_in_period === "boolean" ? sign.is_booked_in_period : !!sign?.is_booked;
 
-  // ✅ Matches the real API shape: bookings[].customer.company_name, bookings[].pivot.start_date/end_date
+  // ✅ تفاصيل الحجز المتعارض ضمن الفترة (period_bookings من السيرفر)، وإلا الشكل القديم bookings[]
   const getActiveBookingInfo = (sign) => {
+    const periodBooking = sign?.period_bookings?.[0];
+    if (periodBooking) {
+      const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-EG') : null);
+      return {
+        customer: periodBooking.customer || null,
+        startDate: fmt(periodBooking.start_date),
+        endDate: fmt(periodBooking.end_date),
+      };
+    }
     if (!sign?.bookings?.length) return null;
     const activeBooking = sign.bookings[0];
     return {
@@ -119,6 +135,22 @@ const MoveSignDialog = ({
     date.setDate(date.getDate() + 1);
     return formatDate(date);
   };
+
+  // تحديث دوري للقائمة طالما النافذة مفتوحة (كل 5 دقائق) وعند العودة للتبويب، كي لا تبقى
+  // حالة «محجوزة/متاحة» قديمة إن تغيّر شيء في الحجوزات أثناء فتح الصفحة.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const bump = () => setReloadKey((k) => k + 1);
+    const timer = setInterval(bump, 5 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") bump();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isOpen]);
 
   // Resolve the current sign being moved, and fetch same-size signs from the API
   useEffect(() => {
@@ -193,7 +225,7 @@ const MoveSignDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, currentMoveSignId, booking?.roadsigns, booking?.end_date, newEndDate]);
+  }, [isOpen, currentMoveSignId, booking?.roadsigns, booking?.end_date, newEndDate, reloadKey]);
 
   // ✅ Uses the real is_booked field instead of a non-existent "status"
   const hasActiveBookings = useMemo(() => {
@@ -374,7 +406,16 @@ const MoveSignDialog = ({
                 <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   اختر اللوحة البديلة:
                 </Label>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReloadKey((k) => k + 1)}
+                    disabled={isRoadSignsFetching}
+                    className="px-2 py-0.5 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                    title="تحديث حالة اللوحات من السيرفر"
+                  >
+                    ⟳ تحديث
+                  </button>
                   {isRoadSignsFetching ? (
                     <span className="flex items-center gap-1">
                       <span className="animate-spin">⟳</span>

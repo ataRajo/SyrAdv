@@ -27,5 +27,6 @@ export const userValidationSchema = Yup.object({
     .typeError("الراتب يجب أن يكون رقمًا")
     .positive("الراتب يجب أن يكون أكبر من صفر")
     .nullable(),
+  salary_type: Yup.string().oneOf(["monthly", "weekly", "daily", ""], "نوع الراتب غير صالح").nullable(),
 
 });

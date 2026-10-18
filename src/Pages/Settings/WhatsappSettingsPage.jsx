@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
 import {
@@ -28,6 +28,24 @@ const PLACEHOLDERS_BY_KEY = {
   after_dismantle_thank_you: ["{customer_name}", "{booking_number}"],
   bulk_welcome_default: ["{customer_name}"],
   bulk_offer_default: ["{customer_name}"],
+  // رسالة للزبون عند إضافة دفعة باسمه (SendWhatsappPaymentNotification)
+  payment_received: [
+    "{customer_name}",
+    "{payment_number}",
+    "{paid}",
+    "{remaining}",
+    "{date}",
+  ],
+  // رسالة للزبون عند إنشاء عقد مؤقت (SendWhatsappBookingNotification)
+  temporary_booking_created: [
+    "{customer_name}",
+    "{booking_number}",
+    "{start_date}",
+    "{end_date}",
+    "{duration_days}",
+    "{roadsigns_count}",
+    "{map_link}",
+  ],
 };
 
 const SettingRow = ({ setting }) => {
@@ -35,6 +53,7 @@ const SettingRow = ({ setting }) => {
   const [template, setTemplate] = useState(setting.template || "");
   const [leadDays, setLeadDays] = useState(setting.lead_days ?? "");
   const [updateSetting, { isLoading }] = useUpdateWhatsappSettingMutation();
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     setEnabled(setting.enabled);
@@ -62,13 +81,27 @@ const SettingRow = ({ setting }) => {
 
   const placeholders = PLACEHOLDERS_BY_KEY[setting.key] || [];
 
+  // النقر على متغيّر يدرجه في مكان المؤشر داخل نص الرسالة.
+  const insertPlaceholder = (placeholder) => {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? template.length;
+    const end = el?.selectionEnd ?? template.length;
+    setTemplate(template.slice(0, start) + placeholder + template.slice(end));
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const pos = start + placeholder.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
   return (
-    <div className="border rounded-lg p-4 space-y-3 bg-white shadow-sm">
+    <div className="border border-border rounded-lg p-4 space-y-3 bg-card text-card-foreground shadow-sm">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h3 className="font-semibold text-lg text-gray-800">{setting.label}</h3>
+        <h3 className="font-semibold text-lg text-foreground">{setting.label}</h3>
 
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-muted-foreground">
             {enabled ? "مُفعَّلة" : "معطَّلة"}
           </span>
           <input
@@ -83,28 +116,32 @@ const SettingRow = ({ setting }) => {
       {placeholders.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {placeholders.map((p) => (
-            <span
+            <button
+              type="button"
               key={p}
-              className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono"
+              onClick={() => insertPlaceholder(p)}
+              title="انقر لإدراجه في النص"
+              className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded font-mono hover:bg-green-100 hover:text-green-800 transition"
             >
               {p}
-            </span>
+            </button>
           ))}
         </div>
       )}
 
       <textarea
+        ref={textareaRef}
         value={template}
         onChange={(e) => setTemplate(e.target.value)}
         rows={4}
         dir="rtl"
-        className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        className="w-full border border-border rounded-md p-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-green-500"
         placeholder="نص الرسالة..."
       />
 
       {setting.key === "before_expiry_reminder" && (
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600 whitespace-nowrap">
+          <label className="text-sm text-muted-foreground whitespace-nowrap">
             عدد أيام التذكير قبل نهاية العقد:
           </label>
           <input
@@ -112,7 +149,7 @@ const SettingRow = ({ setting }) => {
             min={1}
             value={leadDays}
             onChange={(e) => setLeadDays(e.target.value)}
-            className="w-24 border rounded-md p-1 text-sm"
+            className="w-24 border border-border rounded-md p-1 text-sm bg-background text-foreground"
           />
         </div>
       )}
@@ -139,7 +176,7 @@ const WhatsappSettingsPage = () => {
     return (
       <div className="w-full h-full flex flex-col justify-center items-center p-10">
         <Icon icon="mdi:loading" className="animate-spin text-green-600" width={32} />
-        <p className="mt-2 text-gray-600">جاري التحميل...</p>
+        <p className="mt-2 text-muted-foreground">جاري التحميل...</p>
       </div>
     );
   }
@@ -147,25 +184,25 @@ const WhatsappSettingsPage = () => {
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Icon icon="mdi:whatsapp" className="text-green-600" width={28} />
           إعدادات إشعارات واتساب
         </h1>
         <button
           onClick={() => refetch()}
-          className="text-sm text-gray-500 flex items-center gap-1 hover:text-gray-700"
+          className="text-sm text-muted-foreground flex items-center gap-1 hover:text-foreground"
         >
           <Icon icon="mdi:refresh" className={isFetching ? "animate-spin" : ""} width={18} />
           تحديث
         </button>
       </div>
 
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-muted-foreground">
         تحكّم بتفعيل أو تعطيل كل نوع رسالة واتساب تلقائية، وعدّل نصها مباشرة دون الحاجة لنشر كود جديد.
       </p>
 
       {settings.length === 0 ? (
-        <p className="text-gray-500 text-sm">
+        <p className="text-muted-foreground text-sm">
           لا توجد إعدادات بعد - يجب تشغيل seeder الإعدادات الافتراضية أولًا (WhatsappNotificationSettingSeeder).
         </p>
       ) : (

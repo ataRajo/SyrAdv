@@ -1,5 +1,5 @@
 // src/pages/CustomersPage.jsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import CustomersContainer from "../../Components/Customers/CustomersContainer";
 import HeaderComponent from "../../utils/HeaderComponent";
 
@@ -11,9 +11,12 @@ import CustomerFormDialog from "./CustomerFormDialog";
 import { Toaster } from "react-hot-toast";
 import useCustomers from "../../hooks/useCustomers";
 import { useGetWorkTypesQuery } from "../../RtkQuery/Slice/WorkTypesApi/WorkTypesApi";
+import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
 import { Icon } from "@iconify/react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { showToast } from "../../utils/Notifictions/showToast";  // adjust path
+import { fetchAllPages } from "../../utils/export/fetchAllPages";
 
 
 const STATUS_OPTIONS = [
@@ -38,10 +41,26 @@ const CustomersPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
 const [currentPage, setCurrentPage] = useState(1);
 const [itemsPerPage, setItemsPerPage] = useState(10);
+  // بحث من الخادم (اسم/شركة/هاتف/بريد/رقم) مع debounce - كان البحث يُرسَل
+  // للخادم لكنه يُتجاهَل هناك، ثم يُفلتَر محليًا على الصفحة المعروضة فقط.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
 
-  // Fetch work types for dropdown
+  // Fetch work types (تُستخدم كتابات فوق قائمة الزبائن - "الكل" + كل نوع عمل)
   const { data: workTypesData, isLoading: isWorkTypesLoading } = useGetWorkTypesQuery();
+
+  // ← أضيف: العدد الكلي للزبائن بدون أي فلترة، ليظهر جنب تابة "الكل"
+  // (نفس صلاحيات الرؤية المطبّقة على القائمة الرئيسية عبر status/work_type_id
+  // تُطبَّق هنا أيضًا لأنه نفس الـ endpoint، فقط بلا فلاتر وبأقل بيانات ممكنة).
+  const { data: allCustomersMeta } = useGetCustomersQuery({ page: 1, per_page: 1 });
+  const totalCustomersCount = allCustomersMeta?.total ?? 0;
 
   // Pass filters to API
   const {
@@ -58,24 +77,27 @@ const [itemsPerPage, setItemsPerPage] = useState(10);
     filters: {
       status: statusFilter || undefined,
       work_type_id: workTypeFilter || undefined,
-      search: searchQuery || undefined,
+      search: debouncedSearch || undefined,
       page:currentPage , 
       per_page:itemsPerPage
     },
   });
 
+  // كل الزبائن (لا الصفحة المعروضة فقط) بنفس الفلاتر - للتصدير PDF/Excel.
+  const exportAllCustomers = () =>
+    fetchAllPages("/customers", {
+      status: statusFilter || undefined,
+      work_type_id: workTypeFilter || undefined,
+      search: debouncedSearch || undefined,
+    });
+
   // Local filtering for search (client-side)
+  // البحث يتم من الخادم الآن - لا فلترة محلية إضافية (كانت تُخفي نتائج
+  // مطابقة بالشركة/الهاتف لأنها تفحص الاسم الكامل فقط).
   const filteredData = useMemo(() => {
     if (!isSuccess || !customers) return [];
-    let result = customers;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((c) =>
-        (c.full_name || c.fullName || "").toLowerCase().includes(q)
-      );
-    }
-    return result;
-  }, [customers, isSuccess, searchQuery]);
+    return customers;
+  }, [customers, isSuccess]);
 
   const workTypes = workTypesData?.data || [];
 
@@ -91,20 +113,25 @@ const [itemsPerPage, setItemsPerPage] = useState(10);
       <div className="p-4" dir="rtl">
         {/* Export Buttons */}
         <div className="my-2 flex gap-3 justify-between items-center">
+          {/* ⚠️ FIXED: الملف كان يخرج فارغًا (القائمة مُرقَّمة لا مصفوفة) -
+              loadData يجلب كل الزبائن (كل الصفحات) بنفس الفلاتر الحالية. */}
           <InvoicePdf
-            howCustomerTable={false}
+            showCustomerTable={false}
             customer={customers}
             showCustomerRemainingTable={true}
+            title="كشف الزبائن"
+            loadData={exportAllCustomers}
           />
           <InvoiceExcel
-            howCustomerTable={false}
+            showCustomerTable={false}
             customer={customers}
             showCustomerRemainingTable={true}
+            loadData={exportAllCustomers}
           />
         </div>
 
         {/* Filters Section */}
-        <div className="my-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="my-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Search by Name */}
           <div className="relative">
             <Icon
@@ -113,7 +140,7 @@ const [itemsPerPage, setItemsPerPage] = useState(10);
             />
             <input
               type="text"
-              placeholder="ابحث عن الزبون باسم المستخدم"
+              placeholder="ابحث بالاسم أو الشركة أو الهاتف أو البريد أو الرقم"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full p-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
@@ -146,40 +173,71 @@ const [itemsPerPage, setItemsPerPage] = useState(10);
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
             />
           </div>
+        </div>
 
-          {/* Filter by Work Type */}
-          <div className="relative">
-            <select
-              value={workTypeFilter}
-              onChange={(e) => setWorkTypeFilter(e.target.value)}
-              disabled={isWorkTypesLoading}
-              className="w-full p-2 pl-8 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+        {/* تابات نوع العمل - متل تابات الحجوزات: "الكل" مع العدد الكلي،
+            وجنب كل نوع عمل عدد الزبائن فيه. الضغط على تابة يفلتر الجدول
+            تحت مباشرة بتفاصيل الزبائن الموجودة أصلًا (طلب صريح). */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <Button
+            variant={workTypeFilter === "" ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setWorkTypeFilter("");
+              setCurrentPage(1);
+            }}
+            className={`px-3 gap-2 ${workTypeFilter === "" ? "bg-blue-600 text-white" : ""}`}
+          >
+            <Icon icon="mdi:view-list" />
+            الكل
+            <Badge
+              variant="secondary"
+              className={
+                workTypeFilter === ""
+                  ? "bg-white/20 text-white"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+              }
             >
-              <option
-                value=""
-                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              >
-                جميع أنواع العمل
-              </option>
-              {workTypes.map((wt) => (
-                <option
+              {totalCustomersCount}
+            </Badge>
+          </Button>
+
+          {isWorkTypesLoading ? (
+            <span className="text-sm text-gray-500 dark:text-gray-400">جاري تحميل أنواع العمل...</span>
+          ) : (
+            workTypes.map((wt) => {
+              const isActive = workTypeFilter === String(wt.id);
+              return (
+                <Button
                   key={wt.id}
-                  value={wt.id}
-                  className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  variant={isActive ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setWorkTypeFilter(String(wt.id));
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 gap-2 ${isActive ? "bg-blue-600 text-white" : ""}`}
                 >
-                  {wt.name || wt.title || `نوع ${wt.type}`}
-                </option>
-              ))}
-            </select>
-            <Icon
-              icon="mdi:chevron-down"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
-            />
-          </div>
+                  <Icon icon="mdi:briefcase-outline" />
+                  {wt.type}
+                  <Badge
+                    variant="secondary"
+                    className={
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    }
+                  >
+                    {wt.count_of_customers ?? 0}
+                  </Badge>
+                </Button>
+              );
+            })
+          )}
         </div>
 
         {/* Active Filters Badges */}
-        {(statusFilter || workTypeFilter || searchQuery) && (
+        {(statusFilter || searchQuery) && (
           <div className="flex flex-wrap gap-2 mb-3">
             {statusFilter !== "" && (
               <Badge
@@ -193,21 +251,6 @@ const [itemsPerPage, setItemsPerPage] = useState(10);
                 <button
                   onClick={() => setStatusFilter("")}
                   className="hover:bg-white/20 rounded-full p-0.5"
-                >
-                  <Icon icon="mdi:close" className="text-xs" />
-                </button>
-              </Badge>
-            )}
-            {workTypeFilter !== "" && (
-              <Badge
-                variant="outline"
-                className="gap-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-              >
-                {workTypes.find((w) => w.id === Number(workTypeFilter))?.name ||
-                  `نوع ${workTypeFilter}`}
-                <button
-                  onClick={() => setWorkTypeFilter("")}
-                  className="hover:bg-blue-100 dark:hover:bg-blue-800 rounded-full p-0.5"
                 >
                   <Icon icon="mdi:close" className="text-xs" />
                 </button>

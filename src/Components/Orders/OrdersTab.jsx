@@ -22,7 +22,6 @@ import { OrderFieldsShow } from "../../utils/Dialogs/Data/Show/OrderFieldsShow";
 import OrderFilters from "./OrderFilters";
 import OrdersHeader from "./OrdersHeader";
 import ExportService from "./OrderExportService";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
 import useMangeOrders from "../../hooks/useMangeOrders";
 
 /* ==================== ثوابت النطاق ==================== */
@@ -520,10 +519,11 @@ const OrdersTab = ({ data, permission, isAdmin }) => {
     regions,
   } = useMangeOrders();
 
-  const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
-    per_page: 1000,
-  });
-  const customersList = customersResponse?.data ?? [];
+  // الزبون المختار فقط (لعرض اسمه وللتصدير) - لم نعد نحمّل 1000 زبون دفعة
+  // واحدة؛ الاختيار يتم ببحث من الخادم داخل OrderFilters (CustomerSearchSelect).
+  const [selectedCustomerObj, setSelectedCustomerObj] = useState(null);
+  const customersList = selectedCustomerObj ? [selectedCustomerObj] : [];
+  const isLoadingCustomers = false;
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -638,13 +638,7 @@ const OrdersTab = ({ data, permission, isAdmin }) => {
   const filteredGroups = useMemo(() => {
     let result = bookingGroups;
 
-    if (orderType) {
-      const typeValue = TYPE_BY_KEY[orderType]?.value ?? Number(orderType);
-      if (Number.isFinite(typeValue)) {
-        result = result.filter((g) => g.ordersByType[typeValue]?.length > 0);
-      }
-    }
-
+    // التصفية بالعميل على مستوى الحجز (العميل ثابت لكل حجز).
     if (selectedCustomerId) {
       const wanted = selectedCustomerId.toString();
       result = result.filter(
@@ -652,33 +646,32 @@ const OrdersTab = ({ data, permission, isAdmin }) => {
       );
     }
 
-    if (cityId) {
-      const wanted = cityId.toString();
-      result = result.filter((g) =>
-        g.allOrders.some((o) => o.road_sign?.city?.id?.toString() === wanted)
-      );
-    }
+    // ⚠️ التصفية بنوع الطلب/المدينة/المنطقة/التاريخ تُطبَّق على مستوى *الطلب*
+    // لا الحجز: سابقًا كان الحجز كله يبقى (بكل أنواع طلباته) لمجرد أن أحد طلباته
+    // يطابق - فيظهر الفك والتركيب معًا عند اختيار "فك". الآن يُحذف كل طلب لا
+    // يطابق، ويُعاد حساب إحصائيات البطاقة، ويختفي الحجز إن لم يبقَ فيه شيء.
+    const typeValue = orderType
+      ? TYPE_BY_KEY[orderType]?.value ?? Number(orderType)
+      : null;
+    const hasTypeFilter = Number.isFinite(typeValue);
 
-    if (regionId) {
-      const wanted = regionId.toString();
-      result = result.filter((g) =>
-        g.allOrders.some((o) => o.road_sign?.region?.id?.toString() === wanted)
-      );
-    }
+    const matchesOrder = (o) => {
+      if (hasTypeFilter && Number(o.type) !== typeValue) return false;
+      if (cityId && o.road_sign?.city?.id?.toString() !== cityId.toString()) return false;
+      if (regionId && o.road_sign?.region?.id?.toString() !== regionId.toString()) return false;
+      if (selectedDate && toDateKey(o.action_date) !== selectedDate) return false;
+      return true;
+    };
 
-    // عند التصفية بتاريخ محدد، تُعرَض فقط طلبات ذلك اليوم داخل كل حجز - لا
-    // كامل طلبات الحجز لمجرد أن أحدها يقع في ذلك التاريخ.
-    if (selectedDate) {
+    if (hasTypeFilter || cityId || regionId || selectedDate) {
       result = result
         .map((g) => {
-          const matchOrders = (list) => list.filter((o) => toDateKey(o.action_date) === selectedDate);
-
-          const allOrders = matchOrders(g.allOrders);
+          const allOrders = g.allOrders.filter(matchesOrder);
           if (allOrders.length === 0) return null;
 
           const ordersByType = {};
           Object.entries(g.ordersByType).forEach(([type, orders]) => {
-            ordersByType[type] = matchOrders(orders);
+            ordersByType[type] = orders.filter(matchesOrder);
           });
 
           const confirmable = allOrders.filter((o) => Number(o.type) !== 4);
@@ -862,6 +855,7 @@ const OrdersTab = ({ data, permission, isAdmin }) => {
         regionId={regionId}
         setRegionId={setRegionId}
         customersList={customersList}
+        onCustomerSelected={setSelectedCustomerObj}
         isLoadingCustomers={isLoadingCustomers}
         cities={cities}
         regions={regions}
@@ -906,7 +900,7 @@ const OrdersTab = ({ data, permission, isAdmin }) => {
         <div className="space-y-4">
           {filteredGroups.map((group) => (
             <BookingCard
-              key={group.key}
+              key={`${group.key}|${orderType || "all"}`}
               group={group}
               todayKey={todayKey}
               canConfirm={canConfirm}

@@ -12,6 +12,7 @@ import ActivityFeedTab from "./ActivityFeedTab";
 import WeeklyReportTab from "./WeeklyReportTab";
 import MyOrdersTab from "./MyOrdersTab";
 import MyAchievementsTab from "./MyAchievementsTab";
+import MaintenanceHoldsTab from "./MaintenanceHoldsTab";
 
 /**
  * نقطة الدخول الوحيدة لنظام الورشات - المحتوى يختلف حسب من يفتحها، ثلاث
@@ -31,18 +32,24 @@ import MyAchievementsTab from "./MyAchievementsTab";
  * مخفي)، لكن معالجة دفاعية هنا أيضًا.
  */
 const WorkshopsPanel = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasRole, user } = useAuth();
   const isSupervisor = hasPermission(Permissions.ViewOrders);
   const isManager = hasPermission(Permissions.ManageWorkshopTeam);
   const isWorker = hasPermission(Permissions.ViewWorkshopOrders);
   const canSeeActivityFeed = isSupervisor || isManager;
+  // تبويب "الصيانة" - صلاحية مستقلة manage-maintenance-holds (طلب صريح:
+  // "صلاحية جديدة تخص الصيانة") أو super admin. المرتبط بورشة يرى ورشته
+  // فقط، ومن بلا ورشة يرى كل الورشات (نفس فحص الباك-إند).
+  const isSuperAdminUser = typeof hasRole === "function" && hasRole("super admin");
+  const canManageMaintenance = isSuperAdminUser || hasPermission(Permissions.ManageMaintenanceHolds);
+  const maintenanceUnrestricted = isSuperAdminUser || (canManageMaintenance && !user?.workshop_id);
 
   // الـ hooks تُستدعى دائمًا بلا شرط (قاعدة React) - كل واحد منها لا
   // يُنفِّذ فعليًا إلا إذا استُهلكت بياناته في التبويبات المعروضة أدناه.
   const workshops = useWorkshops();
   const myWorkshop = useMyWorkshopOrders();
 
-  if (!isSupervisor && !isManager && !isWorker) {
+  if (!isSupervisor && !isManager && !isWorker && !canManageMaintenance) {
     return (
       <div className="p-6 text-center text-muted-foreground" dir="rtl">
         <Icon icon="mdi:lock-outline" className="w-10 h-10 mx-auto mb-2" />
@@ -59,13 +66,23 @@ const WorkshopsPanel = () => {
   const showAchievements = isWorker && !isManager;
 
   const tabCount =
-    (isWorker ? 1 : 0) + (showAchievements ? 1 : 0) + (canSeeActivityFeed ? 1 : 0) + (isSupervisor ? 4 : 0);
-  const defaultTab = isSupervisor ? "activity-feed" : "my-orders";
+    (isWorker ? 1 : 0) +
+    (showAchievements ? 1 : 0) +
+    (canSeeActivityFeed ? 1 : 0) +
+    (isSupervisor ? 4 : 0) +
+    (canManageMaintenance ? 1 : 0);
+  const defaultTab = isSupervisor ? "activity-feed" : isWorker ? "my-orders" : "maintenance";
 
   return (
     <div className="space-y-4 p-4 sm:p-6" dir="rtl">
       <h2 className="text-xl font-bold">
-        {isSupervisor ? "إدارة الورشات" : isManager ? "إدارة فريق ورشتي" : "ورشتي"}
+        {isSupervisor
+          ? "إدارة الورشات"
+          : isManager
+          ? "إدارة فريق ورشتي"
+          : isWorker
+          ? "ورشتي"
+          : "صيانة الورشات"}
       </h2>
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList
@@ -110,6 +127,11 @@ const WorkshopsPanel = () => {
               </TabsTrigger>
             </>
           )}
+          {canManageMaintenance && (
+            <TabsTrigger value="maintenance" className="text-xs md:text-sm font-medium">
+              الصيانة
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {isWorker && (
@@ -146,6 +168,12 @@ const WorkshopsPanel = () => {
               <WeeklyReportTab workshops={workshops} />
             </TabsContent>
           </>
+        )}
+
+        {canManageMaintenance && (
+          <TabsContent value="maintenance" className="mt-4">
+            <MaintenanceHoldsTab unrestricted={maintenanceUnrestricted} />
+          </TabsContent>
         )}
       </Tabs>
     </div>

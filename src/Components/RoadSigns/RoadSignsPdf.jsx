@@ -1,9 +1,20 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import "../../assets/fonts/Amiri-Regular.js"; // Import the Amiri font file
+import { loadSacLetterheadAssets } from "../../utils/branding/sacBrand";
+import {
+  SAC_RGB,
+  applySacLetterhead,
+  drawSacTitle,
+  sacAutoTableMargin,
+  stampSacLetterheadOnAllPages,
+} from "../../utils/branding/pdfLetterheadJsPdf";
 
 const RoadSignsPdf = ({ roadSigns, endDate, startDate }) => {
-  const generatePDF = () => {
+  const generatePDF = async () => {
+    // Official SAC letterhead art (logo corner, watermark, footer bar)
+    await loadSacLetterheadAssets();
+
     // Initialize jsPDF with A4 landscape settings
     const doc = new jsPDF({
       orientation: "landscape",
@@ -14,12 +25,14 @@ const RoadSignsPdf = ({ roadSigns, endDate, startDate }) => {
     // Register Amiri font
     doc.setFont("Amiri-Regular", "normal");
 
+    // Letterhead behind every page (autoTable page breaks included)
+    const box = applySacLetterhead(doc);
+
     // Add title in the center
     const title = "بيانات اللوحات الطرقية";
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    doc.setFontSize(16);
-    doc.text(title, pageWidth / 2, 15, { align: "center" });
+    drawSacTitle(doc, title, `تاريخ التقرير: ${new Date().toLocaleDateString("en-GB")}`);
+    doc.setFont("Amiri-Regular", "normal");
 
     // Define table headers (in reverse order for RTL)
     const headers = [
@@ -53,18 +66,21 @@ const RoadSignsPdf = ({ roadSigns, endDate, startDate }) => {
         font: "Amiri-Regular",
         halign: "center",
         fontSize: 8,
-        textColor: [0, 0, 0],
+        textColor: SAC_RGB.dark,
+        lineColor: SAC_RGB.border,
+        lineWidth: 0.2,
         fontStyle: "normal",
       },
+      alternateRowStyles: { fillColor: SAC_RGB.goldPale },
       headStyles: {
         font: "Amiri-Regular",
         halign: "center",
         fontSize: 8,
-        fillColor: [41, 128, 185],
+        fillColor: SAC_RGB.gold,
         textColor: [255, 255, 255],
         fontStyle: "normal",
       },
-      margin: { top: 25, left: 10, right: 10 },
+      margin: sacAutoTableMargin(doc),
       columnStyles: {
         0: { cellWidth: 40 },
         1: { cellWidth: 35 },
@@ -76,7 +92,7 @@ const RoadSignsPdf = ({ roadSigns, endDate, startDate }) => {
       },
       tableWidth: "auto",
       theme: "grid",
-      startY: 25,
+      startY: box.top,
       pageBreak: "auto",
       didParseCell: (data) => {
         data.cell.styles.font = "Amiri-Regular";
@@ -89,6 +105,9 @@ const RoadSignsPdf = ({ roadSigns, endDate, startDate }) => {
         }
       },
     });
+
+    // Page numbers (the letterhead art is already behind every page)
+    stampSacLetterheadOnAllPages(doc);
 
     // Save the PDF
     doc.save("لوحات_طرقية.pdf");

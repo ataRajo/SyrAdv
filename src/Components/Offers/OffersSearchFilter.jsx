@@ -8,16 +8,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { useGetWorkTypesQuery } from "../../RtkQuery/Slice/WorkTypesApi/WorkTypesApi";
 
 const OffersSearchFilter = ({
   search,
   active,
   expired,
+  workTypeId,
   onSearch,
   onActiveChange,
   onExpiredChange,
+  onWorkTypeChange,
   onClear,
 }) => {
+  // ← أضيف: فلترة العروض حسب نوع العمل - يرجّع المستخدم للعروض التي
+  // عملها لفئة معيّنة من الزبائن (طلب صريح).
+  const { data: workTypesData } = useGetWorkTypesQuery();
+  const workTypes = workTypesData?.data || [];
   return (
     <div className="flex flex-wrap items-center gap-3 mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
       {/* Search Input */}
@@ -115,6 +122,43 @@ const OffersSearchFilter = ({
             >
               ساري المفعول
             </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Work Type Filter */}
+      <div className="min-w-[160px]">
+        <Select
+          value={workTypeId === "" || workTypeId === undefined ? "all" : String(workTypeId)}
+          onValueChange={(value) => {
+            onWorkTypeChange(value === "all" ? "" : value);
+          }}
+        >
+          <SelectTrigger
+            className="text-right bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
+            dir="rtl"
+          >
+            <SelectValue placeholder="نوع العمل" />
+          </SelectTrigger>
+          <SelectContent
+            dir="rtl"
+            className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+          >
+            <SelectItem
+              value="all"
+              className="text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700"
+            >
+              جميع أنواع العمل
+            </SelectItem>
+            {workTypes.map((wt) => (
+              <SelectItem
+                key={wt.id}
+                value={String(wt.id)}
+                className="text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700"
+              >
+                {wt.type}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

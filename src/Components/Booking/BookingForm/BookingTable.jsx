@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ShoppingCart, ChevronDown, ChevronUp, FileText, Eye } from "lucide-react";
+import { ShoppingCart, ChevronDown, ChevronUp, FileText, Eye, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -18,10 +18,23 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useNavigate } from "react-router";
 import { BookingContext } from "../../../Context/BookingContext";
 import useGetRoadSignsByFilter from "../../../hooks/useGetRoadSignsByFilter";
 import html2pdf from "html2pdf.js";
+import { loadSacLetterheadAssets } from "../../../utils/branding/sacBrand";
+import {
+  sacLetterheadStyles,
+  sacLetterheadFooter,
+  sacLetterheadWatermark,
+  sacRestyleHeader,
+} from "../../../utils/branding/pdfLetterheadHtml";
 import { saveAs } from "file-saver";
+// تنبيه غير حاجب (طلب صريح): إن كانت اللوحة ضمن خطة إعلانية غير مؤرشفة
+// تتقاطع مع تاريخ هذا الحجز، تبقى متاحة للإضافة لكن نُنبّه الموظف. يعتمد
+// على حقل sign.active_advertising_plans القادم من GET /road-signs - راجع
+// API_CONTRACT.md وComponents/AdvertisingPlans/AdvertisingPlanConflictBadge.jsx.
+import AdvertisingPlanConflictBadge from "../../AdvertisingPlans/AdvertisingPlanConflictBadge";
 
 // Helper functions outside component
 const normalizeSize = (size) => {
@@ -99,6 +112,11 @@ const SignRow = memo(({
             <span className="text-xs text-orange-600 dark:text-orange-400 mt-1">
               محجوز حتى: {new Date(bookingDates.end).toLocaleDateString('ar-EG')}
             </span>
+          )}
+          {sign.active_advertising_plans?.length > 0 && (
+            <div className="mt-1">
+              <AdvertisingPlanConflictBadge plans={sign.active_advertising_plans} />
+            </div>
           )}
         </div>
       </TableCell>
@@ -186,6 +204,19 @@ const GroupRow = memo(({
     }
   }, [group.signs, onViewImage]);
 
+  // تجميع خطط إعلانية متقاطعة عبر كل لوحات المجموعة (بلا تكرار لنفس
+  // الخطة) لعرض تنبيه واحد على مستوى الصف المطوي - التفاصيل الكاملة لكل
+  // لوحة تظهر عند التوسعة ضمن SignRow.
+  const groupConflictPlans = useMemo(() => {
+    const byId = new Map();
+    (group.signs || []).forEach((s) => {
+      (s.active_advertising_plans || []).forEach((p) => {
+        if (!byId.has(p.id)) byId.set(p.id, p);
+      });
+    });
+    return Array.from(byId.values());
+  }, [group.signs]);
+
   return (
     <TableRow
       className={`${
@@ -208,6 +239,11 @@ const GroupRow = memo(({
               <span className="text-sm text-red-600 dark:text-red-400">
                 غير متاح
               </span>
+            )}
+            {groupConflictPlans.length > 0 && (
+              <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                <AdvertisingPlanConflictBadge plans={groupConflictPlans} />
+              </div>
             )}
           </div>
           {isExpanded ? (
@@ -312,7 +348,8 @@ const BookingTable = () => {
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedSignImage, setSelectedSignImage] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  
+
+  const navigate = useNavigate();
   const pdfRef = useRef(null);
   
   // Memoize filter values
@@ -525,6 +562,9 @@ const generateFilteredPDF = useCallback(() => {
     alert("لا توجد بيانات لطباعتها بعد تطبيق الفلاتر الحالية");
     return;
   }
+
+  // warm the letterhead cache (the helpers fall back to bundled URLs meanwhile)
+  loadSacLetterheadAssets();
 
  const createPrintHTML = () => {
   const groups = groupedRoadSigns;
@@ -749,9 +789,14 @@ const generateFilteredPDF = useCallback(() => {
         .btn-close:hover {
           background-color: #c0392b; /* Darker red on hover */
         }
+
+        /* Official SAC letterhead (logo corner, watermark, footer bar) */
+        ${sacLetterheadStyles()}
+        ${sacRestyleHeader('.header')}
       </style>
     </head>
     <body>
+      ${sacLetterheadWatermark()}
       <div class="header">
         <h1>تقرير اللوحات الطرقية</h1>
         <div class="date">
@@ -824,6 +869,7 @@ const generateFilteredPDF = useCallback(() => {
           جميع الحقوق محفوظة
         </p>
       </div>
+      ${sacLetterheadFooter()}
       
       <div class="controls no-print">
         <button class="btn btn-print" onclick="window.print()">
@@ -866,13 +912,15 @@ const generateFilteredPDF = useCallback(() => {
 }, [roadSigns, direction, place, cityId, regionId, model, formik.values, groupedRoadSigns, cities, regions]);
 
 
-  const generateFilteredWord = useCallback(() => {
+  const generateFilteredWord = useCallback(async () => {
     if (!roadSigns || roadSigns.length === 0) {
       alert("لا توجد بيانات لطباعتها بعد تطبيق الفلاتر الحالية");
       return;
     }
 
     try {
+      // Word can't read bundled asset URLs - embed the letterhead as data URLs
+      await loadSacLetterheadAssets();
       const createWordContent = () => {
         const groups = groupedRoadSigns;
         
@@ -887,11 +935,13 @@ const generateFilteredPDF = useCallback(() => {
               .filter-info { background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
               table { width: 100%; border-collapse: collapse; margin: 20px 0; }
               th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-              th { background-color: #2c3e50; color: white; }
-              .group-row { background-color: #f0f8ff; }
+              th { background-color: #D5A225; color: white; }
+              .group-row { background-color: #FBF5E6; }
+              ${sacLetterheadStyles({ mode: "word" })}
             </style>
           </head>
           <body>
+            ${sacLetterheadWatermark({ mode: "word" })}
             <h1>تقرير اللوحات الطرقية</h1>
             <div class="filter-info">
               <strong>الفلاتر المطبقة:</strong> ${memoizedFiltersText || 'جميع اللوحات'}
@@ -925,6 +975,7 @@ const generateFilteredPDF = useCallback(() => {
             <p style="text-align: center; margin-top: 40px; color: #666;">
               تم إنشاء التقرير في ${new Date().toLocaleDateString('ar-SA')}
             </p>
+            ${sacLetterheadFooter({ mode: "word" })}
           </body>
           </html>`;
 
@@ -941,6 +992,19 @@ const generateFilteredPDF = useCallback(() => {
       alert('حدث خطأ أثناء إنشاء ملف Word. يرجى المحاولة مرة أخرى.');
     }
   }, [roadSigns, groupedRoadSigns, memoizedFiltersText]);
+
+  // ✅ زر "عرض على الخريطة" - يفتح صفحة خريطة تعرض دبابيس (markers) لمواقع
+  // اللوحات الظاهرة حالياً في الجدول، بالاعتماد على إحداثيات كل لوحة
+  // (latitudeX / longitudeY) القادمة من استجابة useGetRoadSignsByFilter -
+  // بدون الحاجة لوجود حجز محفوظ مسبقاً (نفس مكتبة الخريطة Leaflet /
+  // react-leaflet المستخدمة في باقي المشروع).
+  const handleViewOnMap = useCallback(() => {
+    if (!roadSigns || roadSigns.length === 0) {
+      alert("لا توجد بيانات لعرضها على الخريطة بعد تطبيق الفلاتر الحالية");
+      return;
+    }
+    navigate("/dashboard/booking/road-signs-map", { state: { roadSigns } });
+  }, [roadSigns, navigate]);
 
   // Optimize useEffect
   useEffect(() => {
@@ -984,6 +1048,17 @@ const generateFilteredPDF = useCallback(() => {
         >
           <FileText className="h-4 w-4" />
           تصدير Word ({roadSigns?.length || 0})
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleViewOnMap}
+          disabled={!roadSigns || roadSigns.length === 0}
+          className="flex items-center gap-2"
+        >
+          <MapPin className="h-4 w-4" />
+          عرض على الخريطة
         </Button>
       </div>
 

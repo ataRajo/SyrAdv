@@ -1,3 +1,10 @@
+// نفس قيم SetEmployeeSalaryRequest على الباك-إند.
+export const SALARY_TYPE_OPTIONS = [
+  { value: "monthly", label: "شهري" },
+  { value: "weekly", label: "أسبوعي" },
+  { value: "daily", label: "يومي" },
+];
+
 export const UserFields = [
   { name: "full_name", label: "الاسم الكامل", type: "text", dir: "rtl" },
   { name: "username", label: "اسم المستخدم", type: "text", dir: "rtl" },
@@ -31,6 +38,17 @@ export const UserFields = [
     label: "الراتب",
     type: "number",
     dir: "rtl",
+  },
+  // نوع الراتب (طلب صريح): شهري / أسبوعي / يومي - نفس الخيارات في "الرواتب
+  // والأجور" بالصندوق والمحاسبة (PayrollTab). يُحفَظ في نفس سجل الراتب.
+  {
+    name: "salary_type",
+    label: "نوع الراتب",
+    type: "select",
+    dir: "rtl",
+    options: SALARY_TYPE_OPTIONS,
+    valueKey: "value",
+    displayKey: "label",
   },
   {
     name: "permissions",

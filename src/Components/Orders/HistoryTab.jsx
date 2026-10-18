@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { ShoppingCart, User, Calendar, MapPin } from "lucide-react";
 import {DynamicTable} from "../../utils/Tables/DynamicTable";
 import OrderFilters from "./OrderFilters";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
 import useMangeOrders from "../../hooks/useMangeOrders";
 import { HistoryOrdersColumns } from "../../utils/Tables/ColumnsTable/HistoryOrdersColumns";
 
@@ -20,12 +19,11 @@ const HistoryTab = ({ history, permission }) => {
     regions,
   } = useMangeOrders();
 
-  // ✅ fetch ALL customers (was: default page-1-only, so most customers
-  // never appeared in the dropdown and couldn't be filtered by at all)
-  const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
-    per_page: 1000,
-  });
-  const customersList = customersResponse?.data ?? [];
+  // الزبون المختار فقط (لعرض اسمه وللتصدير) - لم نعد نحمّل 1000 زبون دفعة
+  // واحدة؛ الاختيار يتم ببحث من الخادم داخل OrderFilters (CustomerSearchSelect).
+  const [selectedCustomerObj, setSelectedCustomerObj] = useState(null);
+  const customersList = selectedCustomerObj ? [selectedCustomerObj] : [];
+  const isLoadingCustomers = false;
 
   const [selectedCustomerIdHistory, setSelectedCustomerIdHistory] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -66,7 +64,7 @@ const HistoryTab = ({ history, permission }) => {
     }
 
     if (orderType) {
-      const typeMap = { release: 1, installation: 2, both: 3 };
+      const typeMap = { release: 1, installation: 2, both: 3, swap: 3 };
       const typeValue = typeMap[orderType];
       if (typeValue) {
         filteredHistory = filteredHistory.filter(order => Number(order.type) === typeValue);
@@ -109,6 +107,7 @@ const HistoryTab = ({ history, permission }) => {
         regionId={regionId}
         setRegionId={setRegionId}
         customersList={customersList}
+        onCustomerSelected={setSelectedCustomerObj}
         isLoadingCustomers={isLoadingCustomers}
         cities={cities}
         regions={regions}

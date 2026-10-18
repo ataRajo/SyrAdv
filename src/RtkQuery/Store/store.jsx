@@ -22,6 +22,11 @@ import { whatsappApiSlice } from "../Slice/Whatsapp/WhatsappApi"
 import { publicContactApiSlice } from "../Slice/Public/PublicContactApi"
 import { WhatsappSettingsSlice } from "../Slice/Whatsapp/WhatsappSettingsApi"
 import { WhatsappBulkSlice } from "../Slice/Whatsapp/WhatsappBulkApi"
+import { RoadSignEvaluationsSlice } from "../Slice/RoadSignEvaluations/RoadSignEvaluationsApi"
+// ميزة "الخطط الإعلانية" (طلب صريح) - راجع AdvertisingPlansApi.jsx
+// و Public/PublicAdvertisingPlansApi.jsx لتفاصيل كل واجهة.
+import { AdvertisingPlansSlice } from "../Slice/AdvertisingPlans/AdvertisingPlansApi"
+import { publicAdvertisingPlansApiSlice } from "../Slice/Public/PublicAdvertisingPlansApi"
 
 const store = configureStore({
   reducer: {
@@ -47,7 +52,10 @@ const store = configureStore({
     [whatsappApiSlice.reducerPath]: whatsappApiSlice.reducer,
     [publicContactApiSlice.reducerPath]: publicContactApiSlice.reducer,
     [WhatsappSettingsSlice.reducerPath]: WhatsappSettingsSlice.reducer,
-    [WhatsappBulkSlice.reducerPath]: WhatsappBulkSlice.reducer
+    [WhatsappBulkSlice.reducerPath]: WhatsappBulkSlice.reducer,
+    [RoadSignEvaluationsSlice.reducerPath]: RoadSignEvaluationsSlice.reducer,
+    [AdvertisingPlansSlice.reducerPath]: AdvertisingPlansSlice.reducer,
+    [publicAdvertisingPlansApiSlice.reducerPath]: publicAdvertisingPlansApiSlice.reducer
 
   },
   middleware: (getDefaultMiddleware) =>
@@ -74,7 +82,10 @@ const store = configureStore({
       whatsappApiSlice.middleware,
       publicContactApiSlice.middleware,
       WhatsappSettingsSlice.middleware,
-      WhatsappBulkSlice.middleware
+      WhatsappBulkSlice.middleware,
+      RoadSignEvaluationsSlice.middleware,
+      AdvertisingPlansSlice.middleware,
+      publicAdvertisingPlansApiSlice.middleware
     ),
 });
 

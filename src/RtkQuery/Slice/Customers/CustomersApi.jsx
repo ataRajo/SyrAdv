@@ -7,6 +7,22 @@ export const CustomersSlice = createApi({
   baseQuery: baseQueryWithReauth,
   tagTypes: ["customers"],
   endpoints: (builder) => ({
+    // بحث خفيف للزبائن (GET /customers-lookup) - يستخدمه CustomerSearchSelect
+    // في كل صفحات الفلترة: بحث من الخادم + تمرير لا نهائي بدل تحميل كل
+    // الزبائن أو ترقيم يدوي. keepUnusedDataFor قصير كي تبقى النتائج حديثة.
+    lookupCustomers: builder.query({
+      query: ({ search, page = 1, per_page = 20, ids, has_remaining } = {}) => {
+        const params = new URLSearchParams();
+        if (search) params.append("search", search);
+        params.append("page", page);
+        params.append("per_page", per_page);
+        if (has_remaining) params.append("has_remaining", 1);
+        (ids || []).forEach((id) => params.append("ids[]", id));
+        return `/customers-lookup?${params.toString()}`;
+      },
+      keepUnusedDataFor: 60,
+      providesTags: ["customers"],
+    }),
      getCustomers: builder.query({
       query: (params) => {
         if (!params) return "/customers";
@@ -96,6 +112,8 @@ export const CustomersSlice = createApi({
 
 
 export const {
+  useLookupCustomersQuery,
+  useLazyLookupCustomersQuery,
   useGetCustomersQuery,
   useAddNewCustomerMutation,
   useShowOneCustomerQuery,

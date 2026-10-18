@@ -1,20 +1,47 @@
-import React from "react";
+import React, { useState } from "react";
 import * as XLSX from "xlsx"; // Import the xlsx library
 import { saveAs } from "file-saver"; // Import saveAs from file-saver
+import { withSacExcelBanner } from "../../utils/branding/excelBrand";
+import { normalizeList } from "../../utils/export/fetchAllPages";
 
 const InvoiceExcel = ({
-  customer,
+  customer: customerProp,
   showCustomerTable = false,
   showCustomerPaymentsTable = false,
   showCustomerRemainingTable = false,
+  // ⚠️ FIXED (الملف كان يخرج فارغًا): دالة اختيارية تجلب كل البيانات (كل
+  // الصفحات) لحظة التصدير - نفس InvoicePdf.
+  loadData,
+  disabled = false,
 }) => {
-  const generateExcel = () => {
+  const [isExporting, setIsExporting] = useState(false);
+
+  const generateExcel = async () => {
+    setIsExporting(true);
+    try {
+      let customer = loadData ? await loadData() : customerProp;
+      // الباك-إند يُرجِع قوائم مُرقَّمة ({ data: [...] }) لا مصفوفات مباشرة.
+      if (showCustomerRemainingTable) {
+        customer = normalizeList(customer);
+      } else if (customer && showCustomerPaymentsTable && !Array.isArray(customer.payments)) {
+        customer = { ...customer, payments: normalizeList(customer.payments) };
+      }
+      buildExcel(customer);
+    } catch (error) {
+      console.error("Excel export failed:", error);
+      alert(error?.message || "تعذر تصدير الملف");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const buildExcel = (customer) => {
     const workbook = XLSX.utils.book_new(); // Create a new workbook
 
-    // Helper function to prepare data for SheetJS
+    // Helper function to prepare data for SheetJS, with the SAC company /
+    // contact banner prepended above the header row.
     const prepareSheetData = (headers, data) => {
-      // Concatenate headers and data
-      return [headers, ...data];
+      return withSacExcelBanner(headers, data);
     };
 
     // Customer Info Table
@@ -44,7 +71,7 @@ const InvoiceExcel = ({
     }
 
     // Customer Remaining Table (assuming 'customer' is an array here based on your original code)
-    if (showCustomerRemainingTable && Array.isArray(customer)) {
+    if (showCustomerRemainingTable && Array.isArray(customer) && customer.length) {
       const customerRemainingHeaders = [
         "المبلغ المتبقي",
         "المبلغ المدفوع",
@@ -70,7 +97,7 @@ const InvoiceExcel = ({
     }
 
     // Customer Payments Table
-    if (showCustomerPaymentsTable && customer?.payments) {
+    if (showCustomerPaymentsTable && customer?.payments?.length) {
       let paymentHeaders;
       let tableData;
 
@@ -150,9 +177,10 @@ const InvoiceExcel = ({
       onClick={generateExcel}
       type="button"
       dir="rtl"
-      className="bg-gray-800 text-white px-4 py-2 cursor-pointer rounded-lg shadow-sm hover:bg-gray-700 transition-colors duration-200"
+      disabled={disabled || isExporting}
+      className="bg-gray-800 text-white px-4 py-2 cursor-pointer rounded-lg shadow-sm hover:bg-gray-700 transition-colors duration-200 disabled:opacity-60 disabled:cursor-wait"
     >
-      تصدير كملف Excel
+      {isExporting ? "جارٍ تجهيز الملف..." : "تصدير كملف Excel"}
     </button>
   );
 };

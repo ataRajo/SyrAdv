@@ -5,17 +5,38 @@ const DB_NAME = "bookingImagesDB";
 const STORE = "images";
 const DB_VERSION = 1;
 
+// إصلاح PDF: كانت openDB تفتح اتصال indexedDB.open() جديد بكل استدعاء.
+// عند الطباعة نقرأ كل صور اللوحات دفعة واحدة (Promise.all)، فهذا كان يعني
+// عشرات اتصالات indexedDB.open() متزامنة - مصدر إضافي محتمل لفشل عابر
+// بقراءة واحدة (تُقرَأ بالخطأ كـ "لا توجد صورة"). الآن اتصال واحد فقط
+// يُفتح ويُعاد استخدامه لكل قراءة/كتابة لاحقة.
+let dbPromise = null;
+
 function openDB() {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) {
         req.result.createObjectStore(STORE);
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      // لو أُغلِق الاتصال (مثلاً من تبويب آخر يطلب ترقية نسخة)، نُبطِل
+      // الذاكرة المؤقتة كي يُفتح اتصال جديد بالاستدعاء التالي بدل تعليق كل
+      // القراءات/الكتابات اللاحقة على اتصال ميت.
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error);
+    };
   });
+  return dbPromise;
 }
 
 export async function idbSet(key, value) {

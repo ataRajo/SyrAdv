@@ -1,20 +1,13 @@
-import Logo from "../../assets/images/adv_syrian.png";
+import { getSacLogoBase64 } from "../../utils/branding/sacBrand";
+import {
+  sacLetterheadStyles,
+  sacLetterheadFooter,
+  sacLetterheadWatermark,
+  sacRestyleHeader,
+} from "../../utils/branding/pdfLetterheadHtml";
 
 class OrderExportService {
-  getLogoBase64 = async () => {
-    try {
-      const response = await fetch(Logo);
-      const blob = await response.blob();
-      return await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.log("Could not load logo, using placeholder");
-      return '';
-    }
-  };
+  getLogoBase64 = async () => getSacLogoBase64();
 
   // Individual PDF Methods
   downloadIndividualPDF = async (order, toast) => {
@@ -66,8 +59,8 @@ class OrderExportService {
       align-items: flex-start;
       margin-bottom: 30px;
       padding-bottom: 20px;
-      border-bottom: 3px solid #4f46e5;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-bottom: 3px solid #D5A225;
+      background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%);
       color: white;
       padding: 20px;
       border-radius: 10px;
@@ -128,7 +121,7 @@ class OrderExportService {
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     .customer-card h3 {
-      color: #4f46e5;
+      color: #1A1817;
       margin-bottom: 15px;
       font-size: 18px;
       border-bottom: 2px solid #e5e7eb;
@@ -194,7 +187,7 @@ class OrderExportService {
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
     .detail-card h4 {
-      color: #4f46e5;
+      color: #1A1817;
       margin-bottom: 15px;
       font-size: 16px;
       display: flex;
@@ -292,9 +285,13 @@ class OrderExportService {
         display: none;
       }
     }
+
+    ${sacLetterheadStyles()}
+    ${sacRestyleHeader('.header')}
   `;
 
   getIndividualPDFBody = (order, logoBase64) => `
+    ${sacLetterheadWatermark()}
     <div class="header">
       <div class="logo-container">
         ${logoBase64 ? `<img src="${logoBase64}" alt="الشركة السورية للإعلان" class="logo">` : '<div class="logo-placeholder">الشعار</div>'}
@@ -388,6 +385,12 @@ class OrderExportService {
           </div>
         </div>
         <div class="location-item">
+          <div class="location-label">القياس:</div>
+          <div class="location-value">
+            <span class="badge badge-roadsign">${order.road_sign?.template?.size || 'غير محدد'}</span>
+          </div>
+        </div>
+        <div class="location-item">
           <div class="location-label">رمز الاتجاه:</div>
           <div class="location-value">
             <span class="badge badge-direction">${order.road_sign?.direction_code || 'غير محدد'}</span>
@@ -407,7 +410,7 @@ class OrderExportService {
     </div>
     
     <div class="order-details-section">
-      <h3 style="color: #4f46e5; margin-bottom: 20px; display:flex; align-items: center; gap: 10px;">📋 تفاصيل الطلب</h3>
+      <h3 style="color: #1A1817; margin-bottom: 20px; display:flex; align-items: center; gap: 10px;">📋 تفاصيل الطلب</h3>
       <div class="order-details-grid">
         <div class="detail-card">
           <h4>نوع الطلب</h4>
@@ -438,7 +441,7 @@ class OrderExportService {
     
     ${order.notes ? `
       <div class="notes-section">
-        <h3 style="color: #4f46e5; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">📝 الملاحظات</h3>
+        <h3 style="color: #1A1817; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">📝 الملاحظات</h3>
         <div class="notes-box">
           <div class="notes-content">${order.notes}</div>
         </div>
@@ -452,7 +455,8 @@ class OrderExportService {
       <p>تم إنشاء هذا التقرير تلقائياً من نظام إدارة الطلبات</p>
       <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
     </div>
-    
+    ${sacLetterheadFooter()}
+
     <script>
       window.onload = function() {
         window.print();
@@ -502,7 +506,7 @@ class OrderExportService {
     </html>
   `;
 
-  getBulkPDFStyles = () => `
+  getBulkPDFStyles = (mode = "print") => `
     @media print {
       @page { margin: 15mm; }
       body { margin: 0; }
@@ -521,8 +525,8 @@ class OrderExportService {
       align-items: flex-start;
       margin-bottom: 30px;
       padding-bottom: 20px;
-      border-bottom: 3px solid #4f46e5;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-bottom: 3px solid #D5A225;
+      background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%);
       color: white;
       padding: 20px;
       border-radius: 10px;
@@ -579,7 +583,7 @@ class OrderExportService {
       overflow: hidden;
     }
     th {
-      background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+      background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%);
       color: white;
       padding: 10px 6px;
       text-align: center;
@@ -775,12 +779,12 @@ class OrderExportService {
     .count-boards {
       font-size: 18px;
       font-weight: bold;
-      color: #3730a3;
+      color: #1A1817;
       line-height: 1;
     }
     .count-label {
       font-size: 9px;
-      color: #4f46e5;
+      color: #1A1817;
       margin-right: 2px;
     }
     .count-faces {
@@ -852,13 +856,13 @@ class OrderExportService {
       font-size: 11px;
     }
     .region-summary-item b {
-      color: #3730a3;
+      color: #1A1817;
     }
 
     @media print {
       /* التقرير أفقي: 12 عمودًا لا تتسع في A4 عمودي، والوضع الأفقي وحده
          يوفّر نحو ثلث عدد الصفحات قبل احتساب أثر الدمج. */
-      @page { size: A4 landscape; margin: 10mm; }
+      @page { size: A4 portrait; margin: 10mm; }
 
       .no-print { display: none; }
 
@@ -875,9 +879,13 @@ class OrderExportService {
       .region-summary { page-break-after: avoid; }
       .footer { page-break-before: avoid; }
     }
+
+    ${sacLetterheadStyles({ mode })}
+    ${sacRestyleHeader('.header')}
   `;
 
   getBulkPDFBody = (orders, selectedCustomerName, customersList, logoBase64, formattedReportDate, formattedReportTime) => `
+    ${sacLetterheadWatermark()}
     <div class="header">
       <div class="logo-container">
         ${logoBase64 ? `<img src="${logoBase64}" alt="الشركة السورية للإعلان" class="logo">` : '<div class="logo-placeholder">الشعار</div>'}
@@ -936,7 +944,8 @@ class OrderExportService {
       <p>تاريخ التقرير: ${formattedReportDate} - الساعة: ${formattedReportTime}</p>
       <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
     </div>
-    
+    ${sacLetterheadFooter()}
+
     <script>
       window.onload = function() {
         window.print();
@@ -1167,35 +1176,21 @@ class OrderExportService {
       .join('')}</div>`;
   };
 
-  getWorkshopGroupRow = (group, serial) => {
-    const typeClass =
-      group.type === 1 ? 'badge-release' : group.type === 2 ? 'badge-install' : 'badge-both';
-
-    const codesCell =
-      group.boards === 1
-        ? `<span class="code-chip">${group.codes[0]}</span>`
-        : `<div class="code-list">${group.codes
-            .map((code) => `<span class="code-chip">${code}</span>`)
-            .join('')}</div>`;
-
-    return `
+  /** صف PDF (طولي): النموذج/القياس، العدد، المنطقة، الاتجاه، ثم البقية. */
+  getWorkshopGroupRow = (group, serial) => `
       <tr>
         <td class="serial-cell">${serial}</td>
-        <td class="region-cell">${group.regionName}</td>
         <td class="model-cell">
           <div class="model-name">${group.model}</div>
           ${group.size ? `<div class="model-size">${group.size}</div>` : ''}
         </td>
-        <td class="direction-cell">${group.direction}</td>
         <td class="count-cell">
           <span class="count-boards">${group.boards}</span>
           <span class="count-label">لوحة</span>
           <div class="count-faces">${group.faces} وجه</div>
         </td>
-        <td class="codes-cell">${codesCell}</td>
-        <td>
-          <span class="badge ${typeClass}">${group.typeLabel}</span>
-        </td>
+        <td class="region-cell">${group.regionName}</td>
+        <td class="direction-cell">${group.direction}</td>
         <td>
           ${
             group.oldCustomer && group.oldCustomer !== '-'
@@ -1210,12 +1205,10 @@ class OrderExportService {
               : '<span class="no-customer">-</span>'
           }
         </td>
-        <td><span class="date-badge">${group.dateLabel}</span></td>
         <td class="notes-cell">${this.getWorkshopNotesCell(group)}</td>
         <td class="done-cell"></td>
       </tr>
     `;
-  };
 
   /**
    * كل منطقة في <tbody> مستقل يسبقه سطر عنوان. مع
@@ -1230,7 +1223,7 @@ class OrderExportService {
     return `
       <tbody class="region-block">
         <tr class="region-header">
-          <td colspan="12">
+          <td colspan="9">
             <span class="region-title">${region.regionName}</span>
             <span class="region-city">${region.cityName}</span>
             <span class="region-meta">${region.lines} سطر · ${region.boards} لوحة · ${region.faces} وجه</span>
@@ -1278,7 +1271,7 @@ class OrderExportService {
 
     // Word لا يطبّق قواعد الطباعة من CSS الخارجي بشكل موثوق، فتُحقن
     // ألوان الرأس مباشرةً كما كان يفعل exportToWord أصلًا.
-    const th = forWord ? ' style="background:#000; color:#fff; border:1px solid #fff;"' : '';
+    const thStyle = forWord ? 'background:#000; color:#fff; border:1px solid #fff;' : '';
 
     let serial = 1;
     const bodies = regions
@@ -1293,18 +1286,15 @@ class OrderExportService {
       <table cellspacing="0" cellpadding="0" class="workshop-table">
         <thead>
           <tr>
-            <th${th} style="width: 30px;">م</th>
-            <th${th} style="width: 70px;">المنطقة</th>
-            <th${th} style="width: 90px;">النموذج / القياس</th>
-            <th${th} style="width: 110px;">الاتجاه</th>
-            <th${th} style="width: 55px;">العدد</th>
-            <th${th} style="width: 150px;">أرقام اللوحات</th>
-            <th${th} style="width: 60px;">الأمر</th>
-            <th${th} style="width: 105px;">فك (المعلن القديم)</th>
-            <th${th} style="width: 105px;">تركيب (المعلن الجديد)</th>
-            <th${th} style="width: 70px;">التاريخ</th>
-            <th${th} style="width: 110px;">الملاحظات</th>
-            <th${th} style="width: 30px;">تم</th>
+            <th style="width: 5%; ${thStyle}">م</th>
+            <th style="width: 14%; ${thStyle}">النموذج / القياس</th>
+            <th style="width: 9%; ${thStyle}">العدد</th>
+            <th style="width: 11%; ${thStyle}">المنطقة</th>
+            <th style="width: 15%; ${thStyle}">الاتجاه</th>
+            <th style="width: 13%; ${thStyle}">فك (المعلن القديم)</th>
+            <th style="width: 13%; ${thStyle}">تركيب (المعلن الجديد)</th>
+            <th style="width: 16%; ${thStyle}">الملاحظات</th>
+            <th style="width: 4%; ${thStyle}">تم</th>
           </tr>
         </thead>
         ${bodies}
@@ -1398,19 +1388,19 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>تقرير طلبات العميل</title>
       <style>
-        ${this.getBulkPDFStyles().replace(
-          'background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: Black;',
-          'background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: Black;'
+        ${this.getBulkPDFStyles('word').replace(
+          'background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%); color: Black;',
+          'background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%); color: Black;'
         ).replace(
-          'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: Black;',
-          'background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: Black;'
+          'background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%); color: Black;',
+          'background: linear-gradient(135deg, #3a2f1a 0%, #D5A225 100%); color: Black;'
         )}
 
         /* Word لا يقرأ @page size من داخل @media print - يحتاج تعريف
            WordSection الخاص به ليفتح الملف بوضع أفقي مباشرة. */
         @page WordSection1 {
-          size: 29.7cm 21cm;
-          mso-page-orientation: landscape;
+          size: 21cm 29.7cm;
+          mso-page-orientation: portrait;
           margin: 1cm 1cm 1cm 1cm;
         }
         div.WordSection1 { page: WordSection1; }
@@ -1420,6 +1410,7 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
     </head>
     <body>
       <div class="WordSection1">
+      ${sacLetterheadWatermark({ mode: "word" })}
       <div class="header">
         <div class="logo-container">
           ${logoBase64 ? `<img src="${logoBase64}" alt="الشركة السورية للإعلان" class="logo">` : '<div class="logo-placeholder">الشعار</div>'}
@@ -1478,6 +1469,7 @@ exportToWord = async (orders, selectedCustomerName, customersList, toast) => {
         <p>تاريخ التقرير: ${formattedReportDate} - الساعة: ${formattedReportTime}</p>
         <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
       </div>
+      ${sacLetterheadFooter({ mode: "word" })}
       </div>
     </body>
     </html>

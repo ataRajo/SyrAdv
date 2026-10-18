@@ -1,7 +1,14 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import "../../assets/fonts/Amiri-Regular.js";
-import logo from "../../assets/images/adv_syrian.png";
+import { loadSacLetterheadAssets } from "../../utils/branding/sacBrand";
+import {
+  SAC_RGB,
+  applySacLetterhead,
+  drawSacTitle,
+  sacAutoTableMargin,
+  stampSacLetterheadOnAllPages,
+} from "../../utils/branding/pdfLetterheadJsPdf";
 
 // Helper function to get region name
 const getRegionName = (sign) => {
@@ -41,7 +48,10 @@ export const ReportPdf = ({
   selectedCustomer,
   isFilteredByCustomer,
 }) => {
-  const generatePDF = () => {
+  const generatePDF = async () => {
+    // Official SAC letterhead art (logo corner, watermark, footer bar)
+    await loadSacLetterheadAssets();
+
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -52,28 +62,19 @@ export const ReportPdf = ({
 
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 10; // Reduced margin for more space
-
-    // Add logo at the top - smaller logo
-    try {
-      const logoWidth = 30; // Smaller width
-      const logoHeight = 26; // Proportional height
-      const logoX = margin;
-      const logoY = margin;
-      
-      doc.addImage(logo, 'PNG', logoX, logoY, logoWidth, logoHeight);
-    } catch (error) {
-      console.error("Error adding logo:", error);
-    }
+    // Letterhead behind every page (incl. autoTable / addPage pages);
+    // content lives inside the returned safe box.
+    const box = applySacLetterhead(doc);
+    const margin = box.left;
 
     // Dynamic title based on filter
-    const title = isFilteredByCustomer 
+    const title = isFilteredByCustomer
       ? "تقرير حجوزات زبون"
       : "تقرير لوحات الزبائن";
-    
-    // Move title text to the right to accommodate logo
-    doc.setFontSize(16); // Smaller title
-    doc.text(title, pageWidth / 2, margin + 8, { align: "center" });
+
+    // Title in the top band next to the logo (like the official voucher)
+    drawSacTitle(doc, title);
+    doc.setFont("Amiri-Regular", "normal");
 
     doc.setFontSize(9); // Smaller font for info
     
@@ -93,7 +94,7 @@ export const ReportPdf = ({
     };
     
     // Add customer name if filtered
-    let infoY = margin + 15; // Closer spacing
+    let infoY = box.top; // first line below the letterhead logo
     
     if (isFilteredByCustomer && selectedCustomer) {
       const customerName = selectedCustomer.company_name || selectedCustomer.full_name || "غير معروف";
@@ -112,14 +113,10 @@ export const ReportPdf = ({
     if (customers && customers.length > 0) {
       customers.forEach((customer, index) => {
         // Add new page for each customer after the first one
+        // (the letterhead art is painted automatically on the new page)
         if (index > 0) {
           doc.addPage();
-          try {
-            doc.addImage(logo, 'PNG', margin, margin, 30, 26);
-          } catch (error) {
-            console.error("Error adding logo to new page:", error);
-          }
-          currentY = margin + 15;
+          currentY = box.top;
         }
 
         // Show customer name
@@ -169,7 +166,7 @@ export const ReportPdf = ({
             head: roadSignsHeaders,
             body: roadSignsData,
             startY: currentY,
-            margin: { top: margin, left: margin, right: margin, bottom: margin },
+            margin: sacAutoTableMargin(doc),
             styles: {
               font: "Amiri-Regular",
               halign: "center",
@@ -185,14 +182,14 @@ export const ReportPdf = ({
               halign: "center",
               valign: "middle",
               fontSize: 8,
-              fillColor: [59, 130, 246],
+              fillColor: SAC_RGB.gold,
               textColor: [255, 255, 255],
               fontStyle: "bold",
               cellPadding: 2,
               lineWidth: 0.1,
             },
             alternateRowStyles: {
-              fillColor: [248, 250, 252], // Light gray for alternate rows
+              fillColor: SAC_RGB.goldPale, // pale gold for alternate rows
             },
             columnStyles: {
               0: { cellWidth: 8, halign: "center", valign: "middle" }, // م
@@ -201,7 +198,7 @@ export const ReportPdf = ({
               3: { cellWidth: 18, halign: "center", valign: "middle" }, // النموذج
               4: { cellWidth: 15, halign: "center", valign: "middle" }, // القياس
               5: { cellWidth: 12, halign: "center", valign: "middle" }, // الطباعة (م²)
-              6: { cellWidth: 45, halign: "right", valign: "middle" }, // الاتجاه - WIDER
+              6: { cellWidth: 44, halign: "right", valign: "middle" }, // الاتجاه - WIDER
               7: { cellWidth: 15, halign: "center", valign: "middle" }, // من
               8: { cellWidth: 15, halign: "center", valign: "middle" }, // إلى
               9: { cellWidth: 12, halign: "center", valign: "middle" }, // الأوجه
@@ -212,7 +209,7 @@ export const ReportPdf = ({
               data.cell.styles.font = "Amiri-Regular";
               data.cell.styles.fontStyle = "normal";
               data.cell.styles.lineWidth = 0.1;
-              data.cell.styles.lineColor = [200, 200, 200];
+              data.cell.styles.lineColor = SAC_RGB.border;
               
               // ADD vertical alignment for all cells
               data.cell.styles.valign = "middle";
@@ -231,7 +228,7 @@ export const ReportPdf = ({
             willDrawCell: (data) => {
               // Alternate row colors
               if (data.section === 'body' && data.row.index % 2 === 0) {
-                doc.setFillColor(248, 250, 252);
+                doc.setFillColor(...SAC_RGB.goldPale);
                 doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
               }
             },
@@ -255,7 +252,12 @@ export const ReportPdf = ({
           
           const totalSigns = customer.roadSigns.length;
           
-          doc.setFillColor(59, 130, 246); // Blue background
+          // keep the summary bar off the footer artwork
+          if (currentY + 10 > box.bottom) {
+            doc.addPage();
+            currentY = box.top;
+          }
+          doc.setFillColor(...SAC_RGB.dark); // brand dark background
           doc.setTextColor(255, 255, 255); // White text
           doc.rect(margin, currentY, pageWidth - (margin * 2), 8, 'F');
           doc.text(
@@ -280,27 +282,8 @@ export const ReportPdf = ({
       currentY += 20;
     }
 
-    // Add footer with company name on all pages
-    const totalPages = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(7);
-      doc.setTextColor(100, 100, 100);
-      
-      // Add horizontal line
-      doc.setLineWidth(0.1);
-      doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
-      
-      doc.text("شركة الإعلانات السورية", pageWidth / 2, pageHeight - 10, { align: "center" });
-      
-      // Add page number and date in footer
-      doc.text(
-        `الصفحة ${i} من ${totalPages} | ${new Date().toLocaleDateString('ar-EG')}`,
-        pageWidth - margin,
-        pageHeight - 10,
-        { align: "right" }
-      );
-    }
+    // Page numbers (the letterhead art is already behind every page)
+    stampSacLetterheadOnAllPages(doc);
 
     // Reset text color
     doc.setTextColor(0, 0, 0);

@@ -1,10 +1,11 @@
 // PublicMapPage.jsx - UPDATED VERSION
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useGetOneBookingsQuery } from "../../RtkQuery/Slice/Booking/BookingApi";
+import { BASE_URL } from "../../Api/baseUrl";
+import { getStaticEvaluation } from "../../Static/staticEvaluations";
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -50,18 +51,32 @@ const PublicMapPage = () => {
     }
   }, [bookingId, navigate]);
   
-  // Don't fetch if bookingId is missing
-  const { data: getBooking, isLoading, error, refetch } = useGetOneBookingsQuery(bookingId, {
-    skip: !bookingId, // Skip if no bookingId
-  });
-  
-  // Force refetch when component mounts and bookingId exists
+  // صفحة عامة بلا تسجيل دخول: تجلب من الراوت العام public/bookings/{id}/map (بيانات اللوحات فقط، بلا بيانات الزبون).
+  // كانت تستخدم useGetOneBookingsQuery الذي يستدعي bookings/{id}/public-show-link
+  // (يتطلب مصادقة) فيفشل 401 عند أي زائر غير مسجَّل. لا نرسل Authorization هنا عمدًا.
+  const [getBooking, setGetBooking] = useState(null);
+  const [isLoading, setIsLoading] = useState(Boolean(bookingId));
+  const [error, setError] = useState(null);
+  const [specSign, setSpecSign] = useState(null);
+
   useEffect(() => {
-    if (bookingId) {
-      console.log("Refetching data for bookingId:", bookingId);
-      refetch();
-    }
-  }, [bookingId, refetch]);
+    if (!bookingId) return;
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(null);
+    fetch(`${BASE_URL}/public/bookings/${bookingId}/map`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(res.status === 404 ? "العقد غير موجود" : `تعذر تحميل البيانات (${res.status})`);
+        return res.json();
+      })
+      .then((data) => setGetBooking(data?.data ?? data))
+      .catch((e) => { if (e.name !== "AbortError") setError(e); })
+      .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
+    return () => controller.abort();
+  }, [bookingId]);
   
   const validLocations = getBooking?.roadsigns?.filter(rs => rs?.latitudeX && rs?.longitudeY) || [];
   
@@ -75,7 +90,12 @@ const PublicMapPage = () => {
     place: rs.place || "موقع إعلاني",
     directions: rs.directions || "",
     template: rs.template?.model || "",
-    region: rs.region?.name || ""
+    region: rs.region?.name || "",
+    image: rs.image || null,
+    size: rs.template?.size || "",
+    area: rs.template?.advertising_space,
+    displayType: rs.template?.display_type,
+    evaluation: rs.evaluation || getStaticEvaluation(rs.id),
   }));
   
   const createRedMarkerIcon = () => {
@@ -255,16 +275,117 @@ const PublicMapPage = () => {
             icon={createRedMarkerIcon()}
           >
             <Popup>
-              <div dir="rtl" style={{ minWidth: "200px" }}>
+              <div dir="rtl" style={{ minWidth: "220px", maxWidth: "260px" }}>
+                {marker.image && (
+                  <img
+                    src={marker.image}
+                    alt=""
+                    style={{ width: "100%", height: "120px", objectFit: "cover", borderRadius: "6px", marginBottom: "6px" }}
+                  />
+                )}
                 <strong style={{ fontSize: "16px", color: "#ef4444" }}>{marker.template || "لوحة إعلانية"}</strong>
                 <p style={{ margin: "5px 0" }}><strong>📍 المكان:</strong> {marker.place}</p>
                 {marker.directions && <p style={{ margin: "5px 0" }}><strong>🧭 الاتجاه:</strong> {marker.directions}</p>}
                 <p style={{ margin: "5px 0" }}><strong>🗺️ المنطقة:</strong> {marker.region}</p>
+                {marker.size && <p style={{ margin: "5px 0" }}><strong>📐 الأبعاد:</strong> {marker.size}</p>}
+                {marker.area != null && marker.area !== "" && (
+                  <p style={{ margin: "5px 0" }}><strong>📏 الحجم:</strong> {marker.area} م²</p>
+                )}
+                <p style={{ margin: "5px 0" }}>
+                  <strong>🖥️ النوع:</strong> {marker.displayType === "digital" ? "شاشة" : "فيزيائي"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSpecSign(marker)}
+                  style={{
+                    marginTop: "6px", width: "100%", padding: "8px", border: "none",
+                    borderRadius: "6px", backgroundColor: "#0066cc", color: "white",
+                    cursor: "pointer", fontWeight: "bold",
+                  }}
+                >
+                  المواصفات الفنية
+                </button>
               </div>
             </Popup>
           </Marker>
         ))}
       </MapContainer>
+
+      {specSign && (
+        <div
+          onClick={() => setSpecSign(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 2000, backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+          }}
+        >
+          <div
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: "12px", padding: "20px", width: "100%",
+              maxWidth: "420px", maxHeight: "90vh", overflowY: "auto", fontFamily: "Arial, sans-serif",
+            }}
+          >
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              marginBottom: "16px", paddingBottom: "12px", borderBottom: "2px solid #f3f4f6",
+            }}>
+              <strong style={{ fontSize: "18px", fontWeight: 700, color: "#111827" }}>📊 المواصفات الفنية</strong>
+              <button
+                type="button"
+                onClick={() => setSpecSign(null)}
+                style={{
+                  border: "none", background: "#f3f4f6", width: "30px", height: "30px", borderRadius: "50%",
+                  fontSize: "18px", lineHeight: 1, cursor: "pointer", color: "#4b5563",
+                }}
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            {specSign.evaluation ? (
+              <>
+                {[
+                  ["👁️", "نسبة المشاهدة", specSign.evaluation.view_rate, "#2563eb"],
+                  ["👥", "النسبة المتوقعة للجمهور", specSign.evaluation.expected_audience_rate, "#16a34a"],
+                  ["🏙️", "الكثافة السكانية", specSign.evaluation.population_density_score, "#9333ea"],
+                  ["🚗", "حركة المرور", specSign.evaluation.traffic_score, "#ea580c"],
+                ]
+                  .filter(([, , v]) => v !== null && v !== undefined)
+                  .map(([icon, label, value, color]) => (
+                    <div
+                      key={label}
+                      style={{
+                        marginBottom: "10px", padding: "10px 12px", background: "#f9fafb",
+                        border: "1px solid #eef0f3", borderRadius: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "14px", fontWeight: 600, color: "#1f2937" }}>
+                          <span style={{ marginLeft: "6px" }}>{icon}</span>{label}
+                        </span>
+                        <strong style={{ fontSize: "15px", color }}>{value}%</strong>
+                      </div>
+                      <div style={{ height: "8px", background: "#e5e7eb", borderRadius: "4px", overflow: "hidden" }}>
+                        <div style={{ width: `${value}%`, height: "100%", background: color, borderRadius: "4px" }} />
+                      </div>
+                    </div>
+                  ))}
+                {specSign.evaluation.notes && (
+                  <p style={{ fontSize: "13px", color: "#374151", margin: "8px 0" }}>{specSign.evaluation.notes}</p>
+                )}
+                <p style={{ fontSize: "11px", color: "#6b7280", marginTop: "12px" }}>
+                  * هذه النسب تقديرات تقريبية مبنية على موقع اللوحة وليست قياسات فعلية.
+                </p>
+              </>
+            ) : (
+              <p style={{ fontSize: "14px", color: "#6b7280" }}>لا تتوفر مواصفات فنية لهذه اللوحة حاليًا.</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

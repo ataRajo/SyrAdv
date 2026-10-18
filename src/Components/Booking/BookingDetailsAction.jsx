@@ -71,7 +71,14 @@ export const BookingDetailsAction = ({ booking }) => {
       only_available: isTempMoving,
     },
     {
-      skip: !isOpen || !selectedOldSignDetails?.template?.size
+      skip: !isOpen || !selectedOldSignDetails?.template?.size,
+      // القائمة يجب أن تعكس الواقع الحالي دومًا: لا نعتمد على كاش RTK Query
+      // (60 ثانية افتراضيًا) ولا نبقيها قديمة أثناء فتح النافذة - تُجلب من جديد
+      // عند كل فتح، وكل 5 دقائق وعند العودة للتبويب. (حالة «محجوزة ضمن عقد آخر»
+      // نفسها تُحسب على السيرفر لحظة الطلب من جدول الحجوزات الفعلي.)
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      pollingInterval: isOpen ? 5 * 60 * 1000 : 0,
     }
   );
 
@@ -483,14 +490,22 @@ export const BookingDetailsAction = ({ booking }) => {
                         >
                           <option value="">-- اختر لوحة بديلة --</option>
                           {availableTargetSigns.map(sign => {
-                            const isBooked = Array.isArray(sign.bookings) && sign.bookings.length > 0;
+                            // محجوزة فعلًا ضمن فترة هذا الحجز بنفس منطق التوفر الذي يعتمده
+                            // السيرفر (حجوزات دائمة، غير مؤرشفة، تقاطع صارم). لا نعتمد على
+                            // طول bookings[] لأنه يشمل الحجوزات المؤقتة وسطور الأرشيف وحجزًا
+                            // ينتهي في اليوم الذي يبدأ فيه هذا الحجز.
+                            const isBooked =
+                              typeof sign.is_booked_in_period === 'boolean'
+                                ? sign.is_booked_in_period
+                                : Array.isArray(sign.bookings) && sign.bookings.length > 0;
+                            const conflictCustomer = isBooked ? sign.period_bookings?.[0]?.customer : null;
                             return (
                               <option key={sign.id} value={sign.id}>
                                 {isBooked ? '🔒 ' : ''}{sign.roadsign_code || `RS-${sign.id}`} |
                                 {sign.city?.name || 'غير محدد'} |
                                 {sign.place || 'موقع غير محدد'} -
                                 الاتجاه: {sign.directions || 'غير محدد'}
-                                {isBooked ? ' - محجوزة ضمن عقد آخر' : ' - متاحة'}
+                                {isBooked ? ` - محجوزة ضمن عقد آخر${conflictCustomer ? ` (${conflictCustomer})` : ''}` : ' - متاحة'}
                               </option>
                             );
                           })}

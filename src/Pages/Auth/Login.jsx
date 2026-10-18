@@ -1,12 +1,11 @@
-// Login.jsx
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link, useNavigate } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLoginMutation } from "../../RtkQuery/Slice/Auth/AuthApi";
-import { Loader2, Eye, EyeOff, ShieldCheck, User, Lock, Bell, BellOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, ShieldCheck, User, Lock, Bell, BellOff, AlertCircle } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { showToast } from "../../utils/Notifictions/showToast";
 import { useFormik } from "formik";
@@ -15,12 +14,15 @@ import { useAuth } from "../../Context/AuthProvider";
 import { messaging } from "@/firebase";
 import { getToken, isSupported } from "firebase/messaging";
 
+// VAPID Key constant
+const VAPID_KEY = "BAEh5pDcl7muc7kcU-wQnfZQTM9EoYNTD9BLnlq5fYVKBMkxgpiy6pvH7TbHafvprRLOkRSRzP_NSKtkEtxLyWY";
+
 const LoginSchema = Yup.object().shape({
   username: Yup.string()
-    .min(3, "الاسم يجب ان يكون اكبر من 3 احرف")
+    .min(3, "اسم المستخدم يجب أن يكون 3 أحرف على الأقل")
     .required("اسم المستخدم مطلوب"),
   password: Yup.string()
-    .min(8, "كلمة المرور يجب ان تكون اكبر من 8 احرف")
+    .min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل")
     .required("كلمة المرور مطلوبة"),
 });
 
@@ -31,63 +33,68 @@ export function Login({ className, ...props }) {
   const [showPassword, setShowPassword] = useState(false);
   const [fcmToken, setFcmToken] = useState(null);
 
-  // Function to get FCM token
-  const getFCMToken = async () => {
+  // Synchronize FCM Token safely without redundant triggers
+  const initFCMToken = useCallback(async () => {
     try {
       if (!('Notification' in window)) {
-        console.log("This browser does not support notifications");
+        console.log("هذا المتصفح لا يدعم الإشعارات");
         return null;
       }
 
       const isFcmSupported = await isSupported();
       if (!isFcmSupported) {
-        console.log("Firebase Messaging is not supported");
+        console.log("Firebase Messaging غير مدعوم في هذا المتصفح");
         return null;
       }
 
       const permission = await Notification.requestPermission();
-      
       if (permission === 'granted') {
-        const token = await getToken(messaging, {
-          vapidKey: "BAEh5pDcl7muc7kcU-wQnfZQTM9EoYNTD9BLnlq5fYVKBMkxgpiy6pvH7TbHafvprRLOkRSRzP_NSKtkEtxLyWY"
-        });
-        
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
         if (token) {
-          console.log("FCM Token retrieved:", token.substring(0, 20) + "...");
+          const oldToken = localStorage.getItem('fcm_token');
+          if (oldToken && oldToken !== token) {
+            showToast("info", "تم تحديث رمز الإشعارات الخاص بك");
+          }
           setFcmToken(token);
           localStorage.setItem('fcm_token', token);
           return token;
         }
-      } else {
-        console.log("Notification permission not granted:", permission);
       }
     } catch (error) {
-      console.error("Error getting FCM token:", error);
+      console.error("خطأ أثناء جلب رمز FCM:", error);
     }
     return null;
-  };
-
-  // Function to check if token changed
-  const checkTokenChanges = async () => {
-    const oldToken = localStorage.getItem('fcm_token');
-    const newToken = await getFCMToken();
-    
-    if (oldToken && newToken && oldToken !== newToken) {
-      console.log("⚠️ Token changed! Old vs New");
-      showToast("info", "تم تحديث رمز الإشعارات");
-    }
-  };
+  }, []);
 
   useEffect(() => {
-    getFCMToken();
-    checkTokenChanges();
-  }, []);
+    initFCMToken();
+  }, [initFCMToken]);
+
+  const sendFcmTokenToBackend = async (token, userId) => {
+    try {
+      const authToken = localStorage.getItem('token');
+      if (!authToken) return;
+
+      await fetch("/api/save-fcm-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ 
+          fcm_token: token,
+          user_id: userId
+        })
+      });
+    } catch (error) {
+      console.error("خطأ في إرسال FCM token للخادم:", error);
+    }
+  };
 
   const formik = useFormik({
     initialValues: { username: "", password: "" },
     validationSchema: LoginSchema,
     onSubmit: async (values, { setSubmitting }) => {
-      setSubmitting(true);
       try {
         const currentFcmToken = fcmToken || localStorage.getItem('fcm_token');
         
@@ -101,8 +108,7 @@ export function Login({ className, ...props }) {
 
         const success = loginUser(res);
         if (!success) {
-          showToast("error", "فشل تسجيل الدخول");
-          setSubmitting(false);
+          showToast("error", "فشل تسجيل الدخول، يرجى المحاولة لاحقاً");
           return;
         }
 
@@ -115,174 +121,154 @@ export function Login({ className, ...props }) {
         navigate("/dashboard/administration-page/");
       } catch (error) {
         console.error("Login error:", error);
-        showToast("error", error?.data?.message || "حدث خطأ غير متوقع");
+        showToast("error", error?.data?.message || "حدث خطأ غير متوقع أثناء تسجيل الدخول");
+      } finally {
+        setSubmitting(false);
       }
-      setSubmitting(false);
     },
   });
 
-  const sendFcmTokenToBackend = async (token, userId) => {
-    try {
-      const authToken = localStorage.getItem('token');
-      if (!authToken) {
-        return;
-      }
-
-      const response = await fetch("/api/save-fcm-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ 
-          fcm_token: token,
-          user_id: userId
-        })
-      });
-
-      if (response.ok) {
-        console.log("FCM token sent to backend successfully");
-      }
-    } catch (error) {
-      console.error("Error sending FCM token to backend:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (formik.errors.username && formik.touched.username) {
-      showToast("error", formik.errors.username);
-    }
-    if (formik.errors.password && formik.touched.password) {
-      showToast("error", formik.errors.password);
-    }
-  }, [formik.errors, formik.touched]);
-
   return (
-    <div className={cn("w-full min-h-screen flex flex-col lg:flex-row bg-white", className)} {...props}>
+    <div className={cn("w-full min-h-screen flex flex-col lg:flex-row bg-slate-50 dir-rtl", className)} dir="rtl" {...props}>
       
-      {/* القسم الأيمن: الصورة (في التطبيقات التي تستخدم اتجاه RTL) */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 items-end justify-start p-12 overflow-hidden">
+      {/* Right Side: Data Analytics Image Banner */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-950 items-end justify-start p-12 overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop"
-          alt="Admin Dashboard Analytics"
-          className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
+src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop"          alt="لوحة التحكم الإدارية والتحليلات"
+          className="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-luminosity scale-105 transition-transform duration-1000 hover:scale-100"
         />
         
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent" />
-        <div className="absolute inset-0 bg-blue-900/10 mix-blend-color" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
+        <div className="absolute inset-0 bg-blue-950/20 mix-blend-overlay" />
         
-        <div className="relative z-10 max-w-lg text-right w-full ml-auto">
-          <div className="inline-flex items-center justify-center p-3 bg-white/10 backdrop-blur-md rounded-xl mb-6 border border-white/20">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H4a2 2 0 00-2 2v6a2 2 0 002 2h3a2 2 0 002-2zm0 0V9a2 2 0 012-2h3a2 2 0 012 2v10m-6 0a2 2 0 002 2h3a2 2 0 002-2m0 0V5a2 2 0 012-2h3a2 2 0 012 2v14a2 2 0 01-2 2h-3a2 2 0 01-2-2z" />
-            </svg>
+        <div className="relative z-10 max-w-lg text-right w-full">
+          <div className="inline-flex items-center justify-center p-3.5 bg-white/10 backdrop-blur-md rounded-2xl mb-6 border border-white/15 shadow-2xl">
+            <ShieldCheck className="w-7 h-7 text-blue-400" />
           </div>
-          <h2 className="text-4xl font-bold text-white mb-4">
-            التحكم الشامل والمراقبة
+          <h2 className="text-4xl font-extrabold text-white mb-4 tracking-tight leading-tight">
+            التحكم الشامل والمراقبة الذكية
           </h2>
-          <p className="text-lg text-slate-300 leading-relaxed">
-            مرحباً بك في لوحة تحكم المسؤولين المركزية. يمكنك من هنا إدارة البيانات، مراقبة الإحصائيات، ومتابعة جميع تفاصيل سير العمل بأمان وسرعة.
+          <p className="text-base text-slate-300 leading-relaxed font-normal">
+            مرحباً بك في بوابة الإدارة المركزية للشركة السورية للإعلان. قم بإدارة عملياتك، متابعة التحليلات المباشرة، وحماية بياناتك في بيئة آمنة ومتكاملة.
           </p>
         </div>
       </div>
 
-      {/* القسم الأيسر: نموذج تسجيل الدخول */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 sm:p-12 xl:p-24 bg-slate-50 relative z-10">
-        <div className="w-full max-w-[420px] space-y-10">
+      {/* Left Side: Login Form */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 sm:p-12 xl:p-20 bg-white relative z-10">
+        <div className="w-full max-w-[420px] space-y-8">
           
           {/* Header */}
-          <div className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-slate-900 rounded-2xl shadow-xl flex items-center justify-center mb-6">
-              <ShieldCheck className="w-8 h-8 text-white" strokeWidth={1.5} />
+          <div className="text-center space-y-3">
+            <div className="mx-auto w-14 h-14 bg-slate-900 rounded-2xl shadow-lg flex items-center justify-center border border-slate-800">
+              <ShieldCheck className="w-7 h-7 text-white" strokeWidth={1.75} />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              بوابة الإدارة
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+              تسجيل الدخول
             </h1>
-            <p className="text-sm text-slate-500 font-medium bg-slate-200/50 inline-block px-4 py-1.5 rounded-full">
-              الشركة السورية للاعلان - وصول المسؤولين
+            <p className="text-xs sm:text-sm text-slate-500 font-medium bg-slate-100 inline-block px-3.5 py-1.5 rounded-full border border-slate-200">
+              الشركة السورية للإعلان — وصول المسؤولين
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={formik.handleSubmit} className="space-y-6">
-            <div className="space-y-5">
+          <form onSubmit={formik.handleSubmit} className="space-y-5" noValidate>
+            <div className="space-y-4">
               
               {/* Username Input */}
-              <div className="space-y-2">
-                <Label className="text-right block text-slate-700 font-semibold" htmlFor="username">
+              <div className="space-y-1.5">
+                <Label className="text-right block text-slate-700 font-medium text-sm" htmlFor="username">
                   اسم المستخدم
                 </Label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <User className="h-5 w-5 text-slate-400" />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
+                    <User className="h-5 w-5" />
                   </div>
                   <Input
                     id="username"
                     name="username"
                     type="text"
                     placeholder="أدخل اسم المستخدم"
-                    // أضفنا text-slate-900 ولون للـ placeholder هنا
-                    className="pr-10 h-12 bg-white text-slate-900 placeholder:text-slate-400 border-slate-200 focus:border-slate-900 focus:ring-slate-900 transition-colors"
+                    className={cn(
+                      "pr-10 h-11 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 border-slate-200 focus:bg-white focus:border-slate-900 focus:ring-slate-900 transition-all dir-rtl",
+                      formik.touched.username && formik.errors.username && "border-red-500 focus:border-red-500 focus:ring-red-500"
+                    )}
                     value={formik.values.username}
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
-                    required
                   />
                 </div>
+                {formik.touched.username && formik.errors.username && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {formik.errors.username}
+                  </p>
+                )}
               </div>
 
               {/* Password Input */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Link
-                    to="#"
-                    onClick={() => showToast("error", "يرجى التواصل مع مدير النظام")}
-                    className="text-xs text-slate-500 hover:text-slate-900 hover:underline transition-colors"
-                  >
-                    هل نسيت كلمة المرور؟
-                  </Link>
-                  <Label className="text-right block text-slate-700 font-semibold" htmlFor="password">
+                  <Label className="text-right block text-slate-700 font-medium text-sm" htmlFor="password">
                     كلمة المرور
                   </Label>
+                  <Link
+                    to="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      showToast("info", "يرجى التواصل مع مدير النظام لإعادة ضبط كلمة المرور");
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-900 hover:underline transition-colors"
+                  >
+                    نسيت كلمة المرور؟
+                  </Link>
                 </div>
                 <div className="relative">
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <Lock className="h-5 w-5 text-slate-400" />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
+                    <Lock className="h-5 w-5" />
                   </div>
                   <Input
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="أدخل كلمة المرور"
-                    // أضفنا text-slate-900 ولون للـ placeholder هنا
-                    className="pr-10 pl-10 h-12 bg-white text-slate-900 placeholder:text-slate-400 border-slate-200 focus:border-slate-900 focus:ring-slate-900 transition-colors"
+                    className={cn(
+                      "pr-10 pl-10 h-11 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 border-slate-200 focus:bg-white focus:border-slate-900 focus:ring-slate-900 transition-all dir-rtl",
+                      formik.touched.password && formik.errors.password && "border-red-500 focus:border-red-500 focus:ring-red-500"
+                    )}
                     value={formik.values.password}
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
-                    required
                   />
                   <button
                     type="button"
                     className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 hover:text-slate-700 transition-colors"
                     onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                {formik.touched.password && formik.errors.password && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {formik.errors.password}
+                  </p>
+                )}
               </div>
             </div>
 
             {/* Notification Status */}
-            <div className="flex items-center justify-center rounded-lg bg-slate-100 p-3 border border-slate-200">
+            <div className="flex items-center justify-center rounded-xl bg-slate-50 p-3 border border-slate-200/80">
               {fcmToken ? (
                 <div className="flex items-center gap-2 text-emerald-600">
                   <Bell className="w-4 h-4" />
-                  <span className="text-xs font-semibold">نظام إشعارات المسؤولين مفعل</span>
+                  <span className="text-xs font-semibold">نظام الإشعارات مفعل بنجاح</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-amber-600">
                   <BellOff className="w-4 h-4" />
-                  <span className="text-xs font-semibold">يرجى تفعيل الإشعارات للحصول على التنبيهات</span>
+                  <span className="text-xs font-semibold">يرجى السماح بالإشعارات للحصول على التنبيهات</span>
                 </div>
               )}
             </div>
@@ -291,13 +277,13 @@ export function Login({ className, ...props }) {
             <Button
               type="submit"
               disabled={formik.isSubmitting || isLoading}
-              className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-md transition-all active:scale-[0.98]"
+              className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-sm hover:shadow transition-all active:scale-[0.99] rounded-lg"
             >
               {(formik.isSubmitting || isLoading) ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   جاري تسجيل الدخول...
-                </>
+                </span>
               ) : (
                 "تسجيل الدخول للنظام"
               )}
@@ -313,6 +299,8 @@ export function Login({ className, ...props }) {
             background: '#0f172a',
             color: '#fff',
             border: '1px solid #334155',
+            borderRadius: '0.5rem',
+            direction: 'rtl'
           },
         }}
       />

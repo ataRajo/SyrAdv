@@ -23,7 +23,7 @@ const useMangeOrders = () => {
   const [getActiveRegionsByCity] = useGetActiveRegionsByCityMutation();
 
   const queryParams = {
-    ...(orderType === "both" && { type: [3] }),
+    ...((orderType === "both" || orderType === "swap") && { type: [3] }),
     ...(orderType === "release" && { type: [1] }),
     ...(orderType === "installation" && { type: [2] }),
     ...(cityId && { city_id: cityId }),

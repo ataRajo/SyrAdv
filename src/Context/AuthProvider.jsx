@@ -155,6 +155,17 @@ export const AuthProvider = ({ children }) => {
     return permissions.some((p) => p?.name === permission);
   };
 
+  // "تعديل يدوي للحسابات من شجرة الحسابات (من السوبر ادمن فقط)" - طلب
+  // صريح يحتاج تحققًا بالدور نفسه لا بصلاحية edit-financials العادية
+  // (يملكها أيضًا accountant - راجع RolePermissionSeeder على الباك-إند).
+  // user.roles يصل فعليًا مع استجابة تسجيل الدخول (راجع loginUser أعلاه).
+  const hasRole = (roleName) => {
+    if (!user?.roles || !Array.isArray(user.roles)) return false;
+    return user.roles.some((r) => (typeof r === "string" ? r === roleName : r?.name === roleName));
+  };
+
+  const isSuperAdmin = () => hasRole("super admin");
+
   const debugStorage = () => {
     console.log("🔍 Storage Debug Info:");
     console.log("- SuperAdminInfo:", localStorage.getItem("SuperAdminInfo"));
@@ -169,6 +180,8 @@ export const AuthProvider = ({ children }) => {
         user,
         permissions,
         hasPermission,
+        hasRole,
+        isSuperAdmin,
         loginUser, // expose distinct function name
         logout,
         isAuthenticated,

@@ -11,4 +11,5 @@ export const userInitialValues = {
   permissions: [],
   // ✅ الراتب (طلب صريح) - راجع UserFields.js وDialogEditUser.jsx.
   salary: "",
+  salary_type: "monthly",
 };

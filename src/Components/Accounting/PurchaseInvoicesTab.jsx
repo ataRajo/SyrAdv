@@ -18,9 +18,97 @@ import {
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
 import MaterialSearchInput from "./MaterialSearchInput";
-import { useGetPurchaseInvoiceQuery } from "../../RtkQuery/Slice/Accounting/AccountingApi";
+import { useGetPurchaseInvoiceQuery, useUpdatePurchaseInvoiceMutation } from "../../RtkQuery/Slice/Accounting/AccountingApi";
+import toast from "react-hot-toast";
+import { DeleteDialog } from "../../utils/Dialogs/DeleteDialog/DeleteDialog";
+import { openPurchaseInvoicePrint } from "../../utils/branding/purchaseInvoiceDocument";
 
 const fmt = (n) => Number(n ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 });
+
+/**
+ * خصم سلفة المورد من الفاتورة/الدفعة (طلب صريح: "أعطيته سلفة عن مواد سأشتريها
+ * لاحقًا، ثم اشتريت منه => تنقص السلفة بالمبلغ الذي اشتريته"). تلقائي
+ * افتراضيًا (حتى قيمة الفاتورة)، ويمكن إلغاؤه أو تحديد مبلغ جزئي.
+ * القيم بالدولار دائمًا (السلفة بالدولار) - راجع PurchaseInvoiceService::advanceCap().
+ */
+const useAdvanceDeduction = () => {
+  const [state, setState] = useState({ deduct: true, mode: "all", amount: "" });
+  return [state, (patch) => setState((s) => ({ ...s, ...patch }))];
+};
+
+const advancePreview = (outstanding, totalUsd, state) => {
+  const requested = state.mode === "custom" ? Math.max(Number(state.amount) || 0, 0) : outstanding;
+  const deducted = state.deduct ? Math.min(outstanding, requested, Math.max(totalUsd || 0, 0)) : 0;
+  return {
+    deducted,
+    remainingAdvance: Math.max(outstanding - deducted, 0),
+    toPay: Math.max((totalUsd || 0) - deducted, 0),
+    tooHigh: state.deduct && state.mode === "custom" && Number(state.amount) > outstanding + 0.001,
+  };
+};
+
+const advancePayload = (outstanding, state) =>
+  outstanding > 0
+    ? {
+        deduct_advance: state.deduct ? 1 : 0,
+        ...(state.deduct && state.mode === "custom" ? { advance_amount: Number(state.amount) || 0 } : {}),
+      }
+    : {};
+
+const AdvanceDeductionBox = ({ outstanding, totalUsd, state, onChange, payLabel = "المتبقي للدفع" }) => {
+  if (!(outstanding > 0)) return null;
+  const p = advancePreview(outstanding, totalUsd, state);
+  return (
+    <div className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md p-3 space-y-2">
+      <div className="font-semibold flex items-center gap-1.5">
+        <Icon icon="mdi:hand-coin-outline" className="w-4 h-4" />
+        لهذا المورد سلفة قائمة: ${fmt(outstanding)}
+      </div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input type="checkbox" className="h-4 w-4" checked={state.deduct} onChange={(e) => onChange({ deduct: e.target.checked })} />
+        خصم قيمة المشتريات من السلفة
+      </label>
+      {state.deduct && (
+        <div className="flex flex-wrap items-center gap-3 pr-6">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" checked={state.mode === "all"} onChange={() => onChange({ mode: "all" })} />
+            تلقائي (حتى قيمة الفاتورة)
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" checked={state.mode === "custom"} onChange={() => onChange({ mode: "custom" })} />
+            مبلغ محدد ($):
+          </label>
+          {state.mode === "custom" && (
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              max={outstanding}
+              className="h-7 w-28 text-xs bg-white"
+              value={state.amount}
+              onChange={(e) => onChange({ amount: e.target.value })}
+            />
+          )}
+        </div>
+      )}
+      {p.tooHigh && <p className="text-destructive">المبلغ أكبر من رصيد السلفة (${fmt(outstanding)}).</p>}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded bg-white/70 border border-amber-200 p-1.5">
+          <div className="text-[10px] text-muted-foreground">يُخصم من السلفة</div>
+          <div className="font-mono font-semibold">${fmt(p.deducted)}</div>
+        </div>
+        <div className="rounded bg-white/70 border border-amber-200 p-1.5">
+          <div className="text-[10px] text-muted-foreground">المتبقي من السلفة بعدها</div>
+          <div className="font-mono font-semibold">${fmt(p.remainingAdvance)}</div>
+        </div>
+        <div className="rounded bg-white/70 border border-amber-200 p-1.5">
+          <div className="text-[10px] text-muted-foreground">{payLabel}</div>
+          <div className="font-mono font-semibold">${fmt(p.toPay)}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const emptyItem = () => ({ material_id: null, material_name: "", unit: "", quantity: "1", unit_price: "" });
 
@@ -43,6 +131,7 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
   // تعديله يدويًا نتوقف عن الكتابة فوقه.
   const [expenseAccountTouched, setExpenseAccountTouched] = useState(false);
   const [items, setItems] = useState([]);
+  const [advanceState, setAdvanceState] = useAdvanceDeduction();
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
   const hasItems = items.length > 0;
@@ -62,6 +151,11 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
   const selectedSupplier = (suppliers ?? []).find((s) => String(s.id) === String(form.supplier_id));
   const defaultExpenseAccount = selectedSupplier?.category?.expense_account;
   const defaultExpenseAccountId = selectedSupplier?.category?.expense_account_id;
+  const supplierAdvance = Number(selectedSupplier?.outstanding_advance_balance || 0);
+  const nativeTotal = hasItems ? itemsTotal : Number(form.amount) || 0;
+  const invoiceTotalUsd =
+    form.currency === "SYP" ? (Number(form.exchange_rate) > 0 ? nativeTotal / Number(form.exchange_rate) : 0) : nativeTotal;
+  const advanceTooHigh = advancePreview(supplierAdvance, invoiceTotalUsd, advanceState).tooHigh;
 
   const handleSupplierChange = (value) => {
     set("supplier_id")(value);
@@ -94,6 +188,7 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
       // إن لم يُختَر شيء، الباك-إند يعود تلقائيًا لحساب فئة المورد
       // الافتراضي (PurchaseInvoiceService::create).
       ...(form.expense_account_id ? { expense_account_id: Number(form.expense_account_id) } : {}),
+      ...advancePayload(supplierAdvance, advanceState),
       ...(hasItems
         ? {
             items: items.map((it) => ({
@@ -107,7 +202,11 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
     });
   };
 
-  const canSubmit = Boolean(form.supplier_id) && (hasItems || form.amount) && (form.expense_account_id || defaultExpenseAccountId);
+  const canSubmit =
+    Boolean(form.supplier_id) &&
+    (hasItems || form.amount) &&
+    (form.expense_account_id || defaultExpenseAccountId) &&
+    !advanceTooHigh;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -214,8 +313,12 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>رقم الفاتورة (اختياري)</Label>
-          <Input value={form.invoice_number} onChange={(e) => set("invoice_number")(e.target.value)} />
+          <Label>رقم الفاتورة</Label>
+          <Input
+            value={form.invoice_number}
+            placeholder="يُولَّد تلقائيًا (أو أدخل رقم فاتورة المورد)"
+            onChange={(e) => set("invoice_number")(e.target.value)}
+          />
         </div>
         {!hasItems && (
           <div className="space-y-2">
@@ -230,6 +333,14 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
           <Input type="number" step="0.01" min="0.01" placeholder="مثال: 15000" value={form.exchange_rate} onChange={(e) => set("exchange_rate")(e.target.value)} required />
         </div>
       )}
+
+      <AdvanceDeductionBox
+        outstanding={supplierAdvance}
+        totalUsd={invoiceTotalUsd}
+        state={advanceState}
+        onChange={setAdvanceState}
+        payLabel={isCredit ? "يبقى مستحقًا (آجل)" : "يُدفع نقدًا"}
+      />
 
       <div className="space-y-2">
         <Label>طريقة الدفع</Label>
@@ -279,7 +390,11 @@ const AddPurchaseInvoiceForm = ({ suppliers, cashAccounts = [], expenseAccounts 
   );
 };
 
-const PayInvoiceForm = ({ invoice, cashAccounts = [], onCancel, onSave, isSaving }) => {
+const PayInvoiceForm = ({ invoice, suppliers = [], cashAccounts = [], onCancel, onSave, isSaving }) => {
+  const [advanceState, setAdvanceState] = useAdvanceDeduction();
+  const supplierAdvance = Number(
+    (suppliers ?? []).find((s) => String(s.id) === String(invoice.supplier_id))?.outstanding_advance_balance || 0
+  );
   const [form, setForm] = useState({
     amount: "",
     currency: "USD",
@@ -289,12 +404,22 @@ const PayInvoiceForm = ({ invoice, cashAccounts = [], onCancel, onSave, isSaving
   });
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
   const matchingCashAccounts = cashAccounts.filter((a) => a.currency === form.currency);
+  // مبلغ هذه الدفعة بالدولار (فارغ = كامل المتبقي).
+  const payUsd = form.amount
+    ? form.currency === "SYP"
+      ? Number(form.exchange_rate) > 0
+        ? Number(form.amount) / Number(form.exchange_rate)
+        : 0
+      : Number(form.amount)
+    : Number(invoice.remaining_amount || 0);
+  const advanceTooHigh = advancePreview(supplierAdvance, payUsd, advanceState).tooHigh;
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         onSave({
+          ...advancePayload(supplierAdvance, advanceState),
           ...(form.amount ? { amount: Number(form.amount) } : {}),
           currency: form.currency,
           ...(form.currency === "SYP" && form.exchange_rate ? { exchange_rate: Number(form.exchange_rate) } : {}),
@@ -307,6 +432,13 @@ const PayInvoiceForm = ({ invoice, cashAccounts = [], onCancel, onSave, isSaving
       <p className="text-sm text-muted-foreground">
         المتبقي على هذه الفاتورة: <span className="font-semibold text-foreground">${fmt(invoice.remaining_amount)}</span>
       </p>
+      <AdvanceDeductionBox
+        outstanding={supplierAdvance}
+        totalUsd={payUsd}
+        state={advanceState}
+        onChange={setAdvanceState}
+        payLabel="يُدفع نقدًا"
+      />
       <div className="space-y-2">
         <Label>عملة الدفعة</Label>
         <Select value={form.currency} onValueChange={(v) => { set("currency")(v); set("cashbox_account_id")(""); }}>
@@ -344,7 +476,7 @@ const PayInvoiceForm = ({ invoice, cashAccounts = [], onCancel, onSave, isSaving
       </div>
       <DialogFooter className="flex flex-col sm:flex-row gap-2">
         <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">إلغاء</Button>
-        <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
+        <Button type="submit" disabled={isSaving || advanceTooHigh} className="w-full sm:w-auto">
           {isSaving ? "جارٍ التسديد..." : "تسديد وإصدار سند الدفع"}
         </Button>
       </DialogFooter>
@@ -462,6 +594,9 @@ const PurchaseInvoiceDetailsDialog = ({ invoiceId, open, onOpenChange, accountin
               <div className="bg-muted/40 rounded p-2">
                 <div className="text-xs text-muted-foreground">المبلغ الإجمالي</div>
                 <div className="font-semibold font-mono">${fmt(invoice.amount)}</div>
+                {Number(invoice.advance_deducted) > 0 && (
+                  <div className="text-xs text-amber-700">خُصم من سلفة المورد: ${fmt(invoice.advance_deducted)}</div>
+                )}
               </div>
               <div className="bg-muted/40 rounded p-2">
                 <div className="text-xs text-muted-foreground">أضيفت بواسطة</div>
@@ -551,9 +686,74 @@ const PurchaseInvoiceDetailsDialog = ({ invoiceId, open, onOpenChange, accountin
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex gap-2">
+          {invoice && (
+            <Button variant="default" onClick={() => openPurchaseInvoicePrint(invoice)}>
+              <Icon icon="mdi:printer-outline" className="w-4 h-4 ml-1" />
+              طباعة الفاتورة
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>إغلاق</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// تعديل غير مالي: رقم الفاتورة + الوصف (+ تاريخ الاستحقاق للآجلة). المبالغ والبنود تبقى كما هي.
+const EditPurchaseInvoiceDialog = ({ invoice, onClose }) => {
+  const [form, setForm] = useState({
+    invoice_number: invoice?.invoice_number || "",
+    description: invoice?.description || "",
+    due_date: invoice?.due_date || "",
+  });
+  const [updateInvoice, { isLoading }] = useUpdatePurchaseInvoiceMutation();
+  const isCredit = invoice?.payment_type === "credit";
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    try {
+      await updateInvoice({
+        id: invoice.id,
+        invoice_number: form.invoice_number,
+        description: form.description,
+        ...(isCredit && form.due_date ? { due_date: form.due_date } : {}),
+      }).unwrap();
+      toast.success("تم تعديل الفاتورة");
+      onClose();
+    } catch (err) {
+      toast.error(err?.data?.message || "فشل تعديل الفاتورة");
+    }
+  };
+
+  return (
+    <Dialog open={Boolean(invoice)} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl">
+        <DialogHeader><DialogTitle>تعديل الفاتورة {invoice?.invoice_number || `#${invoice?.id ?? ""}`}</DialogTitle></DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            لتغيير المبالغ أو البنود احذف الفاتورة (إن كانت تجريبية) وأعد إدخالها.
+          </p>
+          <div className="space-y-2">
+            <Label>رقم الفاتورة</Label>
+            <Input value={form.invoice_number} onChange={set("invoice_number")} />
+          </div>
+          <div className="space-y-2">
+            <Label>الوصف</Label>
+            <Input value={form.description} onChange={set("description")} />
+          </div>
+          {isCredit && (
+            <div className="space-y-2">
+              <Label>تاريخ الاستحقاق</Label>
+              <Input type="date" value={form.due_date} onChange={set("due_date")} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
+            <Button type="submit" disabled={isLoading}>{isLoading ? "جارٍ الحفظ..." : "حفظ"}</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -572,6 +772,8 @@ const PurchaseInvoicesTab = ({ accounting }) => {
     unarchivePurchaseInvoice,
     payPurchaseInvoice,
     isPayingPurchaseInvoice,
+    deletePurchaseInvoice,
+    isDeletingPurchaseInvoice,
     suppliers,
     setPurchaseInvoiceFilters,
     cashAccounts,
@@ -581,6 +783,8 @@ const PurchaseInvoicesTab = ({ accounting }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [payTarget, setPayTarget] = useState(null);
   const [detailsInvoiceId, setDetailsInvoiceId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editInvoice, setEditInvoice] = useState(null);
   const showingArchived = Boolean(purchaseInvoiceFilters?.archived);
   // حسابات المصروف القابلة للترحيل إليها فقط (شجرة الحسابات - نوع "مصروف")
   // - تُستخدم في تخصيص فاتورة الشراء (طلب العميل).
@@ -664,14 +868,16 @@ const PurchaseInvoicesTab = ({ accounting }) => {
                 <th className="p-2 text-center">سند الدفع</th>
                 <th className="p-2 text-center">التفاصيل</th>
                 <th className="p-2 text-center">{showingArchived ? "استعادة" : "أرشفة"}</th>
+                <th className="p-2 text-center">تعديل</th>
+                <th className="p-2 text-center">حذف</th>
               </tr>
             </thead>
             <tbody>
               {isFetchingPurchaseInvoices && (
-                <tr><td colSpan={11} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+                <tr><td colSpan={13} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
               )}
               {!isFetchingPurchaseInvoices && (purchaseInvoices ?? []).length === 0 && (
-                <tr><td colSpan={11} className="p-4 text-center text-muted-foreground">
+                <tr><td colSpan={13} className="p-4 text-center text-muted-foreground">
                   {showingArchived ? "لا يوجد فواتير مؤرشفة" : "لا يوجد فواتير بعد"}
                 </td></tr>
               )}
@@ -682,7 +888,14 @@ const PurchaseInvoicesTab = ({ accounting }) => {
                   <td className="p-2 text-center text-xs">{invoice.expense_account?.name ?? "-"}</td>
                   <td className="p-2 text-xs text-center">{invoice.date}</td>
                   <td className="p-2 max-w-[220px] truncate text-center" title={invoice.description}>{invoice.description || "-"}</td>
-                  <td className="p-2 font-mono text-center">${fmt(invoice.amount)}</td>
+                  <td className="p-2 font-mono text-center">
+                    ${fmt(invoice.amount)}
+                    {Number(invoice.advance_deducted) > 0 && (
+                      <div className="text-[10px] text-amber-700 font-sans" title="خُصم من سلفة المورد">
+                        من السلفة: ${fmt(invoice.advance_deducted)}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-2 text-center">
                     {invoice.payment_type === "credit" ? (
                       invoice.is_fully_paid ? (
@@ -728,6 +941,15 @@ const PurchaseInvoicesTab = ({ accounting }) => {
                       >
                         <Icon icon="mdi:eye-outline" className="w-4 h-4" />
                       </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => openPurchaseInvoicePrint(invoice)}
+                        title="طباعة فاتورة الشراء"
+                      >
+                        <Icon icon="mdi:file-document-outline" className="w-4 h-4" />
+                      </Button>
                       {invoice.invoice_image_url && (
                         <Icon
                           icon="mdi:image-check-outline"
@@ -753,6 +975,28 @@ const PurchaseInvoicesTab = ({ accounting }) => {
                         icon={showingArchived ? "mdi:archive-arrow-up-outline" : "mdi:archive-outline"}
                         className="w-4 h-4"
                       />
+                    </Button>
+                  </td>
+                  <td className="p-2 text-center">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => setEditInvoice(invoice)}
+                      title="تعديل الفاتورة"
+                    >
+                      <Icon icon="mdi:pencil-outline" className="w-4 h-4" />
+                    </Button>
+                  </td>
+                  <td className="p-2 text-center">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteTarget(invoice)}
+                      title="حذف الفاتورة"
+                    >
+                      <Icon icon="mdi:trash-can-outline" className="w-4 h-4" />
                     </Button>
                   </td>
                 </tr>
@@ -809,6 +1053,7 @@ const PurchaseInvoicesTab = ({ accounting }) => {
           {payTarget && (
             <PayInvoiceForm
               invoice={payTarget}
+              suppliers={suppliers}
               cashAccounts={cashAccounts}
               onCancel={() => setPayTarget(null)}
               onSave={async (data) => {
@@ -820,6 +1065,23 @@ const PurchaseInvoicesTab = ({ accounting }) => {
           )}
         </DialogContent>
       </Dialog>
+
+      <DeleteDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        loading={isDeletingPurchaseInvoice}
+        title="حذف فاتورة الشراء"
+        description={`سيتم حذف الفاتورة ${deleteTarget?.invoice_number || `#${deleteTarget?.id ?? ""}`} نهائيًا مع بنودها ودفعاتها، وتُعكَس قيودها المحاسبية (المصروف، حساب المورد، والصندوق) تلقائيًا. هل أنت متأكد؟`}
+        onConfirm={async () => {
+          const ok = await deletePurchaseInvoice(deleteTarget.id);
+          if (ok) {
+            if (detailsInvoiceId === deleteTarget.id) setDetailsInvoiceId(null);
+            setDeleteTarget(null);
+          }
+        }}
+      />
+
+      {editInvoice && <EditPurchaseInvoiceDialog key={editInvoice.id} invoice={editInvoice} onClose={() => setEditInvoice(null)} />}
 
       <PurchaseInvoiceDetailsDialog
         invoiceId={detailsInvoiceId}

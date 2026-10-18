@@ -18,7 +18,7 @@ import { useParams } from "react-router";
 import { Permissions } from "../../Static/StaticData";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useMoveBookingMutation } from "../../RtkQuery/Slice/Booking/BookingApi";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import CustomerSearchSelect from "../Common/CustomerSearchSelect";
 import { Search, ChevronDown, Loader2, X, Calendar, CalendarOff, ArrowRightLeft } from "lucide-react";
 
 // ---- small debounce hook (kept local, no external deps) ----
@@ -56,20 +56,10 @@ const TableRoadSigns = ({ isLoading }) => {
   // so typing stays instant and we don't fire a request per keystroke
   const debouncedCustomerSearch = useDebouncedValue(customerSearch, 350);
 
-  const {
-    data: customersData,
-    isLoading: isCustomersLoading,
-    error: customersError,
-  } = useGetCustomersQuery(
-    {
-      page: customerPage,
-      per_page: 5,
-      search: debouncedCustomerSearch || undefined,
-    },
-    {
-      refetchOnMountOrArgChange: false,
-    }
-  );
+  // فلتر العميل عبر CustomerSearchSelect (بحث من الخادم + تمرير لا نهائي) -
+  // نحتفظ فقط بالزبون المختار لعرض اسمه.
+  const [selectedCustomerObj, setSelectedCustomerObj] = useState(null);
+  const isCustomersLoading = false;
 
   const {
     cityId,
@@ -170,25 +160,13 @@ const TableRoadSigns = ({ isLoading }) => {
   }, [directionSearch, allRealDirections]);
 
   // ---- customers: no setState inside useMemo anymore ----
-  const allCustomers = useMemo(() => {
-    if (!customersData) return [{ id: "", full_name: "جميع العملاء", company_name: "" }];
-
-    const customersList = Array.isArray(customersData.data)
-      ? customersData.data
-      : Array.isArray(customersData)
-      ? customersData
-      : customersData.customers || customersData.items || [];
-
-    return [{ id: "", full_name: "جميع العملاء", company_name: "" }, ...customersList];
-  }, [customersData]);
-
-  useEffect(() => {
-    if (customersData?.data && Array.isArray(customersData.data)) {
-      setTotalPages(Math.ceil((customersData.total || 0) / (customersData.per_page || 10)));
-    } else {
-      setTotalPages(1);
-    }
-  }, [customersData]);
+  const allCustomers = useMemo(
+    () => [
+      { id: "", full_name: "جميع العملاء", company_name: "" },
+      ...(selectedCustomerObj ? [selectedCustomerObj] : []),
+    ],
+    [selectedCustomerObj]
+  );
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch.trim()) return allCustomers;
@@ -504,114 +482,17 @@ const TableRoadSigns = ({ isLoading }) => {
             العميل
           </Label>
 
-          <div className="relative">
-            <div className="relative">
-              <Input
-                type="text"
-                value={customerSearch}
-                onChange={(e) => {
-                  setCustomerSearch(e.target.value);
-                  setCustomerPage(1);
-                  if (!showCustomerDropdown) setShowCustomerDropdown(true);
-                }}
-                onFocus={() => setShowCustomerDropdown(true)}
-                placeholder="ابحث عن عميل..."
-                className="w-full p-2 border dark:bg-gray-900 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-              />
-
-              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                {isCustomersLoading ? (
-                  <span className="text-gray-400 animate-pulse">...</span>
-                ) : (
-                  <ChevronDown
-                    className="w-4 h-4 text-gray-400 cursor-pointer"
-                    onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                  />
-                )}
-              </div>
-
-              {customerSearch && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomerSearch("");
-                    setCustomerId("");
-                    setCustomerPage(1);
-                  }}
-                  className="absolute left-8 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {showCustomerDropdown && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                {isCustomersLoading ? (
-                  <div className="px-3 py-4 text-center text-gray-500">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                    جاري تحميل العملاء...
-                  </div>
-                ) : filteredCustomers.length > 0 ? (
-                  <>
-                    {filteredCustomers.map((customer) => (
-                      <div
-                        key={customer.id || "all"}
-                        className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                          customerId == customer.id ? "bg-blue-50 dark:bg-blue-900/30" : ""
-                        } ${
-                          customer.id === ""
-                            ? "border-b border-gray-200 dark:border-gray-700 font-semibold"
-                            : ""
-                        }`}
-                        onClick={() => handleCustomerSelect(customer.id)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="font-medium">
-                              {customer.full_name || customer.name || customer.username || `العميل #${customer.id}`}
-                            </div>
-                            {customer.company_name && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {customer.company_name}
-                              </div>
-                            )}
-                          </div>
-                          {customerId == customer.id && <span className="text-blue-500">✓</span>}
-                        </div>
-                      </div>
-                    ))}
-
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-                        <button
-                          onClick={() => setCustomerPage((prev) => Math.max(1, prev - 1))}
-                          disabled={customerPage === 1}
-                          className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          السابق
-                        </button>
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          صفحة {customerPage} من {totalPages}
-                        </span>
-                        <button
-                          onClick={() => setCustomerPage((prev) => Math.min(totalPages, prev + 1))}
-                          disabled={customerPage === totalPages}
-                          className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          التالي
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="px-3 py-4 text-center text-gray-500 text-sm">
-                    {customerSearch ? "لا توجد نتائج" : "ابدأ بالبحث عن عميل"}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <CustomerSearchSelect
+            value={customerId || ""}
+            onChange={(id, customer) => {
+              setSelectedCustomerObj(customer || null);
+              setCustomerId(id || "");
+            }}
+            selectedCustomer={selectedCustomerObj}
+            allowAll
+            allValue=""
+            allLabel="جميع العملاء"
+          />
         </div>
 
         <div className="direction-dropdown-container relative">

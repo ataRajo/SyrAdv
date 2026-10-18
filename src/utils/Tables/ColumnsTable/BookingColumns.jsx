@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getPublicMapUrl } from "../../../Api/baseUrl";
 import { useUpdateBookingStatusMutation, useCalculateReservationMutation } from "../../../../src/RtkQuery/Slice/Booking/BookingApi";
 import { BookingType } from "../../../Static/StaticData";
 import { Loader2 } from "lucide-react";
@@ -49,7 +50,7 @@ export const ShareMapButton = ({ bookingId }) => {
   const [isSharing, setIsSharing] = useState(false);
 
  const handleOpenMap = () => {
-    const mapLink = `https://tsyr.addresses.sy/public-map/${bookingId}`;
+    const mapLink = getPublicMapUrl(bookingId);
     console.log("Opening map link:", mapLink);
     
     try {
@@ -63,7 +64,7 @@ export const ShareMapButton = ({ bookingId }) => {
   };
 
   const handleCopyLink = () => {
-    const mapLink = `https://tsyr.addresses.sy/public-map/${bookingId}`;
+    const mapLink = getPublicMapUrl(bookingId);
     
     navigator.clipboard.writeText(mapLink).then(() => {
       toast.success("تم نسخ رابط الخريطة! ✅", {

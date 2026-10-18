@@ -15,16 +15,30 @@ const initialFormState = {
   offer_price: "",
   from_date: "",
   to_date: "",
+  status: "active",
 };
 
-const OfferModal = ({ show, onClose, onSubmit, isSubmitting }) => {
+// ← أضيف: initialData يفعّل وضع التعديل (بما فيه إعادة تفعيل عرض
+// منتهي عبر حقل "الحالة") - طلب صريح.
+const OfferModal = ({ show, onClose, onSubmit, isSubmitting, initialData = null }) => {
+  const isEditMode = Boolean(initialData);
   const [formData, setFormData] = useState(initialFormState);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    setFormData(initialFormState);
+    if (initialData) {
+      setFormData({
+        offer_description: initialData.offer_description || "",
+        offer_price: initialData.offer_price ?? "",
+        from_date: initialData.from_date || "",
+        to_date: initialData.to_date || "",
+        status: initialData.status || "active",
+      });
+    } else {
+      setFormData(initialFormState);
+    }
     setErrors({});
-  }, [show]);
+  }, [show, initialData]);
 
   const validate = () => {
     const newErrors = {};
@@ -66,13 +80,18 @@ const OfferModal = ({ show, onClose, onSubmit, isSubmitting }) => {
     });
   };
 
+  const statusOptions = [
+    { value: "active", label: "نشط" },
+    { value: "expired", label: "غير نشط" },
+  ];
+
   return (
     <Dialog open={show} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700" dir="rtl">
         <DialogHeader>
           <DialogTitle className="text-right flex items-center gap-2 text-gray-900 dark:text-gray-100">
             <Icon icon="mdi:tag" className="text-blue-500" />
-            إضافة عرض جديد
+            {isEditMode ? "تعديل العرض" : "إضافة عرض جديد"}
           </DialogTitle>
         </DialogHeader>
 
@@ -154,6 +173,29 @@ const OfferModal = ({ show, onClose, onSubmit, isSubmitting }) => {
             </div>
           </div>
 
+          {/* Status - فقط عند التعديل، تسمح بإعادة تفعيل عرض منتهي */}
+          {isEditMode && (
+            <div className="space-y-2">
+              <Label htmlFor="status" className="text-right block text-gray-700 dark:text-gray-300">
+                الحالة
+              </Label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                dir="rtl"
+              >
+                {statusOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">
             <Button
@@ -175,7 +217,7 @@ const OfferModal = ({ show, onClose, onSubmit, isSubmitting }) => {
               ) : (
                 <Icon icon="mdi:check" />
               )}
-              حفظ
+              {isEditMode ? "حفظ التعديل" : "حفظ"}
             </Button>
           </div>
         </form>

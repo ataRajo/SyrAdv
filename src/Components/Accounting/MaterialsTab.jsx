@@ -10,10 +10,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
+import toast from "react-hot-toast";
 import {
   useGetMaterialsWithStatsQuery,
   useGetMaterialPurchasesQuery,
+  useAddMaterialMutation,
+  useDeleteMaterialMutation,
+  useUpdateMaterialMutation,
 } from "../../RtkQuery/Slice/Accounting/AccountingApi";
+import { DeleteDialog } from "../../utils/Dialogs/DeleteDialog/DeleteDialog";
 
 const fmt = (n) => Number(n ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 });
 
@@ -120,6 +125,107 @@ const MaterialPurchasesDialog = ({ material, open, onOpenChange }) => {
 };
 
 /**
+ * إضافة مادة جديدة لفهرس المواد مباشرة من تبويبة "المواد" (طلب صريح) -
+ * بدل انتظار إضافتها تلقائيًا عبر أول فاتورة شراء تحتويها.
+ */
+const AddMaterialDialog = ({ open, onOpenChange }) => {
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("");
+  const [addMaterial, { isLoading }] = useAddMaterialMutation();
+
+  const close = () => {
+    setName("");
+    setUnit("");
+    onOpenChange(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    try {
+      await addMaterial({ name: name.trim(), ...(unit.trim() ? { unit: unit.trim() } : {}) }).unwrap();
+      toast.success("تمت إضافة المادة بنجاح");
+      close();
+    } catch (error) {
+      const msg =
+        error?.data?.errors?.name?.[0] ||
+        error?.data?.message ||
+        "فشل إضافة المادة";
+      toast.error(msg.includes("taken") ? "هذه المادة موجودة مسبقًا" : msg);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
+      <DialogContent className="max-w-[95vw] sm:max-w-[420px]" dir="rtl">
+        <DialogHeader>
+          <DialogTitle>إضافة مادة جديدة</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>اسم المادة *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: فليكس" autoFocus required />
+          </div>
+          <div className="space-y-2">
+            <Label>الوحدة (اختياري)</Label>
+            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="مثال: متر مربع، قطعة، لتر" />
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button type="button" variant="outline" onClick={close} className="w-full sm:w-auto">إلغاء</Button>
+            <Button type="submit" disabled={isLoading || !name.trim()} className="w-full sm:w-auto">
+              {isLoading ? "جارٍ الحفظ..." : "إضافة المادة"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const EditMaterialDialog = ({ material, onClose }) => {
+  const [name, setName] = useState(material?.name || "");
+  const [unit, setUnit] = useState(material?.unit || "");
+  const [updateMaterial, { isLoading }] = useUpdateMaterialMutation();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    try {
+      await updateMaterial({ id: material.id, name: name.trim(), unit: unit.trim() || null }).unwrap();
+      toast.success("تم تعديل المادة");
+      onClose();
+    } catch (error) {
+      const msg = error?.data?.errors?.name?.[0] || error?.data?.message || "فشل تعديل المادة";
+      toast.error(msg.includes("taken") ? "هذه المادة موجودة مسبقًا" : msg);
+    }
+  };
+
+  return (
+    <Dialog open={Boolean(material)} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-[95vw] sm:max-w-[420px]" dir="rtl">
+        <DialogHeader>
+          <DialogTitle>تعديل المادة</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>اسم المادة *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+          </div>
+          <div className="space-y-2">
+            <Label>الوحدة (اختياري)</Label>
+            <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>إلغاء</Button>
+            <Button type="submit" disabled={isLoading || !name.trim()}>{isLoading ? "جارٍ الحفظ..." : "حفظ"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+/**
  * تبويبة "المواد" - طلب العميل: مكان مخصص للبحث عن مادة (مثال: "فليكس")
  * ومعرفة إجمالي كميتها المُشتراة عبر كل الفواتير دفعة واحدة، بدل تصفّح كل
  * فاتورة شراء على حدة بحثًا عنها. نفس بيانات فواتير الشراء، مُجمَّعة حسب
@@ -132,11 +238,32 @@ const MaterialsTab = () => {
     per_page: 100,
   });
   const [selectedMaterial, setSelectedMaterial] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [deleteMaterial, { isLoading: isDeleting }] = useDeleteMaterialMutation();
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteMaterial(deleteTarget.id).unwrap();
+      toast.success("تم حذف المادة");
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(error?.data?.message || "فشل حذف المادة");
+    }
+  };
 
   return (
     <div className="border border-border rounded-lg bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-border">
-        <h3 className="font-semibold">المواد</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold">المواد</h3>
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Icon icon="mdi:plus" className="w-4 h-4 ml-1" />
+            إضافة مادة
+          </Button>
+        </div>
         <div className="space-y-1 min-w-[240px]">
           <Label className="text-xs">ابحث عن مادة (مثال: فليكس)</Label>
           <Input
@@ -157,14 +284,16 @@ const MaterialsTab = () => {
               <th className="p-2 text-center">إجمالي المبلغ</th>
               <th className="p-2 text-center">عدد مرات الشراء</th>
               <th className="p-2 text-center">التفاصيل</th>
+              <th className="p-2 text-center">تعديل</th>
+              <th className="p-2 text-center">حذف</th>
             </tr>
           </thead>
           <tbody>
             {isFetching && (
-              <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
             )}
             {!isFetching && materials.length === 0 && (
-              <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">لا يوجد مواد مطابقة</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">لا يوجد مواد مطابقة</td></tr>
             )}
             {materials.map((m) => (
               <tr key={m.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -184,11 +313,45 @@ const MaterialsTab = () => {
                     <Icon icon="mdi:eye-outline" className="w-4 h-4" />
                   </Button>
                 </td>
+                <td className="p-2 text-center">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => setEditTarget(m)}
+                    title="تعديل المادة"
+                  >
+                    <Icon icon="mdi:pencil-outline" className="w-4 h-4" />
+                  </Button>
+                </td>
+                <td className="p-2 text-center">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => setDeleteTarget(m)}
+                    title="حذف المادة"
+                  >
+                    <Icon icon="mdi:trash-can-outline" className="w-4 h-4" />
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <AddMaterialDialog open={addOpen} onOpenChange={setAddOpen} />
+      {editTarget && <EditMaterialDialog key={editTarget.id} material={editTarget} onClose={() => setEditTarget(null)} />}
+
+      <DeleteDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        loading={isDeleting}
+        title="حذف المادة"
+        description={`سيتم حذف المادة "${deleteTarget?.name ?? ""}" من الفهرس. فواتير الشراء السابقة لن تتأثر وستحتفظ باسم المادة. هل أنت متأكد؟`}
+        onConfirm={handleConfirmDelete}
+      />
 
       <MaterialPurchasesDialog
         material={selectedMaterial}

@@ -117,6 +117,11 @@ const PaySalaryForm = ({
   });
   const [bonuses, setBonuses] = useState([]);
   const [deductions, setDeductions] = useState([]);
+  // خصم السلفة من الراتب (طلب صريح: تلقائي أو اختياري) - افتراضيًا كامل
+  // المتبقي حتى قيمة الراتب، ويمكن إلغاؤه أو تحديد مبلغ جزئي.
+  const [deductAdvance, setDeductAdvance] = useState(true);
+  const [advanceMode, setAdvanceMode] = useState("all"); // all | custom
+  const [advanceAmount, setAdvanceAmount] = useState("");
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
   const updateAdjustment = (list, setList, index, patch) =>
@@ -146,10 +151,14 @@ const PaySalaryForm = ({
     (Number(form.amount) || Number(employee?.salary?.amount) || 0) +
     bonusesTotal -
     deductionsTotal;
-  const advanceToDeductPreview = Math.min(
-    outstandingAdvance,
-    Math.max(grossForPreview, 0),
-  );
+  const requestedAdvance =
+    advanceMode === "custom" ? Math.max(Number(advanceAmount) || 0, 0) : outstandingAdvance;
+  const advanceToDeductPreview = deductAdvance
+    ? Math.min(outstandingAdvance, requestedAdvance, Math.max(grossForPreview, 0))
+    : 0;
+  const advanceAfterPreview = Math.max(outstandingAdvance - advanceToDeductPreview, 0);
+  const customAdvanceTooHigh =
+    deductAdvance && advanceMode === "custom" && Number(advanceAmount) > outstandingAdvance + 0.001;
   const netAfterAdvancePreview = Math.max(
     grossForPreview - advanceToDeductPreview,
     0,
@@ -236,6 +245,14 @@ const PaySalaryForm = ({
                 })),
               }
             : {}),
+          ...(hasAdvance
+            ? {
+                deduct_advance: deductAdvance,
+                ...(deductAdvance && advanceMode === "custom"
+                  ? { advance_amount: Number(advanceAmount) || 0 }
+                  : {}),
+              }
+            : {}),
         });
       }}
       className="space-y-4"
@@ -255,19 +272,70 @@ const PaySalaryForm = ({
             icon="mdi:alert-circle-outline"
             className="w-4 h-4 mt-0.5 shrink-0"
           />
-          <div className="space-y-1">
+          <div className="space-y-2 flex-1">
             <p className="font-semibold">
               هذا الموظف لديه سلفة سابقة لم تُسدَّد بعد:{" "}
               {fmt(outstandingAdvance)}
             </p>
-            <p>
-              ستُخصَم تلقائيًا من هذا الصرف - المتبقي الفعلي المتوقَّع بعد
-              الخصم:{" "}
-              <span className="font-semibold">
-                {fmt(netAfterAdvancePreview)}
-              </span>{" "}
-              (من أصل {fmt(grossForPreview)})
-            </p>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={deductAdvance}
+                onChange={(e) => setDeductAdvance(e.target.checked)}
+              />
+              خصم السلفة من هذا الراتب
+            </label>
+            {deductAdvance && (
+              <div className="flex flex-wrap items-center gap-3 pr-6">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="advance-mode"
+                    checked={advanceMode === "all"}
+                    onChange={() => setAdvanceMode("all")}
+                  />
+                  كامل المتبقي (حتى قيمة الراتب)
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="advance-mode"
+                    checked={advanceMode === "custom"}
+                    onChange={() => setAdvanceMode("custom")}
+                  />
+                  مبلغ محدد:
+                </label>
+                {advanceMode === "custom" && (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={outstandingAdvance}
+                    className="h-7 w-28 text-xs bg-white"
+                    value={advanceAmount}
+                    onChange={(e) => setAdvanceAmount(e.target.value)}
+                  />
+                )}
+              </div>
+            )}
+            {customAdvanceTooHigh && (
+              <p className="text-destructive">المبلغ أكبر من المتبقي من السلفة ({fmt(outstandingAdvance)}).</p>
+            )}
+            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div className="rounded bg-white/70 border border-amber-200 p-1.5">
+                <div className="text-[10px] text-muted-foreground">يُخصم من السلفة</div>
+                <div className="font-mono font-semibold">{fmt(advanceToDeductPreview)}</div>
+              </div>
+              <div className="rounded bg-white/70 border border-amber-200 p-1.5">
+                <div className="text-[10px] text-muted-foreground">المتبقي من السلفة بعدها</div>
+                <div className="font-mono font-semibold">{fmt(advanceAfterPreview)}</div>
+              </div>
+              <div className="rounded bg-white/70 border border-amber-200 p-1.5">
+                <div className="text-[10px] text-muted-foreground">الصافي نقدًا للموظف</div>
+                <div className="font-mono font-semibold">{fmt(netAfterAdvancePreview)}</div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -364,7 +432,7 @@ const PaySalaryForm = ({
         </Button>
         <Button
           type="submit"
-          disabled={isPaying || (!form.amount && !employee?.salary)}
+          disabled={isPaying || customAdvanceTooHigh || (!form.amount && !employee?.salary)}
         >
           {isPaying ? "جارٍ الصرف..." : "صرف الراتب"}
         </Button>

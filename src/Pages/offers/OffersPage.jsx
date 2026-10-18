@@ -11,15 +11,19 @@ const OffersPage = () => {
     isLoading,
     isFetching,
     showModal,
+    editingOffer,
     isSubmitting,
     filters,
     openCreateModal,
+    openEditModal,
     closeModal,
     handleSubmit,
     handleDelete,
+    handleToggleStatus,
     handleSearch,
     handleActiveFilter,
     handleExpiredFilter,
+    handleWorkTypeFilter,
     clearFilters,
     refetch,
   } = useOffers();
@@ -39,9 +43,11 @@ const OffersPage = () => {
         search={filters.search}
         active={filters.active}
         expired={filters.expired}
+        workTypeId={filters.work_type_id}
         onSearch={handleSearch}
         onActiveChange={handleActiveFilter}
         onExpiredChange={handleExpiredFilter}
+        onWorkTypeChange={handleWorkTypeFilter}
         onClear={clearFilters}
       />
 
@@ -51,6 +57,8 @@ const OffersPage = () => {
         isLoading={isLoading}
         isFetching={isFetching}
         onDelete={handleDelete}
+        onEdit={openEditModal}
+        onToggleStatus={handleToggleStatus}
       />
 
       {/* Modal */}
@@ -60,6 +68,7 @@ const OffersPage = () => {
           onClose={closeModal}
           onSubmit={handleSubmit}
           isSubmitting={isSubmitting}
+          initialData={editingOffer}
         />
       )}
     </div>

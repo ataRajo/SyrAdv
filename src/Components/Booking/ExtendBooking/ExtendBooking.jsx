@@ -322,6 +322,8 @@ const ExtendBooking = () => {
         product_type: booking.product_type,
         printing_id: useNewDesign ? selectedPrintingType : booking.printing_id,
         is_extend: !useNewDesign,
+        // الباك يفرض تاريخ البداية من end_date للعقد القديم عند التمديد
+        ...(!useNewDesign ? { booking_id: Number(id) } : {}),
         include_design_cost: useNewDesign,
         pending_moves: pendingMoves.length > 0 ? pendingMoves.map(move => ({
           old_roadsign_id: move.oldSignId,

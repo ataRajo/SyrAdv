@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import logo from "../../assets/images/adv_syrian.png";
+import { SAC_COLORS, SAC_CONTACT, SAC_LOGO_PATH } from "../../utils/branding/sacBrand";
 
 const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
   const [isPrinting, setIsPrinting] = useState(false);
@@ -148,17 +148,17 @@ const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
           }}
         >
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "3px solid #2563eb", paddingBottom: "12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: `3px solid ${SAC_COLORS.gold}`, paddingBottom: "12px" }}>
             <div style={{ textAlign: "right" }}>
-              <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "bold", color: "#1e40af" }}>{title}</h1>
+              <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "bold", color: SAC_COLORS.dark }}>{title}</h1>
               <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#6b7280" }}>
                 تاريخ التقرير: {formatDate(new Date())}
               </p>
             </div>
             <img
-              src={logo}
-              alt="Logo"
-              style={{ width: "60px", height: "auto", objectFit: "contain" }}
+              src={SAC_LOGO_PATH}
+              alt="SAC"
+              style={{ width: "90px", height: "auto", objectFit: "contain" }}
               crossOrigin="anonymous"
             />
           </div>
@@ -166,7 +166,7 @@ const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
           {/* Customer Info Card */}
           {customerInfo && Object.keys(customerInfo).length > 0 && (
             <div style={{ background: "#eff6ff", borderRadius: "8px", padding: "16px", marginBottom: "20px", borderRight: "4px solid #2563eb" }}>
-              <h3 style={{ margin: "0 0 10px", fontSize: "14px", color: "#1e40af", fontWeight: "bold" }}>معلومات العميل</h3>
+              <h3 style={{ margin: "0 0 10px", fontSize: "14px", color: "#1A1817", fontWeight: "bold" }}>معلومات العميل</h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
                 <div>
                   <span style={{ fontSize: "11px", color: "#6b7280" }}>اسم الشركة:</span>
@@ -191,8 +191,8 @@ const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
           {/* Summary Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "20px" }}>
             <div style={{ background: "#dbeafe", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: "11px", color: "#1e40af" }}>عدد الدفعات</p>
-              <p style={{ margin: "4px 0 0", fontSize: "18px", fontWeight: "bold", color: "#1e40af" }}>{payments.length}</p>
+              <p style={{ margin: 0, fontSize: "11px", color: "#1A1817" }}>عدد الدفعات</p>
+              <p style={{ margin: "4px 0 0", fontSize: "18px", fontWeight: "bold", color: "#1A1817" }}>{payments.length}</p>
             </div>
             <div style={{ background: "#dcfce7", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
               <p style={{ margin: 0, fontSize: "11px", color: "#166534" }}>إجمالي المدفوع</p>
@@ -210,19 +210,19 @@ const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
 
           {/* Payments Table */}
           <div>
-            <h3 style={{ margin: "0 0 10px", fontSize: "14px", color: "#1e40af", fontWeight: "bold" }}>تفاصيل الدفعات</h3>
+            <h3 style={{ margin: "0 0 10px", fontSize: "14px", color: "#1A1817", fontWeight: "bold" }}>تفاصيل الدفعات</h3>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
               <thead>
-                <tr style={{ background: "#1e40af", color: "#fff" }}>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>#</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>رقم الدفعة</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>التاريخ</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>العميل</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>الموظف</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>المبلغ الكلي</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>المدفوع</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>المتبقي</th>
-                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>الحالة</th>
+                <tr style={{ background: "#1A1817", color: "#fff" }}>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>#</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>رقم الدفعة</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>التاريخ</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>العميل</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>الموظف</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>المبلغ الكلي</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>المدفوع</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>المتبقي</th>
+                  <th style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>الحالة</th>
                 </tr>
               </thead>
               <tbody>
@@ -275,12 +275,12 @@ const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
               </tbody>
               {payments.length > 0 && (
                 <tfoot>
-                  <tr style={{ background: "#1e40af", color: "#fff", fontWeight: "bold" }}>
-                    <td colSpan={5} style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}>الإجمالي</td>
-                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af", direction: "ltr" }}>{totalAmount.toFixed(2)} $</td>
-                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af", direction: "ltr" }}>{totalPaid.toFixed(2)} $</td>
-                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af", direction: "ltr" }}>{totalRemaining.toFixed(2)} $</td>
-                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1e40af" }}></td>
+                  <tr style={{ background: "#1A1817", color: "#fff", fontWeight: "bold" }}>
+                    <td colSpan={5} style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}>الإجمالي</td>
+                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817", direction: "ltr" }}>{totalAmount.toFixed(2)} $</td>
+                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817", direction: "ltr" }}>{totalPaid.toFixed(2)} $</td>
+                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817", direction: "ltr" }}>{totalRemaining.toFixed(2)} $</td>
+                    <td style={{ padding: "10px 6px", textAlign: "center", border: "1px solid #1A1817" }}></td>
                   </tr>
                 </tfoot>
               )}
@@ -288,9 +288,30 @@ const PaymentsPdf = ({ customer, title = "تقرير الدفعات" }) => {
           </div>
 
           {/* Footer */}
-          <div style={{ marginTop: "20px", paddingTop: "12px", borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: "11px", color: "#6b7280" }}>
-            <p style={{ margin: "2px 0" }}>© الشركة السورية للإعلان - نظام إدارة المدفوعات</p>
+          <div style={{ marginTop: "20px", paddingTop: "10px", textAlign: "center", fontSize: "11px", color: "#6b7280" }}>
             <p style={{ margin: "2px 0" }}>تم إنشاء هذا التقرير آلياً بتاريخ {formatDate(new Date())}</p>
+          </div>
+          <div
+            dir="ltr"
+            style={{
+              marginTop: "10px",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              background: `linear-gradient(90deg, ${SAC_COLORS.goldLight} 0%, ${SAC_COLORS.gold} 45%, ${SAC_COLORS.goldDark} 100%)`,
+              color: "#fff",
+              fontSize: "11px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            <span>{SAC_CONTACT.website}</span>
+            <span>
+              {SAC_CONTACT.phones.map((p) => `${p.number} ${p.city}`).join("   |   ")}
+            </span>
+            <span>{SAC_CONTACT.email}</span>
           </div>
         </div>
       </div>

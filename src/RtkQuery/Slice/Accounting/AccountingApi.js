@@ -46,6 +46,8 @@ const parsePaginatedResponse = (response) => {
       per_page: meta.per_page ?? 20,
       current_page: meta.current_page ?? 1,
       total_pages: meta.last_page ?? meta.total_pages ?? 1,
+      // إجمالي إضافي من الخادم إن وُجد (مثال: total_outstanding لسجل السلف).
+      ...(response?.meta?.total_outstanding != null ? { total_outstanding: Number(response.meta.total_outstanding) } : {}),
     },
   };
 };
@@ -83,6 +85,8 @@ export const accountingApi = createApi({
     "EmployeeAdvance",
     "SupplierAdvance",
     "SupplierStatement",
+    "AccountManualAdjustment",
+    "ReconciliationLog",
   ],
   endpoints: (builder) => ({
     // ---------------------------------------------------------------
@@ -94,7 +98,12 @@ export const accountingApi = createApi({
       providesTags: ["Account"],
     }),
     getAccountsTree: builder.query({
-      query: () => ({ url: "/accounting/accounts", params: { tree: 1 } }),
+      // حسابات الزبائن برصيد صفر مخفية افتراضيًا من الشجرة (طلب صريح) -
+      // { includeZeroCustomers: true } يُظهرها (زر في دليل الحسابات).
+      query: ({ includeZeroCustomers = false } = {}) => ({
+        url: "/accounting/accounts",
+        params: { tree: 1, ...(includeZeroCustomers ? { include_zero_customers: 1 } : {}) },
+      }),
       transformResponse: (response) => {
         if (Array.isArray(response)) return response;
         if (Array.isArray(response?.data)) return response.data;
@@ -126,6 +135,27 @@ export const accountingApi = createApi({
     deleteAccount: builder.mutation({
       query: (id) => ({ url: `/accounting/accounts/${id}`, method: "DELETE" }),
       invalidatesTags: ["Account"],
+    }),
+    // "تعديل يدوي للحسابات من شجرة الحسابات (من السوبر ادمن فقط)" - طلب
+    // صريح. يفتح حقولًا مقفلة عادة (code/type/normal_balance/parent_id)
+    // وحتى balance نفسه - راجع AccountController::manualAdjust على
+    // الباك-إند، المقيَّد بدور super admin فقط.
+    manualAdjustAccount: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/accounting/accounts/${id}/manual-adjust`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        "Account",
+        { type: "Account", id },
+        { type: "AccountManualAdjustment", id },
+      ],
+    }),
+    getAccountManualAdjustments: builder.query({
+      query: (id) => `/accounting/accounts/${id}/manual-adjustments`,
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: (result, error, id) => [{ type: "AccountManualAdjustment", id }],
     }),
     getAccountStatement: builder.query({
       query: ({ id, ...params }) => ({
@@ -191,6 +221,61 @@ export const accountingApi = createApi({
         "TrialBalance",
       ],
     }),
+    // توثيق سند (رفع صورة السند الموقَّع) - السند بانتظار التوثيق يُرحَّل
+    // على شجرة الحسابات لحظتها فقط (CashboxTransactionService::document).
+    documentTransaction: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/accounting/transactions/${id}/document`,
+        method: "POST",
+        body, // FormData يحمل "image"
+      }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+      ],
+    }),
+    // ترحيل دفتر اليومية - السوبر أدمن فقط (TransactionController::post/postBatch).
+    postTransaction: builder.mutation({
+      query: (id) => ({ url: `/accounting/transactions/${id}/post`, method: "POST" }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+      ],
+    }),
+    postTransactionsBatch: builder.mutation({
+      query: (ids) => ({ url: `/accounting/transactions/post-batch`, method: "POST", body: { ids } }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+      ],
+    }),
     reverseTransaction: builder.mutation({
       query: ({ id, reason }) => ({
         url: `/accounting/transactions/${id}/reverse`,
@@ -203,6 +288,44 @@ export const accountingApi = createApi({
         "CustomerStatement",
         "CompanyStatement",
         "TrialBalance",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+        "Supplier",
+        "PurchaseInvoice",
+      ],
+    }),
+
+    // زر «تعديل» في المعاملات/السندات: الوصف والتاريخ فقط (طلب صريح).
+    updateTransaction: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/accounting/transactions/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Transaction", "CompanyStatement", "CustomerStatement"],
+    }),
+    // حذف نهائي لسند/قيد تجريبي (مرحلة الاختبار) - dry_run=1 يعرض ما سيُحذف فقط.
+    previewDeleteTransaction: builder.query({
+      query: (id) => ({ url: `/accounting/transactions/${id}`, method: "DELETE", params: { dry_run: 1 } }),
+      transformResponse: (response) => response?.data ?? response,
+      keepUnusedDataFor: 0,
+    }),
+    deleteTransaction: builder.mutation({
+      query: (id) => ({ url: `/accounting/transactions/${id}`, method: "DELETE" }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "CashClosing",
       ],
     }),
 
@@ -329,6 +452,16 @@ export const accountingApi = createApi({
       }),
       invalidatesTags: ["SupplierCategory"],
     }),
+    updateSupplierCategory: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/accounting/supplier-categories/${id}`, method: "PUT", body }),
+      invalidatesTags: ["SupplierCategory", "Supplier"],
+    }),
+    // طلب صريح: "حذف فئات الموردين" - مرفوض من الباك-إند إن كان أي مورد لا
+    // يزال تابعًا للفئة (راجع SupplierCategoryController::destroy).
+    deleteSupplierCategory: builder.mutation({
+      query: (id) => ({ url: `/accounting/supplier-categories/${id}`, method: "DELETE" }),
+      invalidatesTags: ["SupplierCategory"],
+    }),
     getSuppliers: builder.query({
       query: () => "/accounting/suppliers",
       transformResponse: (response) => response?.data ?? [],
@@ -337,6 +470,11 @@ export const accountingApi = createApi({
     addSupplier: builder.mutation({
       query: (body) => ({ url: "/accounting/suppliers", method: "POST", body }),
       invalidatesTags: ["Supplier", "Account"],
+    }),
+    // تعديل مورد + استكمال الثبوتية (FormData عبر POST لدعم رفع الملفات).
+    updateSupplier: builder.mutation({
+      query: ({ id, body }) => ({ url: `/accounting/suppliers/${id}`, method: "POST", body }),
+      invalidatesTags: ["Supplier", "Account", "SupplierStatement"],
     }),
     // طلب صريح: "إضافة خيار حذف المورد" - مسموح فقط إن لم يكن للمورد فواتير
     // شراء أو سلف مسجَّلة (راجع SupplierController::destroy على الباك-إند).
@@ -378,7 +516,14 @@ export const accountingApi = createApi({
         "Account",
         "Transaction",
         "TrialBalance",
+        "SupplierAdvance",
+        "SupplierStatement",
       ],
+    }),
+    // زر «تعديل» الفاتورة: رقم الفاتورة/الوصف/تاريخ الاستحقاق فقط (غير مالية).
+    updatePurchaseInvoice: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/accounting/purchase-invoices/${id}`, method: "PUT", body }),
+      invalidatesTags: (result, error, { id }) => [{ type: "PurchaseInvoice", id }, "PurchaseInvoice"],
     }),
     archivePurchaseInvoice: builder.mutation({
       query: (id) => ({
@@ -394,13 +539,21 @@ export const accountingApi = createApi({
       }),
       invalidatesTags: ["PurchaseInvoice"],
     }),
+    // حذف فاتورة شراء - القيود تُعكَس في الباك-إند (PurchaseInvoiceService::delete).
+    deletePurchaseInvoice: builder.mutation({
+      query: (id) => ({
+        url: `/accounting/purchase-invoices/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["PurchaseInvoice", "Supplier", "Account", "Transaction", "TrialBalance", "Material", "SupplierAdvance", "SupplierStatement"],
+    }),
     payPurchaseInvoice: builder.mutation({
       query: ({ id, ...body }) => ({
         url: `/accounting/purchase-invoices/${id}/pay`,
         method: "POST",
         body,
       }),
-      invalidatesTags: ["PurchaseInvoice", "Supplier", "Account", "Transaction", "TrialBalance"],
+      invalidatesTags: ["PurchaseInvoice", "Supplier", "Account", "Transaction", "TrialBalance", "SupplierAdvance", "SupplierStatement"],
     }),
     // إرفاق/إزالة صورة الفاتورة الخارجية (طلب صريح: أرشفة موثَّقة بالصورة
     // للفواتير القادمة من خارج النظام) - راجع PurchaseInvoiceController.
@@ -431,6 +584,15 @@ export const accountingApi = createApi({
     addMaterial: builder.mutation({
       query: (body) => ({ url: "/accounting/materials", method: "POST", body }),
       invalidatesTags: ["Material"],
+    }),
+    updateMaterial: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/accounting/materials/${id}`, method: "PUT", body }),
+      invalidatesTags: ["Material"],
+    }),
+    // حذف مادة من الفهرس - بنود الفواتير السابقة تحتفظ باسم المادة (material_name).
+    deleteMaterial: builder.mutation({
+      query: (id) => ({ url: `/accounting/materials/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Material", "PurchaseInvoice"],
     }),
 
     // ---------------------------------------------------------------
@@ -486,7 +648,7 @@ export const accountingApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["EmployeeAdvance"],
+      invalidatesTags: ["EmployeeAdvance", "PayrollEmployee", "Transaction", "Account", "TrialBalance"],
     }),
     settleEmployeeAdvance: builder.mutation({
       query: ({ userId, ...body }) => ({
@@ -494,7 +656,47 @@ export const accountingApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["EmployeeAdvance", "Transaction", "Account", "CompanyStatement", "TrialBalance"],
+      invalidatesTags: ["EmployeeAdvance", "PayrollEmployee", "Transaction", "Account", "CompanyStatement", "TrialBalance"],
+    }),
+    // زر «تعديل» و«حذف نهائي» لسلفة موظف (طلب صريح).
+    updateEmployeeAdvance: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/accounting/employee-advances/${id}`, method: "PUT", body }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "CashClosing",
+      ],
+    }),
+    previewDeleteEmployeeAdvance: builder.query({
+      query: (id) => ({ url: `/accounting/employee-advances/${id}`, method: "DELETE", params: { dry_run: 1 } }),
+      transformResponse: (response) => response?.data ?? response,
+      keepUnusedDataFor: 0,
+    }),
+    deleteEmployeeAdvance: builder.mutation({
+      query: (id) => ({ url: `/accounting/employee-advances/${id}`, method: "DELETE" }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "CashClosing",
+      ],
     }),
     getEmployeeAdvanceBalance: builder.query({
       query: (userId) => `/accounting/employees/${userId}/advances/balance`,
@@ -523,7 +725,7 @@ export const accountingApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["SupplierAdvance", "Supplier"],
+      invalidatesTags: ["SupplierAdvance", "Supplier", "SupplierStatement", "Transaction", "Account", "TrialBalance"],
     }),
     settleSupplierAdvance: builder.mutation({
       query: ({ supplierId, ...body }) => ({
@@ -531,7 +733,47 @@ export const accountingApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["SupplierAdvance", "Supplier", "Transaction", "Account", "CompanyStatement", "TrialBalance"],
+      invalidatesTags: ["SupplierAdvance", "Supplier", "SupplierStatement", "Transaction", "Account", "CompanyStatement", "TrialBalance"],
+    }),
+    // زر «تعديل» و«حذف نهائي» لسلفة مورد (طلب صريح).
+    updateSupplierAdvance: builder.mutation({
+      query: ({ id, ...body }) => ({ url: `/accounting/supplier-advances/${id}`, method: "PUT", body }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "CashClosing",
+      ],
+    }),
+    previewDeleteSupplierAdvance: builder.query({
+      query: (id) => ({ url: `/accounting/supplier-advances/${id}`, method: "DELETE", params: { dry_run: 1 } }),
+      transformResponse: (response) => response?.data ?? response,
+      keepUnusedDataFor: 0,
+    }),
+    deleteSupplierAdvance: builder.mutation({
+      query: (id) => ({ url: `/accounting/supplier-advances/${id}`, method: "DELETE" }),
+      invalidatesTags: [
+        "Transaction",
+        "Account",
+        "CustomerStatement",
+        "CompanyStatement",
+        "TrialBalance",
+        "EmployeeAdvance",
+        "SupplierAdvance",
+        "PayrollEmployee",
+        "Supplier",
+        "SupplierStatement",
+        "PurchaseInvoice",
+        "CashClosing",
+      ],
     }),
     getSupplierAdvanceBalance: builder.query({
       query: (supplierId) => `/accounting/suppliers/${supplierId}/advances/balance`,
@@ -546,6 +788,19 @@ export const accountingApi = createApi({
       transformResponse: parsePaginatedResponse,
       providesTags: ["SupplierAdvance"],
     }),
+
+    // ---------------------------------------------------------------
+    // "والتأكد من جميع الحسابات" - راجع ReconciliationController.
+    // ---------------------------------------------------------------
+    getReconciliationLogs: builder.query({
+      query: () => "/accounting/reconciliation/logs",
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["ReconciliationLog"],
+    }),
+    runReconciliation: builder.mutation({
+      query: () => ({ url: "/accounting/reconciliation/run", method: "POST" }),
+      invalidatesTags: ["ReconciliationLog"],
+    }),
   }),
 });
 
@@ -556,6 +811,8 @@ export const {
   useAddAccountMutation,
   useUpdateAccountMutation,
   useDeleteAccountMutation,
+  useManualAdjustAccountMutation,
+  useGetAccountManualAdjustmentsQuery,
   useGetAccountStatementQuery,
   useGetTransactionsQuery,
   useGetTransactionQuery,
@@ -563,6 +820,13 @@ export const {
   useRecordOutgoingMutation,
   useTransferFundsMutation,
   useReverseTransactionMutation,
+  useUpdateTransactionMutation,
+  useLazyPreviewDeleteTransactionQuery,
+  useDeleteTransactionMutation,
+  useDocumentTransactionMutation,
+  useUpdateSupplierMutation,
+  usePostTransactionMutation,
+  usePostTransactionsBatchMutation,
   useGetCustomerStatementQuery,
   useSendCustomerStatementMutation,
   useGetCompanyStatementQuery,
@@ -583,6 +847,8 @@ export const {
   useGetSelectableAccountsQuery,
   useGetSupplierCategoriesQuery,
   useAddSupplierCategoryMutation,
+  useUpdateSupplierCategoryMutation,
+  useDeleteSupplierCategoryMutation,
   useGetSuppliersQuery,
   useAddSupplierMutation,
   useDeleteSupplierMutation,
@@ -591,14 +857,18 @@ export const {
   useGetPurchaseInvoicesQuery,
   useGetPurchaseInvoiceQuery,
   useAddPurchaseInvoiceMutation,
+  useUpdatePurchaseInvoiceMutation,
   useArchivePurchaseInvoiceMutation,
   useUnarchivePurchaseInvoiceMutation,
   usePayPurchaseInvoiceMutation,
+  useDeletePurchaseInvoiceMutation,
   useUploadPurchaseInvoiceImageMutation,
   useRemovePurchaseInvoiceImageMutation,
   useGetMaterialsQuery,
   useLazyGetMaterialsQuery,
   useAddMaterialMutation,
+  useUpdateMaterialMutation,
+  useDeleteMaterialMutation,
   useGetMaterialsWithStatsQuery,
   useGetMaterialPurchasesQuery,
   usePayBrokerCommissionMutation,
@@ -606,13 +876,21 @@ export const {
   useLazyGetBrokerCommissionHistoryQuery,
   useGiveEmployeeAdvanceMutation,
   useSettleEmployeeAdvanceMutation,
+  useUpdateEmployeeAdvanceMutation,
+  useLazyPreviewDeleteEmployeeAdvanceQuery,
+  useDeleteEmployeeAdvanceMutation,
   useLazyGetEmployeeAdvanceBalanceQuery,
   useGetEmployeeAdvancesHistoryQuery,
   useLazyGetEmployeeAdvancesHistoryQuery,
   useLazyGetEmployeeStatementQuery,
   useGiveSupplierAdvanceMutation,
   useSettleSupplierAdvanceMutation,
+  useUpdateSupplierAdvanceMutation,
+  useLazyPreviewDeleteSupplierAdvanceQuery,
+  useDeleteSupplierAdvanceMutation,
   useLazyGetSupplierAdvanceBalanceQuery,
   useGetSupplierAdvancesHistoryQuery,
   useLazyGetSupplierAdvancesHistoryQuery,
+  useGetReconciliationLogsQuery,
+  useRunReconciliationMutation,
 } = accountingApi;

@@ -20,8 +20,10 @@ export const useMyWorkshopOrders = () => {
   // المنطقة (طلب صريح): activeRegions هي المنطقة/المناطق التي لدى هذا
   // الفاعل بعينه (مدير الورشة يعمل كعامل، أو عامل عادي - المسار نفسه) فيها
   // أوامر مُستلَمة ولم تُنفَّذ بعد. راجع WorkshopsApi.jsx وMyOrdersTab.jsx.
-  const { data: { orders: myOrders = [], activeRegions = [] } = {}, isFetching: isFetchingMyOrders } =
-    useGetMyWorkshopOrdersQuery(orderFilters);
+  const {
+    data: { orders: myOrders = [], activeRegions = [], activeRegionRemaining = 0 } = {},
+    isFetching: isFetchingMyOrders,
+  } = useGetMyWorkshopOrdersQuery(orderFilters);
 
   const { data: sizeBreakdown, isFetching: isFetchingSizeBreakdown } =
     useGetMyWorkshopSizeBreakdownQuery();
@@ -80,6 +82,7 @@ const completeOrder = useCallback(
   return {
     myOrders,
     activeRegions,
+    activeRegionRemaining,
     isFetchingMyOrders,
     orderFilters,
     setOrderFilters,

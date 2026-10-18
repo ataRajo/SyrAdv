@@ -5,11 +5,6 @@ export const PaymentFields = [
     type: "number",
   },
   {
-    name: "payment_number",
-    label: "رقم الدفعة",
-    type: "text",
-  },
-  {
     name: "customer_id",
     label: "الزبون",
     type: "select",
@@ -23,4 +18,4 @@ export const PaymentFields = [
     type: "file",
     accept: "image/*",
   },
-];
+];

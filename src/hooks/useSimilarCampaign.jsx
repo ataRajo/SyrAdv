@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { useGetRoadSignsQuery } from '../RtkQuery/Slice/RoadSings/RoadSingsApi';
-import { useGetCustomersQuery } from '../RtkQuery/Slice/Customers/CustomersApi';
 import { useAddNewBookingMutation } from '../RtkQuery/Slice/Booking/BookingApi';
 import toast from 'react-hot-toast';
 
@@ -18,7 +17,9 @@ export const useSimilarCampaign = (originalBooking) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Fetch customers
-  const { data: customersData, isLoading: isLoadingCustomers } = useGetCustomersQuery({ per_page: 100 });
+  // اختيار العميل عبر CustomerSearchSelect (بحث من الخادم) - كان يحمّل أول 100 عميل فقط.
+  const customersData = null;
+  const isLoadingCustomers = false;
   
   // Fetch road signs with date filters
   const { 

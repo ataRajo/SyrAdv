@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Calendar, Building, MapPin, ShoppingCart, User } from "lucide-react";
+import CustomerSearchSelect from "../Common/CustomerSearchSelect";
 
 const OrderFilters = ({
   selectedCustomerId,
@@ -19,6 +20,9 @@ const OrderFilters = ({
   isCitiesLoading = false,
   sortedData = [],
   isHistoryTab = false,
+  // يُستدعى مع كائن الزبون المختار (لعرض اسمه في الشارات والتصدير) - القائمة
+  // لم تعد تُحمَّل كاملة، البحث يتم من الخادم عبر CustomerSearchSelect.
+  onCustomerSelected,
 }) => {
   const selectedCustomerName = selectedCustomerId 
     ? customersList.find(c => c.id.toString() === selectedCustomerId.toString())?.company_name || selectedCustomerId
@@ -31,19 +35,19 @@ const OrderFilters = ({
           <label className="mb-2 text-sm font-medium text-foreground">
             تصفية بالعميل
           </label>
-          <select
-            value={selectedCustomerId}
-            onChange={(e) => setSelectedCustomerId(e.target.value)}
-            className="p-2.5 border rounded-lg bg-card text-foreground text-sm shadow-sm focus:ring-2 focus:ring-primary focus:border-primary w-full disabled:bg-muted disabled:text-muted-foreground transition-colors duration-200"
+          <CustomerSearchSelect
+            value={selectedCustomerId || ""}
+            onChange={(id, customer) => {
+              setSelectedCustomerId(id || "");
+              onCustomerSelected?.(customer || null);
+            }}
+            selectedCustomer={customersList.find((c) => String(c.id) === String(selectedCustomerId)) || null}
+            allowAll
+            allValue=""
+            allLabel="جميع العملاء"
             disabled={isLoadingCustomers}
-          >
-            <option value="">جميع العملاء</option>
-            {Array.isArray(customersList) && customersList.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.company_name || customer.name || `عميل #${customer.id}`}
-              </option>
-            ))}
-          </select>
+            triggerClassName="h-[42px] rounded-lg bg-card shadow-sm"
+          />
         </div>
 
         <div className="flex flex-col">
@@ -60,7 +64,7 @@ const OrderFilters = ({
                 onChange={() => setOrderType("")}
                 className="text-gray-500 focus:ring-gray-500 h-4 w-4 accent-gray-500"
               />
-              <span className="text-gray-600 font-medium">فك وتركيب</span>
+              <span className="text-gray-600 font-medium">الكل</span>
             </label>
             <label className="flex items-center gap-2 text-sm text-foreground">
               <input
@@ -83,6 +87,17 @@ const OrderFilters = ({
                 className="text-green-500 focus:ring-green-500 h-4 w-4 accent-green-500"
               />
               <span className="text-green-600 font-medium">تركيب</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="radio"
+                name={`orderType${isHistoryTab ? 'History' : ''}`}
+                value="swap"
+                checked={orderType === "swap"}
+                onChange={(e) => setOrderType(e.target.value)}
+                className="text-amber-500 focus:ring-amber-500 h-4 w-4 accent-amber-500"
+              />
+              <span className="text-amber-600 font-medium">فك وتركيب</span>
             </label>
           </div>
         </div>

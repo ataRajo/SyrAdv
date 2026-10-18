@@ -57,7 +57,7 @@ const ReceiveDialog = ({ order, onCancel, onConfirm, isSaving }) => {
   );
 };
 
-const CompleteDialog = ({ onCancel, onConfirm, isSaving }) => {
+export const CompleteDialog = ({ onCancel, onConfirm, isSaving }) => {
   const [beforePhoto, setBeforePhoto] = useState(null);
   const [beforePreview, setBeforePreview] = useState(null);
   const [afterPhoto, setAfterPhoto] = useState(null);
@@ -181,6 +181,7 @@ const MyOrdersTab = ({ myWorkshop }) => {
   const {
     myOrders,
     activeRegions,
+    activeRegionRemaining = 0,
     isFetchingMyOrders,
     orderFilters,
     setOrderFilters,
@@ -239,7 +240,9 @@ const MyOrdersTab = ({ myWorkshop }) => {
               منطقتك النشطة حاليًا: {activeRegionNames.join("، ")}
             </div>
             <div className="text-xs text-amber-700 mt-0.5">
-              لديك أوامر مُستلَمة لم تُنفَّذ بعد في هذه المنطقة - أنجزها كاملة أولًا قبل استلام أو تنفيذ أوامر من منطقة أخرى.
+              لا يمكنك الخروج من هذه المنطقة إلا بعد تركيب كل لوحاتها
+              {activeRegionRemaining > 0 ? ` (باقي ${activeRegionRemaining} لوحة)` : ""}.
+              اللوحات المؤشَّرة بحالة صيانة من مدير الورشة لا تمنعك من الانتقال.
             </div>
           </div>
         </div>
@@ -336,8 +339,11 @@ const MyOrdersTab = ({ myWorkshop }) => {
                       </div>
                     )}
                     {group.orders.map((order) => {
-                      const isLocked = order.region_locked === true;
-                      const lockTitle = isLocked
+                      const onMaintenance = order.maintenance_hold_active === true;
+                      const isLocked = order.region_locked === true || onMaintenance;
+                      const lockTitle = onMaintenance
+                        ? `هذه اللوحة بحالة صيانة حتى ${order.maintenance_hold_until || ""}`
+                        : isLocked
                         ? "لا يمكن استلام أو تنفيذ أوامر من هذه المنطقة قبل إنجاز منطقتك النشطة كاملة"
                         : undefined;
                       return (
@@ -358,6 +364,19 @@ const MyOrdersTab = ({ myWorkshop }) => {
                                 <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                                   <Icon icon="mdi:map-marker-outline" className="w-3.5 h-3.5 shrink-0" />
                                   {order.road_sign.place}
+                                </div>
+                              )}
+                              {order.under_maintenance_hold && (
+                                <div
+                                  className={`text-xs mt-1 flex items-center gap-1 ${
+                                    onMaintenance ? "text-orange-600" : "text-slate-500"
+                                  }`}
+                                >
+                                  <Icon icon="mdi:wrench-clock" className="w-3.5 h-3.5 shrink-0" />
+                                  {onMaintenance
+                                    ? `بحالة صيانة حتى ${order.maintenance_hold_until || "-"}`
+                                    : "انتهت مدة الصيانة - جاهزة للتنفيذ"}
+                                  {order.maintenance_hold_reason ? ` · ${order.maintenance_hold_reason}` : ""}
                                 </div>
                               )}
                               {order.received_at && (

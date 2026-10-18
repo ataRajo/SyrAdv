@@ -1,4 +1,5 @@
 import React, { memo, useContext, useEffect, useState, useMemo, useRef } from "react";
+import CustomerSearchSelect from "../../Common/CustomerSearchSelect";
 import {
   Select,
   SelectContent,
@@ -259,30 +260,15 @@ const BookingFields = () => {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
  <div>
   <label className="block text-sm font-medium mb-2">الزبون</label>
-  <Select
-    onValueChange={(value) => formik.setFieldValue("customer_id", value)}
+  {/* بحث من الخادم + تمرير لا نهائي (بدل تحميل 500 زبون دفعة واحدة) */}
+  <CustomerSearchSelect
     value={formik.values.customer_id?.toString() || ""}
-  >
-    <SelectTrigger className="w-full text-right">
-      <SelectValue placeholder="اختر الزبون" />
-    </SelectTrigger>
-    <SelectContent className="max-h-[300px]">
-      {isLoadingCustomers && customers.length === 0 ? (
-        <div className="p-2 text-center text-gray-500">جاري التحميل...</div>
-      ) : customers.length > 0 ? (
-        customers.map((customer) => (
-          <SelectItem 
-            key={customer.id} 
-            value={customer.id.toString()}
-          >
-            {customer.full_name} - {customer.company_name}
-          </SelectItem>
-        ))
-      ) : (
-        <div className="p-2 text-center text-gray-500">لا توجد زبائن</div>
-      )}
-    </SelectContent>
-  </Select>
+    onChange={(value) => formik.setFieldValue("customer_id", value || "")}
+    selectedCustomer={bookingData?.customer || null}
+    placeholder="اختر الزبون"
+    showRemaining
+    invalid={Boolean(formik.touched.customer_id && formik.errors.customer_id)}
+  />
 </div>
 
       <div>

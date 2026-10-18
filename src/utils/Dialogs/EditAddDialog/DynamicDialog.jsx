@@ -22,6 +22,7 @@ import "react-quill-new/dist/quill.snow.css";
 import MapDialog from "../../MapDialog";
 import { useAddNewCityMutation } from "../../../RtkQuery/Slice/CitiesAndRegions/CitiesAndRegionsApi";
 import EmployeePermissionsPicker from "./EmployeePermissionsPicker";
+import CustomerSearchSelect from "../../../Components/Common/CustomerSearchSelect";
 
 const DynamicDialog = ({
   show,
@@ -38,6 +39,10 @@ const DynamicDialog = ({
   onFieldChange = () => {},
   handleLocationSelect,
   selectedLocation,
+  // محتوى إضافي يُعرَض بعد الحقول (يستقبل formik) - كان يُمرَّر من
+  // DialogAddPayments دون أن يُعرَض فعليًا.
+  renderCustomFields,
+  submitButtonText,
 }) => {
   const mutationReturn = mutationHook();
   let mutate = null;
@@ -67,6 +72,30 @@ const DynamicDialog = ({
 
   const renderField = (field, formik) => {
     switch (field.type) {
+// اختيار زبون ببحث من الخادم + تمرير لا نهائي (بدل select مرقَّم يدويًا) -
+// راجع Components/Common/CustomerSearchSelect.
+case "customer-search": {
+  const hasError = formik.touched[field.name] && formik.errors[field.name];
+  return (
+    <div key={field.name} className="space-y-2 sm:col-span-2">
+      <Label htmlFor={field.name}>{field.label}</Label>
+      <CustomerSearchSelect
+        id={field.name}
+        value={formik.values[field.name] ?? ""}
+        onChange={(value, customer) => {
+          formik.setFieldValue(field.name, value);
+          formik.setFieldTouched(field.name, true, false);
+          onFieldChange(field.name, value, customer);
+        }}
+        placeholder={field.placeholder || `اختر ${field.label}`}
+        showRemaining={field.showRemaining}
+        hasRemaining={field.hasRemaining}
+        invalid={Boolean(hasError)}
+      />
+      {hasError && <p className="text-sm text-red-500">{formik.errors[field.name]}</p>}
+    </div>
+  );
+}
 case "select": {
   const options = field.options || (selectData[field.dataKey]?.data || []);
   const pagination = selectData[field.dataKey]?.pagination;
@@ -548,6 +577,7 @@ case "map":
               {fields
                 .filter((field) => field.type === "permissions-picker")
                 .map((field) => renderField(field, formik))}
+              {typeof renderCustomFields === "function" && renderCustomFields(formik)}
               <DialogFooter className="mt-6">
   <Button 
     type="button" 
@@ -559,7 +589,7 @@ case "map":
     إلغاء
   </Button>
   <Button type="submit" disabled={isLoading || formik.isSubmitting}>
-    {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "حفظ"}
+    {isLoading || formik.isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : (submitButtonText || "حفظ")}
   </Button>
 </DialogFooter>
             </Form>

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Copy, Loader2, Calendar, User, Printer, Package, AlertCircle } from 'lucide-react';
 import { useSimilarCampaign } from '../../hooks/useSimilarCampaign';
+import CustomerSearchSelect from '../Common/CustomerSearchSelect';
 import { RoadSignsList } from './RoadSignsList';
 import { productTypeOptions } from '../../Static/StaticData';
 import axios from 'axios';
@@ -109,19 +110,11 @@ export const CreateSimilarCampaign = ({ booking ,  printTypes ,loadingPrintTypes
                   <User className="h-4 w-4 text-orange-500" />
                   اختيار العميل *
                 </label>
-<select
-  className="w-full border rounded-lg p-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-  value={customerId}
-  onChange={(e) => setCustomerId(e.target.value)}
-  disabled={isLoadingCustomers}
->
-                  <option value="">-- اختر عميل --</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.company_name || customer.full_name}
-                    </option>
-                  ))}
-                </select>
+                <CustomerSearchSelect
+                  value={customerId || ""}
+                  onChange={(id) => setCustomerId(id || "")}
+                  placeholder="-- اختر عميل --"
+                />
               </div>
               
               {/* Product Type */}

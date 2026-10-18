@@ -8,8 +8,14 @@
     tagTypes: ["payments"], // 👈 keep consistent lowercase
     endpoints: (builder) => ({
       getPayments: builder.query({
-  query: ({ is_received, page, per_page } = {}) => {
+  query: ({ is_received, page, per_page, customer_id, status, is_documented } = {}) => {
     const params = new URLSearchParams();
+    // فلترة من الخادم (كانت الفلترة بالزبون/الحالة تتم على الصفحة المحمَّلة فقط).
+    if (customer_id) params.append("customer_id", customer_id);
+    if (status !== undefined && status !== null && status !== "") params.append("status", status);
+    if (is_documented !== undefined && is_documented !== null && is_documented !== "") {
+      params.append("is_documented", is_documented ? 1 : 0);
+    }
     if (typeof is_received === "boolean") {
       params.append("is_received", is_received);
     }
@@ -84,6 +90,17 @@
         invalidatesTags: ["payments"],
       }),
 
+      // توثيق الدفعة برفع صورة سند القبض الموقَّع - لا تؤثر الدفعة على رصيد
+      // الزبون ولا على شجرة الحسابات إلا بعده (PaymentService::document).
+      documentPayment: builder.mutation({
+        query: ({ id, body }) => ({
+          url: `payments/${id}/document`,
+          method: "POST",
+          body, // FormData يحمل "image"
+        }),
+        invalidatesTags: ["payments"],
+      }),
+
       deletePayment: builder.mutation({
         query: (id) => ({
           url: `payments/${id}`,
@@ -103,5 +120,6 @@
     useGetBoxDailyReportQuery,
     useLazyGetBoxDailyReportQuery,
     useDeletePaymentMutation,
+    useDocumentPaymentMutation,
     useUpdatePaymentStatusMutation, // 👈 now properly exported
   } = PaymentsSlice;

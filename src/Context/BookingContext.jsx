@@ -1,9 +1,8 @@
 import { createContext, useState, useEffect, useMemo, useRef } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { useGetCustomersQuery } from "../RtkQuery/Slice/Customers/CustomersApi";
 import { showToast } from "../utils/Notifictions/showToast";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { useGetRoadSignsQuery } from "../RtkQuery/Slice/RoadSings/RoadSingsApi";
 import {
   useAddNewBookingMutation,
@@ -64,6 +63,11 @@ export const BookingContextApi = ({ children, bookingId }) => {
   const isEditMode = !!bookingId;
   const { id } = useParams();
   const navigate = useNavigate();
+  // "تحويل إلى حجز" من خطة إعلانية (طلب صريح، ميزة جديدة) يصل هنا عبر
+  // location.state - راجع AdvertisingPlanDetails.jsx والتعليق عند تعريف
+  // hasAppliedPlanPrefillRef أدناه لشرح لماذا لا يوجد إنشاء تلقائي للحجز
+  // من الباك-إند.
+  const location = useLocation();
   const superAdminInfo = JSON.parse(localStorage.getItem("SuperAdminInfo"));
 
   // States
@@ -85,6 +89,10 @@ export const BookingContextApi = ({ children, bookingId }) => {
   // الفعلية على الخادم، فلا معنى لاستعادة مسودة سلة قديمة فوقها.
   const hasRestoredCartRef = useRef(false);
   const lastCartActivityRef = useRef(Date.now());
+  // تعبئة مسبقة من خطة إعلانية (fromAdvertisingPlan) - راجع useEffect
+  // المخصص لها بالأسفل. مرجع منفصل عن hasRestoredCartRef حتى لا يظن أحدهما
+  // أن الآخر نفّذ عمله.
+  const hasAppliedPlanPrefillRef = useRef(false);
 
   // RTK Query hooks
   const { data: roadSigns, isLoading: isLoadingRoadSigns } =
@@ -94,14 +102,10 @@ export const BookingContextApi = ({ children, bookingId }) => {
       skip: !isEditMode,
     });
  
-const { data: customersResponse, isLoading: isLoadingCustomers } = useGetCustomersQuery({
-  //page: customerPage,
-  per_page: 80
-});
-
-
-
-const customers = customersResponse?.data || [];
+// اختيار الزبون في نموذج الحجز يتم الآن عبر CustomerSearchSelect (بحث من
+// الخادم) - لم نعد نحمّل 500 زبون دفعة واحدة. تبقى القيم مُصدَّرة للتوافق.
+const isLoadingCustomers = false;
+const customers = [];
   const [addNewBooking, { isLoading: isLoadingAdd }] =
     useAddNewBookingMutation();
   const [updateBookings, { isLoading: isLoadingUpdate }] =
@@ -242,8 +246,13 @@ const formik = useFormik({
 
   // استرجاع مسودة السلة المحفوظة (إن وُجدت ولم تنتهِ صلاحيتها بعد) عند
   // فتح واجهة إنشاء حجز جديد - مرة واحدة فقط عند التحميل الأول.
+  // لا تُستَرجَع إن كان الوصول عبر "تحويل إلى حجز" من خطة إعلانية
+  // (location.state.fromAdvertisingPlan) - تلك التعبئة الصريحة يجب ألا
+  // تُستبدَل بسلة قديمة منسية من جلسة سابقة (راجع useEffect المخصص لها
+  // بالأسفل، وهو من يتولى وضع hasRestoredCartRef.current = true في تلك
+  // الحالة كي لا يُنفَّذ هذا الشرط لاحقًا لو تغيّر location لأي سبب).
   useEffect(() => {
-    if (isEditMode || hasRestoredCartRef.current) return;
+    if (isEditMode || hasRestoredCartRef.current || location.state?.fromAdvertisingPlan) return;
     hasRestoredCartRef.current = true;
 
     const persisted = loadPersistedCart();
@@ -262,6 +271,79 @@ const formik = useFormik({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode]);
+
+  // تعبئة مسبقة عند القدوم من "تحويل إلى حجز" في خطة إعلانية (طلب صريح،
+  // ميزة جديدة - راجع AdvertisingPlanDetails.jsx). لا يوجد إنشاء تلقائي
+  // للحجز من الباك-إند عمدًا: Booking الفعلي يتطلب type (مؤقت/دائم) وبيانات
+  // لكل لوحة (booking_faces...) لا تملكها الخطة إطلاقًا - لا يمكن تخمينها
+  // بأمان. لذلك نُعبّئ هنا كل ما تملكه الخطة فعلًا (الزبون، التواريخ،
+  // اللوحات المختارة)، ونترك "نوع الحجز" فقط ليُكمله الموظف يدويًا -
+  // addToCart أعلاه أصلًا يرفض أي إضافة قبل اكتمال type/product_type/
+  // printing_id.
+  //
+  // جولة تعديلات جديدة (طلب صريح: "عند النقر على تحويل الى حجز اين تذهب
+  // هذه الخطة؟"): إن استُخدِم التسعير التلقائي الجديد على الخطة (نوع منتج +
+  // نوع طباعة + خصم اختياري - راجع AdvertisingPlanForm.jsx)، تُنقَل هذه
+  // القيم أيضًا وتُعبَّأ هنا مباشرةً في formik/حالة الخصم، بدل ترك الموظف
+  // يُعيد اختيارها يدويًا من الصفر رغم أنها محسوبة ومحفوظة أصلًا على الخطة.
+  useEffect(() => {
+    if (isEditMode || hasAppliedPlanPrefillRef.current) return;
+
+    const planPrefill = location.state?.fromAdvertisingPlan;
+    if (!planPrefill) return;
+
+    hasAppliedPlanPrefillRef.current = true;
+    // يمنع useEffect استرجاع السلة القديمة أعلاه من الكتابة فوق هذه
+    // التعبئة لو أُعيد تشغيله لاحقًا لأي سبب.
+    hasRestoredCartRef.current = true;
+
+    formik.setValues((prev) => ({
+      ...prev,
+      customer_id: planPrefill.customer_id ? String(planPrefill.customer_id) : prev.customer_id,
+      start_date: planPrefill.start_date || prev.start_date,
+      end_date: planPrefill.end_date || prev.end_date,
+      product_type: planPrefill.product_type ? String(planPrefill.product_type) : prev.product_type,
+      printing_id: planPrefill.printing_id ? String(planPrefill.printing_id) : prev.printing_id,
+    }));
+
+    if (planPrefill.discount_type && planPrefill.discount_value != null) {
+      setDiscountType(String(planPrefill.discount_type));
+      setDiscountValue(String(planPrefill.discount_value));
+      setShowDiscount(true);
+    }
+
+    const prefilledSigns = (planPrefill.road_signs || []).map((rs) => ({
+      cartId: `cart-plan-${planPrefill.plan_id}-${rs.id}-${Date.now()}`,
+      road_sign_id: rs.id,
+      max_faces: rs.panels_number,
+      dateRanges: [
+        {
+          startDate: planPrefill.start_date,
+          endDate: planPrefill.end_date,
+          booking_faces: 1,
+          units: 1,
+        },
+      ],
+      template: rs.template,
+      region: rs.region,
+      place: rs.place,
+      directions: rs.directions,
+    }));
+
+    if (prefilledSigns.length > 0) {
+      setSelectedSigns(prefilledSigns);
+      setAddedSignIds(new Set(prefilledSigns.map((s) => s.road_sign_id)));
+      lastCartActivityRef.current = Date.now();
+    }
+
+    showToast(
+      "success",
+      planPrefill.product_type && planPrefill.printing_id
+        ? "تم تعبئة بيانات الحجز من الخطة الإعلانية (بما فيها نوع المنتج والطباعة والخصم) - أكمل نوع الحجز ثم احسب السعر واحفظ"
+        : "تم تعبئة بيانات الحجز من الخطة الإعلانية - أكمل نوع الحجز ونوع المنتج والطباعة ثم احفظ الحجز"
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, location.state]);
 
   // حفظ مسودة السلة تلقائيًا مع كل تغيير - يُستخدَم عند العودة لاحقًا (خلال
   // 30 دقيقة) لاستعادتها، وأيضًا كمرجع لوقت آخر نشاط (انظر مؤقّت الإفراغ

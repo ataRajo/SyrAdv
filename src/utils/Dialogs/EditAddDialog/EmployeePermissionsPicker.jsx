@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { Loader2, ShieldCheck, Sparkles, Package } from "lucide-react";
 import { useGetPermissionsQuery } from "../../../RtkQuery/Slice/Users/UsersApi";
 
 /**
@@ -51,7 +51,31 @@ const EmployeePermissionsPicker = ({ value = [], onChange }) => {
     );
   }
 
-  const { groups = [], exceptional = [] } = data;
+  const { groups = [], exceptional = [], packages = [] } = data;
+
+  // باكج مُفعَّل = كل صلاحياته محدَّدة. تفعيله يضيفها كلها، وإلغاؤه يزيلها
+  // كلها (باستثناء ما يشاركه مع باكج آخر لا يزال مُفعَّلًا).
+  const packageState = (pkg) => {
+    const count = pkg.permissions.filter((n) => selected.has(n)).length;
+    return { all: count === pkg.permissions.length && count > 0, some: count > 0 };
+  };
+
+  const togglePackage = (pkg, checked) => {
+    const next = new Set(selected);
+    if (checked) {
+      pkg.permissions.forEach((n) => next.add(n));
+    } else {
+      const keep = new Set(
+        packages
+          .filter((other) => other.key !== pkg.key && packageState(other).all)
+          .flatMap((other) => other.permissions)
+      );
+      pkg.permissions.forEach((n) => {
+        if (!keep.has(n)) next.delete(n);
+      });
+    }
+    onChange(Array.from(next));
+  };
 
   return (
     <div className="col-span-1 sm:col-span-2 space-y-4" dir="rtl">
@@ -59,6 +83,50 @@ const EmployeePermissionsPicker = ({ value = [], onChange }) => {
         <ShieldCheck className="h-4 w-4 text-primary" />
         <h4 className="font-semibold text-sm">صلاحيات الموظف</h4>
       </div>
+
+      {packages.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {packages.map((pkg) => {
+            const { all, some } = packageState(pkg);
+            return (
+              <label
+                key={pkg.key}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border-2 p-3 transition-colors ${
+                  all ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={all}
+                  ref={(el) => {
+                    if (el) el.indeterminate = some && !all;
+                  }}
+                  onChange={(e) => togglePackage(pkg, e.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-sm font-semibold">
+                    <Package className="h-4 w-4 text-primary" />
+                    {pkg.label}
+                    <span className="text-[11px] font-normal text-muted-foreground">
+                      ({pkg.permissions.length} صلاحية)
+                    </span>
+                  </span>
+                  {pkg.description && (
+                    <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                      {pkg.description}
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        أو حدّد الصلاحيات بدقة (الباكج مجرد اختصار لتحديد مجموعة صلاحيات دفعة واحدة):
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {groups.map((group) => {

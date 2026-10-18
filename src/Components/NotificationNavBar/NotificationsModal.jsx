@@ -1,23 +1,39 @@
 // components/NotificationsModal.jsx
 import React, { useEffect, useState } from "react";
-import { Bell, X, ChevronDown, ChevronUp, ExternalLink, MessageCircle, Loader2 } from "lucide-react";
+import {
+  Bell,
+  X,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  MessageCircle,
+  Loader2,
+  ClipboardList,
+  Copy,
+  Check,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { messaging } from "@/firebase";
 import { getToken } from "firebase/messaging";
 import toast from "react-hot-toast";
+import { getPublicPlanUrl } from "../../Api/baseUrl";
 import {
   useGetNotificationsQuery,
   useSendOverdueBalanceWhatsappMutation,
 } from "../../RtkQuery/Slice/Booking/BookingApi";
 
-// طلب صريح: فلترة الإشعارات حسب نوع المحتوى (تنبيهات عامة/طلبات/مالية) -
-// راجع App\Enums\NotificationType على الباك-إند لنفس القيم بالضبط.
+// طلب صريح: فلترة الإشعارات حسب نوع المحتوى (تنبيهات عامة/طلبات/مالية/خطط
+// إعلانية) - راجع App\Enums\NotificationType على الباك-إند لنفس القيم
+// بالضبط. "خطط إعلانية" (advertising_plan) نوع مستقل بحد ذاته (طلب صريح)
+// يُنشأ فقط عندما يضغط الزبون "أريد حجز هذه الخطة" من الرابط العام - راجع
+// AdvertisingPlanService::notifyStaffOfCustomerRequest().
 const NOTIFICATION_TYPE_TABS = [
   { value: null, label: "الكل" },
   { value: "general", label: "عام" },
   { value: "order", label: "الطلبات" },
   { value: "financial", label: "مالية" },
+  { value: "advertising_plan", label: "خطط إعلانية" },
 ];
 
 const NotificationsModal = ({
@@ -30,6 +46,9 @@ const NotificationsModal = ({
   const [typeFilter, setTypeFilter] = useState(null);
   const [sendWhatsapp, { isLoading: isSendingWhatsapp }] = useSendOverdueBalanceWhatsappMutation();
   const [sendingBookingId, setSendingBookingId] = useState(null);
+  // نسخ الرابط العام للخطة (share_token) مباشرة من الإشعار - راجع
+  // AdvertisingPlanConflictBadge لنفس أسلوب "نسخ للحافظة + أيقونة تأكيد".
+  const [copiedPlanId, setCopiedPlanId] = useState(null);
 
   // جلب مستقل بحسب نوع الفلتر المختار (لا يُشغَّل إلا والنافذة مفتوحة) -
   // فلترة الأدوار (من يرى إشعارات الطلبات أصلًا) يطبّقها السيرفر دومًا بصرف
@@ -87,6 +106,25 @@ const NotificationsModal = ({
     // Navigate to booking details page
     window.location.href = `/dashboard/bookings/${bookingId}`;
     onClose();
+  };
+
+  // إشعار "خطط إعلانية" (طلب صريح، نوع مستقل) - الذهاب لصفحة تفاصيل الخطة
+  // بنفس أسلوب handleNavigateToBooking أعلاه.
+  const handleNavigateToAdvertisingPlan = (planId) => {
+    window.location.href = `/dashboard/advertising-plans/${planId}`;
+    onClose();
+  };
+
+  const handleCopyPublicPlanLink = async (shareToken, notificationId) => {
+    const url = getPublicPlanUrl(shareToken);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedPlanId(notificationId);
+      toast.success("تم نسخ الرابط العام");
+      setTimeout(() => setCopiedPlanId(null), 2000);
+    } catch (err) {
+      toast.error("تعذّر نسخ الرابط");
+    }
   };
 
   // إرسال تلقائي فوري عبر واتساب (WAHA) - يستبدل فتح رابط wa.me اليدوي
@@ -315,6 +353,129 @@ const NotificationsModal = ({
                                     </div>
                                   </div>
                                 ))}
+                              </div>
+                            )}
+
+                            {/* "خطط إعلانية" (طلب صريح، نوع مستقل) - الزبون
+                                ضغط "أريد حجز هذه الخطة" من الرابط العام.
+                                نعرض هنا كل بيانات الخطة والزبون وكل لوحة
+                                فيها كاملةً بلا اقتطاع (طلب صريح: "خلي واجهة
+                                الجرس تتحمل داتا كبيرة بحيث تعرض كلشي") -
+                                راجع AdvertisingPlanService::notifyStaffOfCustomerRequest(). */}
+                            {notification.type === "advertising_plan" && notification.data && (
+                              <div className="mt-2 space-y-2">
+                                <div className="grid grid-cols-2 gap-2 text-xs bg-white dark:bg-gray-900 rounded p-2 border border-blue-200 dark:border-blue-900">
+                                  {notification.data.customer && (
+                                    <>
+                                      <div className="col-span-2 flex justify-between">
+                                        <span className="text-gray-500 dark:text-gray-400">الزبون:</span>
+                                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                                          {notification.data.customer.company_name ||
+                                            notification.data.customer.full_name ||
+                                            "—"}
+                                        </span>
+                                      </div>
+                                      {notification.data.customer.phone_number && (
+                                        <div className="col-span-2 flex justify-between">
+                                          <span className="text-gray-500 dark:text-gray-400">الهاتف:</span>
+                                          <span className="font-medium text-gray-900 dark:text-gray-100" dir="ltr">
+                                            {notification.data.customer.phone_number}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                  {(notification.data.start_date || notification.data.end_date) && (
+                                    <div className="col-span-2 flex justify-between">
+                                      <span className="text-gray-500 dark:text-gray-400">فترة الحملة:</span>
+                                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                                        {notification.data.start_date} إلى {notification.data.end_date}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500 dark:text-gray-400">عدد اللوحات:</span>
+                                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                                      {notification.data.road_signs_count ?? (notification.data.road_signs || []).length}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500 dark:text-gray-400">السعر النهائي:</span>
+                                    <span className="font-medium text-green-600 dark:text-green-400">
+                                      {Number(notification.data.total_price || 0).toLocaleString("ar-EG")} ل.س
+                                    </span>
+                                  </div>
+                                  {notification.data.customer_note && (
+                                    <div className="col-span-2">
+                                      <span className="text-gray-500 dark:text-gray-400 block mb-0.5">ملاحظة الزبون:</span>
+                                      <span className="text-gray-900 dark:text-gray-100">{notification.data.customer_note}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* كل اللوحات كاملةً - منطقة قابلة للتمرير كي
+                                    لا تُكسِّر ارتفاع النافذة عند خطة كبيرة
+                                    (طلب صريح: عرض كل الداتا). */}
+                                {(notification.data.road_signs || []).length > 0 && (
+                                  <div className="max-h-56 overflow-y-auto rounded border border-blue-200 dark:border-blue-900">
+                                    <table className="w-full text-[11px]">
+                                      <thead className="bg-blue-50 dark:bg-blue-950/40 sticky top-0">
+                                        <tr>
+                                          <th className="text-right px-2 py-1">اللوحة</th>
+                                          <th className="text-right px-2 py-1">المكان</th>
+                                          <th className="text-right px-2 py-1">النموذج</th>
+                                          <th className="text-right px-2 py-1">السعر</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {notification.data.road_signs.map((rs) => (
+                                          <tr key={rs.id} className="border-t border-blue-100 dark:border-blue-900/60">
+                                            <td className="px-2 py-1 font-mono">{rs.roadsign_code || `#${rs.id}`}</td>
+                                            <td className="px-2 py-1">
+                                              {rs.city ? `${rs.city} - ` : ""}
+                                              {rs.place || "—"}
+                                            </td>
+                                            <td className="px-2 py-1">{rs.template_model || "—"}</td>
+                                            <td className="px-2 py-1">
+                                              {Number(rs.price || 0).toLocaleString("ar-EG")}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleNavigateToAdvertisingPlan(notification.data.advertising_plan_id);
+                                    }}
+                                    className="flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-1 rounded hover:bg-blue-200 dark:hover:bg-blue-900"
+                                  >
+                                    <ClipboardList className="h-3 w-3" />
+                                    الذهاب للخطة
+                                  </button>
+                                  {notification.data.share_token && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCopyPublicPlanLink(notification.data.share_token, notification.id);
+                                      }}
+                                      className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    >
+                                      {copiedPlanId === notification.id ? (
+                                        <Check className="h-3 w-3 text-green-600" />
+                                      ) : (
+                                        <Copy className="h-3 w-3" />
+                                      )}
+                                      نسخ رابط الزبون
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>

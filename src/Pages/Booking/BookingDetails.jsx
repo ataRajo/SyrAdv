@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Download, MapPin, Building, Maximize, FileText,
   Plus, Trash2, ArrowRight, Hash, Copy,
-  Loader2, RotateCw, X, Check, ZoomIn, ZoomOut, Edit2, Crop
+  Loader2, RotateCw, X, Check, ZoomIn, ZoomOut, Edit2, Crop, Printer
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@iconify/react";
@@ -10,14 +10,39 @@ import {
   useGetOneBookingsQuery,
   useUploadBookingPdfMutation,
   useSendBookingPdfWhatsappMutation,
+  useGetBookingMaintenanceHoldsQuery,
 } from "../../RtkQuery/Slice/Booking/BookingApi";
 import toast from "react-hot-toast";
-// html2canvas-pro: بديل مباشر لـ html2canvas يدعم ألوان oklch (Tailwind v4)
-import html2canvas from "html2canvas-pro";
-import { jsPDF } from "jspdf";
 import firstPage from "../../assets/images/new.jpeg"
 import SignContractPanel from "../../Components/Booking/SignContractPanel";
 import ContractDocumentsPanel from "../../Components/Booking/ContractDocumentsPanel";
+import { idbGet, idbSet, compressImage } from "../../utils/idbImageStorage";
+
+// ============================================================
+// PDF FIX (v2) — إزالة html2canvas-pro / jsPDF نهائياً
+// ============================================================
+// المشكلة القديمة: توليد الـ PDF كان يعتمد على html2canvas لالتقاط "لقطة"
+// من DOM الشاشة العادي (screen)، بينما الصور المرفوعة وأشرطة العنوان لا
+// تظهر إلا عبر قواعد @media print الحقيقية (.photos-large-view,
+// hidden print:flex...). كان لازم حيلة (.pdf-capture) تفرض حالة الطباعة
+// يدوياً أثناء الالتقاط، وهذا تحديداً ما كان يسبب التعارض واختفاء الصور
+// أحياناً (تايمنغ تحميل الصور/الخطوط، أو فشل الحيلة بصمت).
+//
+// الحل الآن: الاعتماد الكامل على window.print() -> "حفظ كـ PDF" من نافذة
+// طباعة المتصفح نفسها. هذا يستخدم قواعد @media print الموجودة أصلاً في
+// هذا الملف بشكل طبيعي 100% (بدون أي حيلة JS)، فتظهر الصور والعناوين
+// دائماً كما هي مصمَّمة للطباعة.
+//
+// الأثر الجانبي (بموافقة صريحة): لم يعد ممكناً توليد ملف الـ PDF تلقائياً
+// كـ Blob داخل الكود (المتصفح لا يُعيد الملف المحفوظ من نافذة الطباعة لأي
+// كود جافاسكريبت لأسباب أمنية) — لذلك لم يعد هناك "توليد + رفع + إرسال"
+// بضغطة واحدة. بدلاً من ذلك:
+//   1) المستخدم يضغط "طباعة / حفظ PDF" ويحفظ الملف من نافذة الطباعة.
+//   2) ثم يضغط "رفع الملف المحفوظ" (رفع فقط) أو "رفع وإرسال عبر واتساب"
+//      (نفس الرفع، لكن يرسل تلقائياً بعد نجاح الرفع) ويختار نفس الملف
+//      الذي حفظه للتو من جهازه.
+const ARABIC_PDF_FONT_STACK =
+  "'Tajawal','Segoe UI','Tahoma','Arial','Noto Naskh Arabic',sans-serif";
 
 const BookingDetails = ({ bookingId: propBookingId }) => {
   const [imagesPerSign, setImagesPerSign] = useState({});
@@ -25,11 +50,8 @@ const BookingDetails = ({ bookingId: propBookingId }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSendingWhatsapp, setIsSendingWhatsapp] = useState(false);
   // يُضبَط قبل فتح منتقي الملف مباشرة، ليعرف handleFileChange بعد نجاح
-  // الرفع هل الزر المضغوط كان "رفع فقط" أم "حفظ وإرسال عبر واتساب".
+  // الرفع هل الزر المضغوط كان "رفع فقط" أم "رفع وإرسال عبر واتساب".
   const [sendAfterUpload, setSendAfterUpload] = useState(false);
-  // توليد ملف PDF تلقائيًا من صفحة العرض (بدون نافذة الطباعة/اختيار المسار).
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const printContainerRef = useRef(null);
   const [editingImage, setEditingImage] = useState(null);
   const [currentEditingSignId, setCurrentEditingSignId] = useState(null);
   const [currentEditingIndex, setCurrentEditingIndex] = useState(null);
@@ -48,25 +70,43 @@ const BookingDetails = ({ bookingId: propBookingId }) => {
   const { data: bookingData, isLoading, error } = useGetOneBookingsQuery(bookingId, { skip: !bookingId });
   const [uploadBookingPdf] = useUploadBookingPdfMutation();
   const [sendBookingPdfWhatsapp] = useSendBookingPdfWhatsappMutation();
+  // حالة الصيانة (طلب صريح): إن كانت أي لوحة من الحجز بحالة صيانة لم
+  // تُحسَم، لا يُرسَل الملف للزبون حتى اكتمال كل اللوحات - أو يرسله مدير
+  // الورشة يدويًا بعد تعديل الملف ووضع الصور.
+  const { data: maintenanceInfo, refetch: refetchMaintenance } = useGetBookingMaintenanceHoldsQuery(bookingId, {
+    skip: !bookingId,
+  });
+  const maintenancePending = maintenanceInfo?.pending ?? [];
+  const canForceSend = !!maintenanceInfo?.canForce;
 
   useEffect(() => {
-    if (bookingData?.roadsigns) {
-      const loadedImages = {};
-      bookingData.roadsigns.forEach((sign) => {
-        const saved = localStorage.getItem(`booking_images_${bookingId}_sign_${sign.id}`);
-        loadedImages[sign.id] = saved ? JSON.parse(saved) : [];
-      });
-      setImagesPerSign(loadedImages);
-    }
+    if (!bookingData?.roadsigns) return;
+    let cancelled = false;
+    (async () => {
+      // كانت الصور تُقرأ من localStorage (حصة صغيرة 5-10MB لكل الموقع)
+      // فتفشل بصمت (QuotaExceededError) مع أول صورتين/ثلاث غير مضغوطة -
+      // نفس الإصلاح المطبَّق في SummaryBookings.jsx: IndexedDB عبر idbImageStorage.js.
+      const entries = await Promise.all(
+        bookingData.roadsigns.map(async (sign) => [
+          sign.id,
+          (await idbGet(`booking_images_${bookingId}_sign_${sign.id}`)) || [],
+        ])
+      );
+      if (!cancelled) setImagesPerSign(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
   }, [bookingId, bookingData]);
 
-  const handleDeleteImage = (signId, index) => {
-    setImagesPerSign((prev) => {
-      const updated = (prev[signId] || []).filter((_, i) => i !== index);
-      localStorage.setItem(`booking_images_${bookingId}_sign_${signId}`, JSON.stringify(updated));
-      return { ...prev, [signId]: updated };
-    });
-    toast.success("تم حذف الصورة");
+  const handleDeleteImage = async (signId, index) => {
+    const updated = (imagesPerSign[signId] || []).filter((_, i) => i !== index);
+    try {
+      await idbSet(`booking_images_${bookingId}_sign_${signId}`, updated);
+      setImagesPerSign((prev) => ({ ...prev, [signId]: updated }));
+      toast.success("تم حذف الصورة");
+    } catch (err) {
+      console.error("idbSet failed:", err);
+      toast.error("تعذّر حذف الصورة");
+    }
   };
 
   const handleEditImage = (signId, index, image) => {
@@ -118,7 +158,7 @@ const BookingDetails = ({ bookingId: propBookingId }) => {
     toast.success("تم قص الصورة");
   };
 
-  const handleSaveEditedImage = () => {
+  const handleSaveEditedImage = async () => {
     if (!imgRef.current) return;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -130,12 +170,16 @@ const BookingDetails = ({ bookingId: propBookingId }) => {
     ctx.drawImage(img, -img.width / 2, -img.height / 2);
     const editedImage = canvas.toDataURL("image/jpeg", 0.9);
     if (currentEditingSignId && currentEditingIndex !== null) {
-      setImagesPerSign((prev) => {
-        const updatedImages = [...(prev[currentEditingSignId] || [])];
-        updatedImages[currentEditingIndex] = editedImage;
-        localStorage.setItem(`booking_images_${bookingId}_sign_${currentEditingSignId}`, JSON.stringify(updatedImages));
-        return { ...prev, [currentEditingSignId]: updatedImages };
-      });
+      const updatedImages = [...(imagesPerSign[currentEditingSignId] || [])];
+      updatedImages[currentEditingIndex] = editedImage;
+      try {
+        await idbSet(`booking_images_${bookingId}_sign_${currentEditingSignId}`, updatedImages);
+        setImagesPerSign((prev) => ({ ...prev, [currentEditingSignId]: updatedImages }));
+      } catch (err) {
+        console.error("idbSet failed:", err);
+        toast.error("تعذّر حفظ الصورة المعدَّلة");
+        return;
+      }
     }
     setShowCropModal(false); setEditingImage(null); setIsCropping(false);
     toast.success("تم حفظ الصورة بعد التعديل");
@@ -155,7 +199,7 @@ const BookingDetails = ({ bookingId: propBookingId }) => {
       if (result.status) {
         toast.success("تم رفع ملف PDF بنجاح");
         if (shouldSendAfterUpload) {
-          // "حفظ وإرسال عبر واتساب" - إرسال تلقائي عبر الباك-إند (WAHA)
+          // "رفع وإرسال عبر واتساب" - إرسال تلقائي عبر الباك-إند (WAHA)
           // لنفس الملف الذي رُفع للتو، بدل تنزيله وإرفاقه يدويًا في واتساب.
           await sendPdfWhatsapp();
         } else if (result.data) {
@@ -173,163 +217,53 @@ const BookingDetails = ({ bookingId: propBookingId }) => {
   };
 
   // إرسال (أو إعادة إرسال) ملف الـ PDF المرفوع لهذا الحجز تلقائيًا عبر
-  // واتساب (WAHA) - يُستدعى إما مباشرة بعد الرفع ("حفظ وإرسال")، أو من زر
+  // واتساب (WAHA) - يُستدعى إما مباشرة بعد الرفع ("رفع وإرسال")، أو من زر
   // مستقل لملف مرفوع مسبقًا في تنبيه "يوجد ملف عقد PDF مرفوع مسبقاً" أدناه.
-  const sendPdfWhatsapp = async () => {
+  const sendPdfWhatsapp = async (force = false) => {
     setIsSendingWhatsapp(true);
     try {
-      const result = await sendBookingPdfWhatsapp(bookingId).unwrap();
+      const result = await sendBookingPdfWhatsapp({ bookingId, force: force === true }).unwrap();
       toast.success(result?.message || "تم إرسال الملف للعميل عبر واتساب بنجاح");
     } catch (err) {
-      toast.error(err?.message || "تعذّر إرسال الملف عبر واتساب");
+      if (err?.reason === "maintenance_pending") {
+        refetchMaintenance();
+        const list = (err.pending || [])
+          .map((p) => `• ${p.road_sign}${p.place ? ` (${p.place})` : ""} - حتى ${p.until || "-"}`)
+          .join("\n");
+        if (
+          err.canForce &&
+          window.confirm(
+            `يوجد لوحات بحالة صيانة لم تكتمل:\n${list}\n\nهل تريد إرسال الملف للزبون يدويًا الآن؟ (تأكد أنك عدّلت الملف ووضعت الصور)`
+          )
+        ) {
+          setIsSendingWhatsapp(false);
+          return sendPdfWhatsapp(true);
+        }
+        toast.error(err?.message || "لا يمكن الإرسال: يوجد لوحات بحالة صيانة");
+      } else {
+        toast.error(err?.message || "تعذّر إرسال الملف عبر واتساب");
+      }
     } finally {
       setIsSendingWhatsapp(false);
     }
   };
 
   // ─────────────────────────────────────────────────────────────
-  // توليد PDF تلقائي + تنزيل + رفع + إرسال واتساب
+  // طباعة / حفظ PDF عبر نافذة الطباعة الأصلية للمتصفح (بدل html2canvas)
   // ─────────────────────────────────────────────────────────────
-
-  // اسم الملف: اسم الزبون + رقم الحجز (مع إزالة المحارف غير المسموحة في أسماء الملفات)
-  const buildPdfFileName = () => {
-    const customerName =
-      bookingData?.customer?.full_name ||
-      bookingData?.customer?.company_name ||
-      "زبون";
-    const safeName = String(customerName)
-      .replace(/[\\/:*?"<>|]+/g, " ")
-      .trim()
-      .replace(/\s+/g, "_");
-    return `${safeName}_${bookingData?.id ?? bookingId}.pdf`;
+  const handlePrint = () => {
+    window.print();
   };
 
-  // يحوّل صفحات .print-container إلى ملف PDF (Blob) - كل صفحة (غلاف،
-  // إحصائيات، ملخص نماذج، بطاقة لوحة) تبدأ بصفحة A4 جديدة، وأي صفحة أطول
-  // من A4 تُكمَل تلقائيًا على الصفحة التالية.
-  const generateBookingPdfBlob = async () => {
-    const container = printContainerRef.current;
-    if (!container) throw new Error("تعذّر العثور على محتوى الصفحة لتوليد الملف");
-
-    const pages = Array.from(container.children).filter(
-      (el) => el.offsetHeight > 0 && !el.classList.contains("no-print")
-    );
-    if (pages.length === 0) throw new Error("لا يوجد محتوى لتوليده كملف PDF");
-
-    // A4 بالمليمتر مع هامش 5mm
-    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 5;
-    const contentW = pageW - margin * 2;
-    const contentH = pageH - margin * 2;
-
-    container.classList.add("pdf-capture");
-    try {
-      for (let i = 0; i < pages.length; i++) {
-        const canvas = await html2canvas(pages[i], {
-          scale: 1.5,
-          useCORS: true,          // صور اللوحات من السيرفر (تحتاج CORS على /storage)
-          backgroundColor: "#ffffff",
-          logging: false,
-          ignoreElements: (el) => el.classList?.contains("no-print"),
-        });
-
-        const imgData = canvas.toDataURL("image/jpeg", 0.9);
-        const imgH = (canvas.height * contentW) / canvas.width; // الارتفاع بالمليمتر عند ملء العرض
-
-        if (i > 0) pdf.addPage();
-
-        // إذا كانت الصفحة أطول من A4 تُكمَل على صفحات متتالية
-        let offset = 0;
-        pdf.addImage(imgData, "JPEG", margin, margin, contentW, imgH);
-        while (imgH - offset > contentH + 0.5) {
-          offset += contentH;
-          pdf.addPage();
-          pdf.addImage(imgData, "JPEG", margin, margin - offset, contentW, imgH);
-        }
-      }
-      return pdf.output("blob");
-    } finally {
-      container.classList.remove("pdf-capture");
-    }
-  };
-
-  // تنزيل مباشر لمجلد التنزيلات الافتراضي للمتصفح بدون نافذة "حفظ باسم"
-  const downloadBlob = (blob, fileName) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  };
-
-  // زر "1. تنزيل PDF" - توليد وتنزيل فقط
-  const handleDownloadPdf = async () => {
-    setIsGeneratingPdf(true);
-    const toastId = toast.loading("جاري توليد ملف PDF...");
-    try {
-      const fileName = buildPdfFileName();
-      const blob = await generateBookingPdfBlob();
-      downloadBlob(blob, fileName);
-      toast.success(`تم تنزيل الملف: ${fileName}`, { id: toastId });
-    } catch (err) {
-      console.error("PDF generation error:", err);
-      toast.error(err?.message || "تعذّر توليد ملف PDF", { id: toastId });
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  };
-
-  // زر "حفظ وإرسال عبر واتساب" - توليد ← تنزيل ← رفع للسيرفر ← إرسال واتساب
-  const handleAutoSaveAndSendWhatsapp = async () => {
+  // فتح منتقي الملف لرفع الـ PDF الذي حفظه المستخدم يدوياً من نافذة
+  // الطباعة، ثم إرساله تلقائياً عبر واتساب فور نجاح الرفع.
+  const handleUploadAndSendWhatsapp = () => {
     if (!bookingData?.customer?.phone_number) {
       toast.error("لا يوجد رقم هاتف مسجّل لهذا الزبون");
       return;
     }
-
     setSendAfterUpload(true);
-    setIsGeneratingPdf(true);
-    const toastId = toast.loading("جاري توليد ملف PDF...");
-    try {
-      const fileName = buildPdfFileName();
-      const blob = await generateBookingPdfBlob();
-
-      // 1) حفظ نسخة في التنزيلات فورًا (حتى لو فشل الرفع/الإرسال لاحقًا)
-      downloadBlob(blob, fileName);
-      setIsGeneratingPdf(false);
-
-      // 2) رفع الملف للسيرفر (يستبدل الملف السابق لهذا الحجز)
-      setIsUploading(true);
-      toast.loading("جاري رفع الملف...", { id: toastId });
-      const formData = new FormData();
-      formData.append("pdf", new File([blob], fileName, { type: "application/pdf" }));
-      formData.append("id", bookingId);
-      const uploadResult = await uploadBookingPdf({ id: bookingId, body: formData }).unwrap();
-      if (uploadResult?.status === false) throw new Error(uploadResult?.message || "فشل رفع ملف PDF");
-      setIsUploading(false);
-
-      // 3) إرسال تلقائي عبر واتساب (WAHA)
-      setIsSendingWhatsapp(true);
-      toast.loading("جاري الإرسال عبر واتساب...", { id: toastId });
-      const sendResult = await sendBookingPdfWhatsapp(bookingId).unwrap();
-      toast.success(sendResult?.message || "تم حفظ الملف وإرساله عبر واتساب بنجاح", { id: toastId });
-    } catch (err) {
-      console.error("Save & send WhatsApp error:", err);
-      toast.error(
-        err?.data?.message || err?.message || "تعذّر إكمال الحفظ والإرسال",
-        { id: toastId, duration: 7000 }
-      );
-    } finally {
-      setIsGeneratingPdf(false);
-      setIsUploading(false);
-      setIsSendingWhatsapp(false);
-      setSendAfterUpload(false);
-    }
+    fileInputRef.current.click();
   };
 
   const handleNextGroup = () => { if (currentGroupIndex < groupedSigns.length - 1) setCurrentGroupIndex(currentGroupIndex + 1); };
@@ -443,7 +377,7 @@ const getStatistics = (signs) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans" dir="rtl">
+    <div className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans" dir="rtl" lang="ar" style={{ fontFamily: ARABIC_PDF_FONT_STACK }}>
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -569,12 +503,6 @@ const getStatistics = (signs) => {
         }
 
         .photos-large-view { display: none; }
-        /* وضع توليد PDF تلقائي (html2pdf) - إزالة الظلال والهوامش الخارجية */
-        .pdf-capture > * {
-          box-shadow: none !important;
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-        }
       `}</style>
 
       {/* ── Crop / Edit Modal ── */}
@@ -641,35 +569,56 @@ const getStatistics = (signs) => {
         )}
         <div className="flex gap-2">
           <Button
-            onClick={handleDownloadPdf}
-            disabled={isGeneratingPdf || isUploading || isSendingWhatsapp}
+            onClick={handlePrint}
+            disabled={isUploading || isSendingWhatsapp}
             className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl gap-2 shadow-lg">
-            {isGeneratingPdf && !sendAfterUpload
-              ? (<><Loader2 size={18} className="animate-spin" /> جاري التوليد...</>)
-              : (<><Download size={18} /> 1. تنزيل PDF</>)}
+            <Printer size={18} /> 1. طباعة / حفظ PDF
           </Button>
           <input type="file" accept=".pdf" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
           <Button
             onClick={() => { setSendAfterUpload(false); fileInputRef.current.click(); }}
-            disabled={isGeneratingPdf || isUploading || isSendingWhatsapp}
+            disabled={isUploading || isSendingWhatsapp}
             className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2 shadow-lg">
             {isUploading && !sendAfterUpload ? (<><Loader2 size={18} className="animate-spin" /> جاري الرفع...</>) : (<><Plus size={18} /> 2. رفع الملف المحفوظ</>)}
           </Button>
-          {/* "حفظ وإرسال عبر واتساب" (طلب صريح) - نفس رفع الملف أعلاه، ثم
-              إرسال تلقائي فوري عبر WAHA لرقم العميل، بدل تنزيله وإرفاقه
-              يدويًا في واتساب. راجع BookingService::sendPdfWhatsapp(). */}
+          {/* يفتح نفس منتقي الملفات، ويرسل تلقائياً عبر واتساب بعد نجاح
+              الرفع مباشرة - راجع handleFileChange و sendPdfWhatsapp أعلاه. */}
           <Button
-            onClick={handleAutoSaveAndSendWhatsapp}
-            disabled={isGeneratingPdf || isUploading || isSendingWhatsapp}
+            onClick={handleUploadAndSendWhatsapp}
+            disabled={isUploading || isSendingWhatsapp}
             className="bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2 shadow-lg">
-            {(isGeneratingPdf || isUploading || isSendingWhatsapp) && sendAfterUpload ? (
-              <><Loader2 size={18} className="animate-spin" /> {isGeneratingPdf ? "جاري التوليد..." : isUploading ? "جاري الرفع..." : "جاري الإرسال..."}</>
+            {(isUploading || isSendingWhatsapp) && sendAfterUpload ? (
+              <><Loader2 size={18} className="animate-spin" /> {isUploading ? "جاري الرفع..." : "جاري الإرسال..."}</>
             ) : (
-              <><Icon icon="mdi:whatsapp" width={18} height={18} /> 3. حفظ وإرسال عبر واتساب</>
+              <><Icon icon="mdi:whatsapp" width={18} height={18} /> 3. رفع وإرسال عبر واتساب</>
             )}
           </Button>
         </div>
       </div>
+
+      {/* ── تنبيه حالة الصيانة ── */}
+      {maintenancePending.length > 0 && (
+        <div className="max-w-6xl mx-auto mb-6 p-4 bg-orange-50 rounded-xl border border-orange-200 text-orange-800 no-print">
+          <div className="flex items-center gap-2 font-bold">
+            <Icon icon="mdi:wrench-clock" width={20} height={20} />
+            يوجد {maintenancePending.length} لوحة بحالة صيانة - لن يُرسَل الملف للزبون حتى اكتمال كل اللوحات
+          </div>
+          <ul className="mt-2 text-sm space-y-1 pr-6 list-disc">
+            {maintenancePending.map((p) => (
+              <li key={p.order_id}>
+                {p.road_sign}
+                {p.place ? ` - ${p.place}` : ""} · صيانة حتى {p.until || "-"}
+                {p.reason ? ` · ${p.reason}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs mt-2 text-orange-700">
+            {canForceSend
+              ? "بإمكانك (مدير الورشة) إنهاء الصيانة من صفحة الورشات ← تبويب الصيانة، أو تعديل الملف ووضع الصور هنا ثم الإرسال يدويًا."
+              : "الإرسال اليدوي متاح لمدير الورشة فقط."}
+          </p>
+        </div>
+      )}
 
       {/* ── Existing PDF notice ── */}
       {bookingData?.pdf && (
@@ -685,8 +634,8 @@ const getStatistics = (signs) => {
             {/* إرسال (أو إعادة إرسال) الملف المرفوع مسبقًا تلقائيًا عبر
                 واتساب دون الحاجة لإعادة الطباعة/الرفع. */}
             <Button
-              onClick={sendPdfWhatsapp}
-              disabled={isGeneratingPdf || isSendingWhatsapp || isUploading}
+              onClick={() => sendPdfWhatsapp()}
+              disabled={isSendingWhatsapp || isUploading}
               className="bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2">
               {isSendingWhatsapp ? (<><Loader2 size={18} className="animate-spin" /> جاري الإرسال...</>) : (<><Icon icon="mdi:whatsapp" width={18} height={18} /> إرسال عبر واتساب</>)}
             </Button>
@@ -706,7 +655,7 @@ const getStatistics = (signs) => {
       {/* ══════════════════════════════════════
           PRINT CONTAINER
       ══════════════════════════════════════ */}
-   <div className="print-container" ref={printContainerRef}>
+   <div className="print-container" lang="ar" dir="rtl">
 
   {/* ─────────────────────────────────────
       PAGE 0 — First Page with Photo
@@ -915,16 +864,19 @@ const getStatistics = (signs) => {
                   backgroundColor: "rgba(255,255,255,0.5)"
                 }}>
                   <input type="file" accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setImagesPerSign((prev) => ({ ...prev, [primarySignId]: [reader.result] }));
-                          localStorage.setItem(`booking_images_${bookingId}_sign_${primarySignId}`, JSON.stringify([reader.result]));
-                          toast.success("تم حفظ الصورة محلياً");
-                        };
-                        reader.readAsDataURL(file);
+                      if (!file) return;
+                      try {
+                        // ضغط/تصغير الصورة قبل الحفظ (نفس compressImage المستخدمة في
+                        // SummaryBookings.jsx) - يقلّل حجمها كثيرًا ويسرّع تحميل الصفحة.
+                        const compressed = await compressImage(file);
+                        await idbSet(`booking_images_${bookingId}_sign_${primarySignId}`, [compressed]);
+                        setImagesPerSign((prev) => ({ ...prev, [primarySignId]: [compressed] }));
+                        toast.success("تم حفظ الصورة محلياً");
+                      } catch (err) {
+                        console.error("Image save failed:", err);
+                        toast.error("تعذّر حفظ الصورة");
                       }
                     }}
                     style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />

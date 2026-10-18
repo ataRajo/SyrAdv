@@ -1,10 +1,60 @@
 // pages/SummaryBookings.jsx - FIXED VERSION (IndexedDB storage, no more quota failures)
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Download, MapPin, Building, Maximize, FileText, Copy, Hash, Plus, Trash2 } from "lucide-react";
 import firstPage from "../../assets/images/new.jpeg";
 import { idbSet, idbGet, idbClearAllBookingImages } from "./idbStorage";
+
+// ============================================================
+// PRINT/PDF FIX — Arabic-safe font stack + reliable image loading
+// ============================================================
+// السبب الحقيقي لعدم ظهور الصور ب PDF: window.print() كان يُستدعى فوراً
+// دون انتظار (1) قراءة IndexedDB غير المتزامنة لكل SignImageUploader
+// (لو لم تنتهِ بعد -> لا يُرسَم أي <img> إطلاقاً، فقط نص "جاري التحميل"
+// المُخفى بـ no-print)، و(2) اكتمال تحميل/فك ترميز صور الموقع القادمة من
+// الـ API عبر الشبكة (سلوك معروف بالمتصفح: window.print() يلتقط "لقطة"
+// فورية، فأي <img> لم يكتمل تحميله وقتها يظهر فارغاً بالطباعة/PDF).
+// الحل: handlePrint أصبح غير متزامن - يعيد قراءة كل الصور من IndexedDB،
+// يمررها مباشرة كـ prop لكل SignImageUploader (بدل انتظار حالته الداخلية)،
+// ثم ينتظر فعلياً اكتمال كل عناصر <img> داخل .print-container قبل فتح
+// نافذة الطباعة.
+//
+// والكتابة العربية الخاطئة: كانت تعتمد فقط على font-sans (متغيرات
+// ui-sans-serif/system-ui) بلا أي خط عربي مضمون ولا lang="ar"، وهذا معروف
+// بأنه يسبب استبدال خط أو تشكيل حروف خاطئ تحديداً بمسار الطباعة/PDF لدى
+// كروم حتى لو كانت الشاشة تعرضه بشكل سليم. أضفنا مكدّس خطوط عربي واضح
+// (مع !important داخل @media print) و lang="ar" و تعزيز direction/rtl.
+const ARABIC_PRINT_FONT_STACK =
+  "'Tajawal','Segoe UI','Tahoma','Arial','Noto Naskh Arabic',sans-serif";
+
+/** ينتظر اكتمال تحميل/فك ترميز كل عناصر <img> داخل الحاوية المعطاة قبل
+ * السماح لـ window.print() بالمتابعة - يمنع ظهور صور فارغة بالـ PDF سواء
+ * كانت من IndexedDB أو من رابط شبكة (صورة الموقع) أو صورة ثابتة (الغلاف). */
+const waitForImagesToLoad = (container) => {
+  if (!container) return Promise.resolve();
+  const imgs = Array.from(container.querySelectorAll("img"));
+  return Promise.all(
+    imgs.map(
+      (img) =>
+        new Promise((resolve) => {
+          if (img.complete && img.naturalWidth !== 0) {
+            resolve();
+            return;
+          }
+          const done = () => {
+            img.removeEventListener("load", done);
+            img.removeEventListener("error", done);
+            resolve();
+          };
+          img.addEventListener("load", done);
+          img.addEventListener("error", done);
+          // شبكة أمان: لا نعلّق الطباعة للأبد بسبب صورة واحدة عالقة.
+          setTimeout(done, 5000);
+        })
+    )
+  );
+};
 
 // ============================================================
 // HELPERS
@@ -145,7 +195,7 @@ const compressImage = (file, maxWidth = 1200, quality = 0.7) =>
 // SIGN IMAGE UPLOADER
 // ============================================================
 
-const SignImageUploader = ({ bookingId, signId }) => {
+const SignImageUploader = ({ bookingId, signId, preloadedImages }) => {
   const [images, setImages] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -164,6 +214,25 @@ const SignImageUploader = ({ bookingId, signId }) => {
       cancelled = true;
     };
   }, [bookingId, signId]);
+
+  // إصلاح توليد الـ PDF: قبل الطباعة مباشرة، handlePrint (بالمكوّن الرئيسي)
+  // يعيد قراءة كل الصور من IndexedDB ويمررها هنا كـ prop جاهزة - يفيد
+  // تحديداً البطاقات التي لم تنتهِ قراءتها الخاصة أعلاه بعد وقت الطباعة.
+  //
+  // ⚠️ مهم: لا نمسح صورة معروضة فعلياً على الشاشة أبداً. لو رجعت
+  // preloadedImages فاضية (مثلاً بسبب تعارض عابر بفتح اتصال IndexedDB
+  // بالتوازي مع بطاقات أخرى وقت الطباعة) بينما الصورة أصلاً ظاهرة أمام
+  // المستخدم (من رفعه لها يدوياً أو من التحميل الأول أعلاه)، فهذا يعني أن
+  // النتيجة الفارغة غير موثوقة - نتجاهلها ونُبقي ما هو ظاهر فعلياً. هذا هو
+  // السبب الحقيقي لاختفاء صورة "أُضيفت قبل التوليد مباشرة" بالـ PDF سابقاً:
+  // كانت تُستبدَل هنا بمصفوفة فاضية.
+  useEffect(() => {
+    if (preloadedImages === undefined) return;
+    if (preloadedImages.length > 0) {
+      setImages(preloadedImages);
+    }
+    setIsLoaded(true);
+  }, [preloadedImages]);
 
   const handleAddImage = () => {
     setErrorMsg("");
@@ -320,7 +389,7 @@ const SignImageUploader = ({ bookingId, signId }) => {
 // SINGLE BOOKING PDF SECTION
 // ============================================================
 
-const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId }) => {
+const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId, preloadedImagesMap }) => {
   const roadSigns = bookingData?.roadsigns || [];
   const groupedSigns = groupIdenticalSigns(roadSigns);
   const totalSigns = roadSigns.length;
@@ -358,10 +427,10 @@ const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId }) => 
       {/* PAGE 1 — Statistics */}
       <div className="statistics-page max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl mb-8 print:!max-w-full print:!mx-0 print:!rounded-none print:!shadow-none print:!mb-0">
         <div className="stats-header-band hidden print:flex w-full h-20 shrink-0" style={{ borderRadius: "2.5rem 2.5rem 0 0", overflow: "hidden" }}>
-          <div className="bg-[#1a1a1a] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-[#DAA520]">
+          <div className="bg-[#1A1817] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-[#D5A225]">
             <span className="text-white text-3xl font-extrabold tracking-widest">الشركة</span>
           </div>
-          <div className="bg-[#DAA520] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-[#DAA520]">
+          <div className="bg-[#D5A225] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-[#D5A225]">
             <span className="text-white text-3xl font-extrabold tracking-widest">السورية للإعلان</span>
           </div>
         </div>
@@ -402,10 +471,10 @@ const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId }) => 
       {/* PAGE 2 — Model Summary */}
       <div className="statistics-page max-w-6xl mx-auto bg-white rounded-[2.5rem] shadow-xl mb-8 print:!max-w-full print:!mx-0 print:!rounded-none print:!shadow-none print:!mb-0">
         <div className="stats-header-band hidden print:flex w-full h-20 shrink-0" style={{ borderRadius: "2.5rem 2.5rem 0 0", overflow: "hidden" }}>
-          <div className="bg-[#1a1a1a] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-[#DAA520]">
+          <div className="bg-[#1A1817] w-1/2 flex items-center justify-end px-8 border-b-[6px] border-[#D5A225]">
             <span className="text-white text-3xl font-extrabold tracking-widest">الشركة</span>
           </div>
-          <div className="bg-[#DAA520] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-[#DAA520]">
+          <div className="bg-[#D5A225] w-1/2 flex items-center justify-start px-8 border-b-[6px] border-[#D5A225]">
             <span className="text-white text-3xl font-extrabold tracking-widest">السورية للإعلان</span>
           </div>
         </div>
@@ -475,11 +544,11 @@ const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId }) => 
 
             {/* Split header */}
             <div className="hidden print:flex w-full h-24 z-10 shrink-0">
-              <div style={{ backgroundColor: "#1a1a1a", width: "50%", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 2rem", borderBottom: "6px solid #DAA520", position: "relative" }}>
+              <div style={{ backgroundColor: "#1A1817", width: "50%", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 2rem", borderBottom: "6px solid #D5A225", position: "relative" }}>
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, transparent, rgba(255,255,255,0.05))", pointerEvents: "none" }} />
                 <span style={{ color: "white", fontSize: "2.25rem", fontWeight: 800, letterSpacing: "0.1em", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.3))", position: "relative", zIndex: 10 }}>الشركة</span>
               </div>
-              <div style={{ backgroundColor: "#DAA520", width: "50%", display: "flex", alignItems: "center", justifyContent: "flex-start", padding: "0 2rem", borderBottom: "6px solid #DAA520", position: "relative" }}>
+              <div style={{ backgroundColor: "#D5A225", width: "50%", display: "flex", alignItems: "center", justifyContent: "flex-start", padding: "0 2rem", borderBottom: "6px solid #D5A225", position: "relative" }}>
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent, rgba(0,0,0,0.1))", pointerEvents: "none" }} />
                 <span style={{ color: "white", fontSize: "2.25rem", fontWeight: 800, letterSpacing: "0.1em", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.3))", position: "relative", zIndex: 10 }}>السورية للإعلان</span>
               </div>
@@ -498,7 +567,11 @@ const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId }) => 
               <div style={{ display: "flex", flexDirection: "column", width: "50%" }}>
 
                 {/* TOP LEFT: Uploaded Photo — IndexedDB-backed component */}
-                <SignImageUploader bookingId={bookingId} signId={primarySignId} />
+                <SignImageUploader
+                  bookingId={bookingId}
+                  signId={primarySignId}
+                  preloadedImages={preloadedImagesMap?.[imageStorageKey(bookingId, primarySignId)]}
+                />
 
                 {/* BOTTOM LEFT: Location Photo (FIXED - from API) */}
                 <div style={{
@@ -614,6 +687,9 @@ const SingleBookingPdfSection = ({ bookingData, isFirstBooking, bookingId }) => 
 
 const SummaryBookings = () => {
   const [bookingsData, setBookingsData] = useState([]);
+  const [preloadedImages, setPreloadedImages] = useState({});
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const printContainerRef = useRef(null);
 
   useEffect(() => {
     const storedData = sessionStorage.getItem('summaryBookingsData');
@@ -632,8 +708,47 @@ const SummaryBookings = () => {
     window.history.back();
   };
 
-  const handlePrint = () => {
-    window.print();
+  // يجمع مفاتيح (bookingId, signId) لكل مجموعة لوحات متطابقة عبر كل
+  // الحجوزات المختارة - نفس منطق التجميع المستخدم بالعرض بالضبط، حتى
+  // نُحضّر صورة كل بطاقة قبل الطباعة لا صوراً غير مستخدمة.
+  const collectImageKeys = (data) => {
+    const keys = [];
+    (data || []).forEach((booking) => {
+      const roadSigns = booking?.roadsigns || [];
+      const groups = groupIdenticalSigns(roadSigns);
+      groups.forEach((group) => {
+        keys.push({ bookingId: booking.id, signId: group.signIds[0] });
+      });
+    });
+    return keys;
+  };
+
+  const handlePrint = async () => {
+    setIsPreparingPrint(true);
+    try {
+      // 1) نعيد قراءة كل الصور من IndexedDB مباشرة (المصدر الموثوق) بدل
+      // الاعتماد على أن كل SignImageUploader قد انتهى من قراءته الخاصة.
+      const keys = collectImageKeys(bookingsData);
+      const entries = await Promise.all(
+        keys.map(async ({ bookingId, signId }) => [
+          imageStorageKey(bookingId, signId),
+          await readSignImages(bookingId, signId),
+        ])
+      );
+      setPreloadedImages(Object.fromEntries(entries));
+
+      // 2) ننتظر إطارين حتى يُطبّق React الحالة الجديدة فعلياً على الـ DOM.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      // 3) ننتظر اكتمال تحميل/فك ترميز كل <img> (الصور المرفوعة + صور
+      // الموقع القادمة من الشبكة + صورة الغلاف) قبل فتح نافذة الطباعة -
+      // هذا هو السبب الفعلي لظهور صور فارغة بالـ PDF سابقاً.
+      await waitForImagesToLoad(printContainerRef.current);
+
+      window.print();
+    } finally {
+      setIsPreparingPrint(false);
+    }
   };
 
   const handleClearAllImages = async () => {
@@ -663,6 +778,17 @@ const SummaryBookings = () => {
     @media print {
       body * { visibility: hidden; }
       .print-container, .print-container * { visibility: visible; }
+      /* إصلاح الكتابة العربية الخاطئة بالـ PDF: مكدّس خط عربي مضمون
+         (بدل الاعتماد فقط على font-sans/ui-sans-serif التي قد يستبدلها
+         محرك طباعة كروم بخط لا يدعم تشكيل الحروف العربية بشكل صحيح)،
+         مع تعزيز صريح للاتجاه RTL. */
+      .print-container, .print-container * {
+        font-family: ${ARABIC_PRINT_FONT_STACK} !important;
+      }
+      .print-container {
+        direction: rtl !important;
+        unicode-bidi: embed !important;
+      }
       .print-container {
         position: absolute !important;
         left: 0 !important; top: 0 !important;
@@ -742,7 +868,12 @@ const SummaryBookings = () => {
   `;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans">
+    <div
+      dir="rtl"
+      lang="ar"
+      className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans"
+      style={{ fontFamily: ARABIC_PRINT_FONT_STACK }}
+    >
       <style>{printStyles}</style>
 
       <div className="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-3 mb-6 no-print">
@@ -767,19 +898,21 @@ const SummaryBookings = () => {
         </div>
         <Button
           onClick={handlePrint}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl gap-2 shadow-lg"
+          disabled={isPreparingPrint}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl gap-2 shadow-lg disabled:opacity-60 disabled:cursor-wait"
         >
-          <Download size={18} /> حفظ / طباعة PDF
+          <Download size={18} /> {isPreparingPrint ? "جاري تحضير الصور..." : "حفظ / طباعة PDF"}
         </Button>
       </div>
 
-      <div className="print-container">
+      <div className="print-container" ref={printContainerRef} lang="ar" dir="rtl">
         {bookingsData.map((booking, idx) => (
           <SingleBookingPdfSection
             key={booking.id}
             bookingData={booking}
             bookingId={booking.id}
             isFirstBooking={idx === 0}
+            preloadedImagesMap={preloadedImages}
           />
         ))}
       </div>

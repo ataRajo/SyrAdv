@@ -211,11 +211,20 @@ uploadBookingPdf: builder.mutation({
 // عبر uploadBookingPdf أعلاه لنفس الحجز) لرقم العميل عبر WAHA، بدل تنزيله
 // وإرفاقه يدويًا في واتساب. راجع BookingService::sendPdfWhatsapp() على
 // الباك-إند.
+// يقبل bookingId مباشرة (السلوك القديم) أو { bookingId, force } - force:
+// إرسال يدوي رغم وجود لوحات بحالة صيانة (مسؤول الورشات فقط، يتحقق منه
+// الباك-إند). عند الرفض بسبب الصيانة يعود reason='maintenance_pending'
+// مع قائمة اللوحات و can_force.
 sendBookingPdfWhatsapp: builder.mutation({
-  query: (bookingId) => ({
-    url: `bookings/${bookingId}/send-pdf-whatsapp`,
-    method: 'POST',
-  }),
+  query: (arg) => {
+    const bookingId = typeof arg === "object" && arg !== null ? arg.bookingId : arg;
+    const force = typeof arg === "object" && arg !== null ? !!arg.force : false;
+    return {
+      url: `bookings/${bookingId}/send-pdf-whatsapp`,
+      method: 'POST',
+      ...(force ? { body: { force: true } } : {}),
+    };
+  },
   transformResponse: (response) => ({
     success: true,
     message: response?.message || "تم إرسال الملف للعميل عبر واتساب بنجاح",
@@ -223,6 +232,18 @@ sendBookingPdfWhatsapp: builder.mutation({
   transformErrorResponse: (error) => ({
     success: false,
     message: error.data?.message || "تعذّر إرسال الملف عبر واتساب",
+    reason: error.data?.data?.reason,
+    canForce: !!error.data?.data?.can_force,
+    pending: error.data?.data?.pending ?? [],
+  }),
+}),
+
+// لوحات الحجز بحالة صيانة لم تُحسَم - تنبيه في صفحة ملف الـ PDF.
+getBookingMaintenanceHolds: builder.query({
+  query: (bookingId) => `bookings/${bookingId}/maintenance-holds`,
+  transformResponse: (response) => ({
+    pending: response?.data?.pending ?? [],
+    canForce: !!response?.data?.can_force,
   }),
 }),
 
@@ -369,6 +390,7 @@ export const {
   useConfirmBookingMutation,
   useUploadBookingPdfMutation,
   useSendBookingPdfWhatsappMutation,
+  useGetBookingMaintenanceHoldsQuery,
   useChangeAdvertisementDesignMutation,
     useGetNotificationsQuery,
 useAddDiscountMutation ,

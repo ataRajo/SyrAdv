@@ -1,6 +1,14 @@
 // RoadSignExportService.js
 import html2pdf from "html2pdf.js";
 import { saveAs } from "file-saver";
+import { getSacLogoBase64 } from "../../../utils/branding/sacBrand";
+import { saveHtml2PdfWithSacLetterhead } from "../../../utils/branding/pdfLetterheadJsPdf";
+import {
+  sacLetterheadStyles,
+  sacLetterheadHeader,
+  sacLetterheadFooter,
+  sacLetterheadWatermark,
+} from "../../../utils/branding/pdfLetterheadHtml";
 class PdfGenerator {
   normalizeSize = (size) => {
     if (!size) return "غير متوفر";
@@ -10,16 +18,7 @@ class PdfGenerator {
     return parts.length === 2 ? `${parts[0]} × ${parts[1]}` : size;
   };
 
-  getLogoBase64 = async () => {
-    try {
-      // You can add your logo path here if needed
-      // const response = await fetch(logoPath);
-      // const blob = await response.blob();
-      return '';
-    } catch (error) {
-      return '';
-    }
-  };
+  getLogoBase64 = async () => getSacLogoBase64();
 
   // Generate PDF Report
   generatePDFReport = async (data, filters, formikValues) => {
@@ -65,7 +64,9 @@ class PdfGenerator {
         }
       };
 
-      await html2pdf().set(options).from(element).save();
+      // Renders the HTML, then stamps the official SAC letterhead (logo
+      // corner, watermark, footer bar) on every page of the PDF.
+      await saveHtml2PdfWithSacLetterhead(html2pdf, element, options);
       document.body.removeChild(element);
       return true;
     } catch (error) {
@@ -75,7 +76,7 @@ class PdfGenerator {
   };
 
   // Generate Word Report
-  generateWordReport = (data, filters, formikValues) => {
+  generateWordReport = async (data, filters, formikValues) => {
     const {
       roadSigns,
       groupedRoadSigns
@@ -85,7 +86,8 @@ class PdfGenerator {
       throw new Error("لا توجد بيانات لطباعتها");
     }
 
-    const htmlContent = this.getWordHTMLContent(data, filters, formikValues);
+    const logoBase64 = await this.getLogoBase64();
+    const htmlContent = this.getWordHTMLContent(data, filters, formikValues, logoBase64);
     const blob = new Blob([htmlContent], { type: 'application/msword' });
     const fileName = `تقرير_اللوحات_${new Date().toISOString().slice(0,10)}.doc`;
     saveAs(blob, fileName);
@@ -277,16 +279,18 @@ class PdfGenerator {
               padding: 0;
             }
           }
+
+          ${sacLetterheadStyles({ mode: "canvas" })}
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>تقرير اللوحات الطرقية</h1>
-          <div class="date">
-            تم إنشاؤه في: ${new Date().toLocaleDateString('ar-SA')} الساعة ${new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}
-          </div>
-        </div>
-        
+        ${sacLetterheadWatermark({ mode: "canvas" })}
+        ${sacLetterheadHeader({
+          logoBase64,
+          title: "تقرير اللوحات الطرقية",
+          subtitle: `تم إنشاؤه في: ${new Date().toLocaleDateString('ar-SA')} الساعة ${new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}`,
+        })}
+
         <div class="filters-section">
           <h3>الفلاتر المطبقة:</h3>
           ${filterItems.length > 0 ? filterItems.join('') : '<span class="filter-tag">جميع اللوحات</span>'}
@@ -348,16 +352,16 @@ class PdfGenerator {
           <p>2. يتم تحديث البيانات تلقائياً وفقاً للحجوزات الفعلية</p>
           <p>3. التواريخ المعتمدة: من ${start_date || "غير محدد"} إلى ${end_date || "غير محدد"}</p>
           <p style="margin-top: 20px;">
-            <strong>© ${new Date().getFullYear()} - نظام إدارة اللوحات الإعلانية</strong><br>
-            جميع الحقوق محفوظة
+            <strong>© ${new Date().getFullYear()} - الشركة السورية للإعلان</strong>
           </p>
         </div>
+        ${sacLetterheadFooter({ mode: "canvas" })}
       </body>
       </html>
     `;
   };
 
-  getWordHTMLContent = (data, filters, formikValues) => {
+  getWordHTMLContent = (data, filters, formikValues, logoBase64) => {
     const {
       groupedRoadSigns
     } = data;
@@ -372,42 +376,42 @@ class PdfGenerator {
         <meta charset="UTF-8">
         <title>تقرير اللوحات الطرقية</title>
         <style>
-          body { 
-            font-family: Arial; 
-            direction: rtl; 
-            padding: 20px; 
+          body {
+            font-family: Arial;
+            direction: rtl;
+            padding: 20px;
             margin: 0;
           }
-          h1 { 
-            color: #2c3e50; 
-            text-align: center; 
+          h1 {
+            color: #1A1817;
+            text-align: center;
             margin-bottom: 30px;
           }
-          .filter-info { 
-            background: #f8f9fa; 
-            padding: 15px; 
-            margin: 20px 0; 
-            border-radius: 5px; 
+          .filter-info {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
             border: 1px solid #dee2e6;
           }
-          table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin: 20px 0; 
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
             font-size: 12px;
           }
-          th, td { 
-            border: 1px solid #ddd; 
-            padding: 10px; 
-            text-align: center; 
+          th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
           }
-          th { 
-            background-color: #2c3e50; 
-            color: white; 
+          th {
+            background-color: #D5A225;
+            color: white;
             font-weight: bold;
           }
-          .group-row { 
-            background-color: #f0f8ff; 
+          .group-row {
+            background-color: #f0f8ff;
           }
           .footer {
             text-align: center;
@@ -417,10 +421,13 @@ class PdfGenerator {
             color: #666;
             font-size: 12px;
           }
+
+          ${sacLetterheadStyles({ mode: "word" })}
         </style>
       </head>
       <body>
-        <h1>تقرير اللوحات الطرقية</h1>
+        ${sacLetterheadWatermark({ mode: "word" })}
+        ${sacLetterheadHeader({ logoBase64, title: "تقرير اللوحات الطرقية" })}
         <div class="filter-info">
           <strong>الفلاتر المطبقة:</strong> ${memoizedFiltersText || 'جميع اللوحات'}
         </div>
@@ -454,8 +461,9 @@ class PdfGenerator {
         </table>
         <div class="footer">
           <p>تم إنشاء التقرير في ${new Date().toLocaleDateString('ar-SA')}</p>
-          <p>© ${new Date().getFullYear()} - نظام إدارة اللوحات الإعلانية</p>
+          <p>© ${new Date().getFullYear()} - الشركة السورية للإعلان</p>
         </div>
+        ${sacLetterheadFooter({ mode: "word" })}
       </body>
       </html>
     `;

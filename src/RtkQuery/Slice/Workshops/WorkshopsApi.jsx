@@ -29,7 +29,7 @@ export const workshopsApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Workshop", "WorkshopActivity", "WorkshopReport", "MyWorkshopOrders", "ReassignmentQueue"],
+  tagTypes: ["Workshop", "WorkshopActivity", "WorkshopReport", "MyWorkshopOrders", "ReassignmentQueue", "MaintenanceHolds"],
   endpoints: (builder) => ({
     getWorkshops: builder.query({
       query: (params = {}) => ({ url: "/workshops", params }),
@@ -179,6 +179,9 @@ export const workshopsApi = createApi({
       transformResponse: (response) => ({
         orders: response?.data?.orders ?? [],
         activeRegions: response?.data?.active_regions ?? [],
+        // كم أمرًا مستحقًا بقي في المنطقة النشطة قبل السماح بالانتقال
+        // (لا يُحتسب منها ما هو بحالة صيانة سارية).
+        activeRegionRemaining: response?.data?.active_region_remaining ?? 0,
       }),
       providesTags: ["MyWorkshopOrders"],
     }),
@@ -215,6 +218,53 @@ export const workshopsApi = createApi({
       }),
       invalidatesTags: ["MyWorkshopOrders", "WorkshopActivity", "WorkshopReport"],
     }),
+
+    // ===================== حالة الصيانة - مدير الورشة (ورشته فقط) =====================
+    // لوحة بحالة صيانة: يُمدَّد أمرها وحده (عدد أيام يحدده المسؤول)، فتخرج
+    // من شرط "إنجاز المنطقة" ويُمنع إرسال ملف الـ PDF للزبون حتى تُحسَم.
+    getMaintenanceHolds: builder.query({
+      query: (params = {}) => ({ url: "/workshops-maintenance-holds", params }),
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["MaintenanceHolds"],
+    }),
+    // أوامر فك/تركيب غير منفَّذة في ورشة المدير - لاختيار لوحة للصيانة.
+    getMaintenanceCandidates: builder.query({
+      query: (params = {}) => ({ url: "/workshops-maintenance-candidates", params }),
+      transformResponse: (response) => response?.data ?? [],
+      providesTags: ["MaintenanceHolds"],
+    }),
+    markMaintenanceHold: builder.mutation({
+      query: ({ orderId, days, reason }) => ({
+        url: `/workshop-orders/${orderId}/maintenance-hold`,
+        method: "POST",
+        body: { days, ...(reason ? { reason } : {}) },
+      }),
+      invalidatesTags: ["MaintenanceHolds", "Workshop", "MyWorkshopOrders", "ReassignmentQueue"],
+    }),
+    clearMaintenanceHold: builder.mutation({
+      query: (orderId) => ({
+        url: `/workshop-orders/${orderId}/maintenance-hold`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["MaintenanceHolds", "Workshop", "MyWorkshopOrders"],
+    }),
+    // مدير الورشة ينفّذ الأمر بنفسه مع صور الإثبات (إنهاء الصيانة مبكرًا) -
+    // body: FormData (after_photo إجبارية، before_photo اختيارية).
+    managerCompleteOrder: builder.mutation({
+      query: ({ orderId, formData }) => ({
+        url: `/workshop-orders/${orderId}/manager-complete`,
+        method: "POST",
+        body: formData,
+      }),
+      invalidatesTags: ["MaintenanceHolds", "Workshop", "MyWorkshopOrders", "WorkshopActivity", "WorkshopReport"],
+    }),
+    // إرسال ملف الـ PDF (المرفوع للحجز) للزبون يدويًا رغم وجود لوحات بصيانة.
+    managerSendBookingPdf: builder.mutation({
+      query: (bookingId) => ({
+        url: `/workshops-maintenance/bookings/${bookingId}/send-pdf`,
+        method: "POST",
+      }),
+    }),
   }),
 });
 
@@ -240,5 +290,11 @@ export const {
   useGetMyWorkshopAchievementsQuery,
   useReceiveWorkshopOrderMutation,
   useCompleteWorkshopOrderMutation,
+  useGetMaintenanceHoldsQuery,
+  useGetMaintenanceCandidatesQuery,
+  useMarkMaintenanceHoldMutation,
+  useClearMaintenanceHoldMutation,
+  useManagerCompleteOrderMutation,
+  useManagerSendBookingPdfMutation,
 } = workshopsApi;
   

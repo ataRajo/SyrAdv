@@ -16,6 +16,13 @@ import { Permissions } from "../../Static/StaticData";
 import { DialogAddPayments } from "../../utils/Dialogs/EditAddDialog/Add/DialogAddPayments";
 import HeaderComponent from "../../utils/HeaderComponent";
 import InvoiceExcel from "../Payments/InvoiceExcel";
+import { loadSacLetterheadAssets } from "../../utils/branding/sacBrand";
+import {
+  sacLetterheadStyles,
+  sacLetterheadFooter,
+  sacLetterheadWatermark,
+  sacRestyleHeader,
+} from "../../utils/branding/pdfLetterheadHtml";
 import CustomerFormDialog from "../../Pages/Customers/CustomerFormDialog";
 import { Toaster } from "react-hot-toast";
 import AddDiscountDialog from "./AddDiscountDialog";  
@@ -35,6 +42,35 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {useGetCustomerOffersQuery } from "../../RtkQuery/Slice/Offers/offersApiSlice"
 import BookingsSelectableTable from "./BookingsSelectableTable";
+import { BASE_URL } from "../../Api/baseUrl";
+
+// يفتح كشف الحساب المحاسبي للزبون (نفس صفحة الطباعة في المحاسبة) - بلا
+// الحاجة لتحميل وحدة المحاسبة كاملة (باكج العقود لا يملك view-financials).
+const openLedgerStatement = async (customerId) => {
+  const win = window.open("", "_blank");
+  try {
+    let token = null;
+    try {
+      const info = JSON.parse(localStorage.getItem("SuperAdminInfo") || "null");
+      token = info?.user?.token || info?.token || localStorage.getItem("token");
+    } catch {
+      token = localStorage.getItem("token");
+    }
+    const res = await fetch(`${BASE_URL}/accounting/customers/${customerId}/statement/print`, {
+      headers: { Accept: "text/html", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok) throw new Error(`تعذر عرض كشف الحساب (${res.status})`);
+    const html = await res.text();
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    }
+  } catch (error) {
+    if (win && !win.closed) win.close();
+    alert(error.message || "تعذر عرض كشف الحساب");
+  }
+};
 const CustomerInfo = () => {
   const { id } = useParams();
   const [showAccountStatement, setShowAccountStatement] = useState(false);
@@ -126,8 +162,10 @@ const totalPrintingSpace = customer?.bookings?.reduce((sum, booking) => {
     if (val == null || isNaN(Number(val))) return "0.00 $";
     return Number(val).toFixed(2) + " $";
   };
-const exportToWord = () => {
+const exportToWord = async () => {
   if (!customer) return;
+  // Word needs the letterhead as embedded data URLs
+  await loadSacLetterheadAssets();
   
   const customerData = customer;
   const currentDate = new Date().toLocaleDateString('ar-EG', {
@@ -430,9 +468,12 @@ table tr:nth-child(even) {
         page-break-inside: avoid;
     }
 }
+${sacLetterheadStyles({ mode: "word" })}
+${sacRestyleHeader(".header")}
 </style>
 </head>
 <body>
+${sacLetterheadWatermark({ mode: "word" })}
 <div class="print-container">
     <div class="header">
         <h1>كشف حساب الزبون</h1>
@@ -630,6 +671,7 @@ ${customerData.bookings
         <p>رقم الزبون: ${customerData.id} | التاريخ: ${currentDate}</p>
     </div>
 </div>
+${sacLetterheadFooter({ mode: "word" })}
 </body>
 </html>`;
 
@@ -649,6 +691,8 @@ ${customerData.bookings
 
 const printCustomerSummaryReport = () => {
   if (!customer) return;
+  // warm the letterhead cache (helpers fall back to bundled URLs meanwhile)
+  loadSacLetterheadAssets();
   
   const customerData = customer;
   const currentDate = new Date().toLocaleDateString('ar-EG', {
@@ -989,9 +1033,14 @@ const printCustomerSummaryReport = () => {
       z-index: 1000;
       box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
     }
+
+    /* Official SAC letterhead (logo corner, watermark, footer bar) */
+    ${sacLetterheadStyles()}
+    ${sacRestyleHeader(".header")}
   </style>
 </head>
 <body>
+  ${sacLetterheadWatermark()}
   <div class="print-container">
     <div class="header">
       <h1>كشف حساب الزبون</h1>
@@ -1188,6 +1237,7 @@ ${customerData.bookings
       <p>رقم الزبون: ${customerData.id} | التاريخ: ${currentDate}</p>
     </div>
   </div>
+  ${sacLetterheadFooter()}
   
   <button class="print-button no-print" onclick="window.print()">🖨️ طباعة كشف الحساب</button>
   
@@ -1261,6 +1311,20 @@ ${customerData.bookings
               <Icon icon="mdi:file-document" className="text-lg sm:text-xl" />
               <span className="text-xs sm:text-sm">كشف حساب الزبون</span>
             </Button>
+
+            {/* كشف الحساب المحاسبي (دفتر الأستاذ) - متاح لباكج المحاسبة وباكج
+                العقود معًا (view-financials | view-customer-statements). */}
+            {hasPermission(["view-financials", "view-customer-statements"]) && (
+              <Button
+                onClick={() => openLedgerStatement(id)}
+                variant="outline"
+                className="gap-1 sm:gap-2 cursor-pointer border-amber-200 hover:bg-amber-50 dark:border-amber-700 dark:hover:bg-amber-900/30"
+                size="sm"
+              >
+                <Icon icon="mdi:book-open-variant" className="text-base sm:text-lg text-amber-600" />
+                <span className="text-xs sm:text-sm text-amber-700 dark:text-amber-400">الكشف المحاسبي</span>
+              </Button>
+            )}
 
             {hasPermission(Permissions.EditCustomers) && (
               <Button

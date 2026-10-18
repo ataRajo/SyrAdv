@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
 import { DeleteDialog } from "../../utils/Dialogs/DeleteDialog/DeleteDialog";
+import { useAuth } from "../../Context/AuthProvider";
 
 const ACCOUNT_TYPES = [
   { value: "asset", label: "أصول" },
@@ -28,7 +29,21 @@ const ACCOUNT_TYPES = [
   { value: "expense", label: "مصاريف" },
 ];
 
-const AccountForm = ({ initialData, accountsFlat, onCancel, onSave, isSaving }) => {
+const fmtMoney = (n) =>
+  Number(n ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 });
+
+const AccountForm = ({
+  initialData,
+  accountsFlat,
+  onCancel,
+  onSave,
+  isSaving,
+  isSuperAdmin,
+  onManualAdjust,
+  isManualAdjusting,
+  manualAdjustHistory,
+  isFetchingManualAdjustHistory,
+}) => {
   const isEdit = Boolean(initialData?.id);
   const [form, setForm] = useState({
     parent_id: initialData?.parent_id ?? "",
@@ -37,23 +52,50 @@ const AccountForm = ({ initialData, accountsFlat, onCancel, onSave, isSaving }) 
     type: initialData?.type ?? "expense",
     normal_balance: initialData?.normal_balance ?? "debit",
     currency: initialData?.currency ?? "USD",
+    balance: initialData?.balance ?? 0,
     is_transactional: initialData?.is_transactional ?? true,
     is_cash_account: initialData?.is_cash_account ?? false,
     is_active: initialData?.is_active ?? true,
     description: initialData?.description ?? "",
   });
+  // "تعديل يدوي للحسابات من شجرة الحسابات (من السوبر ادمن فقط)" - طلب
+  // صريح. يفتح الحقول الهيكلية المقفلة عادة عند التعديل (راجع تعليق
+  // AccountService::update() على الباك-إند) وحتى الرصيد نفسه - مقصور على
+  // من يملك دور "سوبر أدمن" فقط، ويطلب سببًا مكتوبًا دائمًا.
+  const [manualMode, setManualMode] = useState(false);
+  const [manualReason, setManualReason] = useState("");
+  // تعديل نوع الحساب من الشجرة (طلب صريح) - الحسابات الفرعية تتبع الأب افتراضيًا.
+  const [applyTypeToChildren, setApplyTypeToChildren] = useState(true);
+  const hasChildren = Boolean(initialData?.children?.length);
+  const typeChanged = isEdit && form.type !== (initialData?.type ?? "expense");
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (isEdit) {
+    if (isEdit && manualMode) {
+      onManualAdjust(initialData.id, {
+        parent_id: form.parent_id || null,
+        code: form.code,
+        name: form.name,
+        type: form.type,
+        normal_balance: form.normal_balance,
+        currency: form.currency,
+        balance: Number(form.balance),
+        is_transactional: form.is_transactional,
+        is_cash_account: form.is_cash_account,
+        is_active: form.is_active,
+        description: form.description,
+        reason: manualReason,
+      });
+    } else if (isEdit) {
       onSave({
         name: form.name,
         description: form.description,
         is_active: form.is_active,
         is_transactional: form.is_transactional,
         is_cash_account: form.is_cash_account,
+        ...(typeChanged ? { type: form.type, apply_to_children: applyTypeToChildren } : {}),
       });
     } else {
       onSave({
@@ -72,7 +114,53 @@ const AccountForm = ({ initialData, accountsFlat, onCancel, onSave, isSaving }) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {!isEdit && (
+      {isEdit && isSuperAdmin && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-red-900">
+            <input
+              type="checkbox"
+              checked={manualMode}
+              onChange={(e) => {
+                setManualMode(e.target.checked);
+                if (e.target.checked) {
+                  setForm((f) => ({
+                    ...f,
+                    parent_id: initialData?.parent_id ?? "",
+                    code: initialData?.code ?? "",
+                    type: initialData?.type ?? "expense",
+                    normal_balance: initialData?.normal_balance ?? "debit",
+                    currency: initialData?.currency ?? "USD",
+                    balance: initialData?.balance ?? 0,
+                  }));
+                }
+              }}
+            />
+            <Icon icon="mdi:shield-alert-outline" className="w-4 h-4" />
+            تعديل يدوي متقدِّم (سوبر أدمن فقط)
+          </label>
+          {manualMode && (
+            <>
+              <p className="text-xs text-red-800">
+                تحذير: هذا يفتح حقولًا هيكلية (الرمز/النوع/الطبيعة المحاسبية/الحساب
+                الأب) وحتى الرصيد نفسه مباشرة، بلا قيد محاسبي موازٍ. استخدمه فقط
+                لتصحيح خطأ إدخال/ترحيل بيانات - كل تعديل هنا يُسجَّل بسببه
+                ومن نفَّذه للمراجعة اللاحقة.
+              </p>
+              <div className="space-y-1">
+                <Label className="text-xs">سبب التعديل (إلزامي)</Label>
+                <Input
+                  value={manualReason}
+                  onChange={(e) => setManualReason(e.target.value)}
+                  placeholder="مثال: تصحيح رصيد افتتاحي أُدخل خطأً عند الترحيل من النظام القديم"
+                  required={manualMode}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {(!isEdit || manualMode) && (
         <>
           <div className="space-y-2">
             <Label>الحساب الأب (اختياري)</Label>
@@ -124,7 +212,57 @@ const AccountForm = ({ initialData, accountsFlat, onCancel, onSave, isSaving }) 
               </SelectContent>
             </Select>
           </div>
+
+          {manualMode && (
+            <div className="space-y-2">
+              <Label className="text-red-800">الرصيد (تعديل مباشر - بلا قيد موازٍ)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={form.balance}
+                onChange={(e) => set("balance")(e.target.value)}
+              />
+            </div>
+          )}
         </>
+      )}
+
+      {isEdit && !manualMode && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <Label>نوع الحساب</Label>
+          <Select value={form.type} onValueChange={set("type")} disabled={initialData?.is_system}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACCOUNT_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {initialData?.is_system && (
+            <p className="text-xs text-muted-foreground">حساب نظام محمي - لا يمكن تغيير نوعه.</p>
+          )}
+          {typeChanged && (
+            <>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                الطبيعة المحاسبية (مدين/دائن) تتبع النوع تلقائيًا، وإن انقلبت يُعاد احتساب إشارة الرصيد وكشف الحساب بنفس الحركات دون أي قيد جديد. يُسجَّل التغيير في سجل التعديلات.
+              </p>
+              {hasChildren && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={applyTypeToChildren}
+                    onChange={(e) => setApplyTypeToChildren(e.target.checked)}
+                  />
+                  تطبيق النوع الجديد على كل الحسابات الفرعية ({initialData.children.length})
+                </label>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       <div className="space-y-2">
@@ -154,7 +292,7 @@ const AccountForm = ({ initialData, accountsFlat, onCancel, onSave, isSaving }) 
           />
           حساب نقدي (صندوق/بنك)
         </label>
-        {!isEdit && form.is_cash_account && (
+        {(!isEdit || manualMode) && form.is_cash_account && (
           <div className="space-y-2">
             <Label>عملة هذا الصندوق/البنك</Label>
             <Select value={form.currency} onValueChange={set("currency")}>
@@ -178,19 +316,40 @@ const AccountForm = ({ initialData, accountsFlat, onCancel, onSave, isSaving }) 
         )}
       </div>
 
+      {isEdit && isSuperAdmin && (manualAdjustHistory ?? []).length > 0 && (
+        <div className="border border-border rounded-md p-2 space-y-1 max-h-32 overflow-y-auto">
+          <p className="text-xs font-semibold text-muted-foreground">سجل التعديلات اليدوية السابقة</p>
+          {isFetchingManualAdjustHistory && <p className="text-xs text-muted-foreground">جارٍ التحميل...</p>}
+          {(manualAdjustHistory ?? []).map((log) => (
+            <div key={log.id} className="text-[11px] border-b border-border/50 pb-1 last:border-0">
+              <span className="font-medium">{log.user_name || "-"}</span>
+              {" - "}
+              <span className="text-muted-foreground">
+                {log.created_at ? new Date(log.created_at).toLocaleString("ar-SY") : "-"}
+              </span>
+              <div className="text-muted-foreground">{log.reason}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           إلغاء
         </Button>
-        <Button type="submit" disabled={isSaving}>
-          {isSaving ? "جارٍ الحفظ..." : "حفظ"}
+        <Button type="submit" disabled={isSaving || isManualAdjusting || (manualMode && !manualReason.trim())}>
+          {isSaving || isManualAdjusting
+            ? "جارٍ الحفظ..."
+            : manualMode
+              ? "حفظ التعديل اليدوي"
+              : "حفظ"}
         </Button>
       </DialogFooter>
     </form>
   );
 };
 
-const AccountNode = ({ node, depth, onInspect, onEdit, onDelete, inspectedId }) => {
+const AccountNode = ({ node, depth, onInspect, onEdit, onDelete, inspectedId, parentType }) => {
   const [collapsed, setCollapsed] = useState(false);
   const hasChildren = node.children && node.children.length > 0;
 
@@ -223,6 +382,11 @@ const AccountNode = ({ node, depth, onInspect, onEdit, onDelete, inspectedId }) 
           {node.is_cash_account && (
             <Badge variant="secondary" className="text-[10px]">صندوق/بنك</Badge>
           )}
+          {depth === 0 || parentType !== node.type ? (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              {ACCOUNT_TYPES.find((t) => t.value === node.type)?.label || node.type}
+            </Badge>
+          ) : null}
           {node.is_system && (
             <Badge variant="outline" className="text-[10px]">نظامي</Badge>
           )}
@@ -255,6 +419,7 @@ const AccountNode = ({ node, depth, onInspect, onEdit, onDelete, inspectedId }) 
               key={child.id}
               node={child}
               depth={depth + 1}
+              parentType={node.type}
               onInspect={onInspect}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -268,8 +433,12 @@ const AccountNode = ({ node, depth, onInspect, onEdit, onDelete, inspectedId }) 
 };
 
 const ChartOfAccountsTab = ({ accounting }) => {
+  const { isSuperAdmin: checkIsSuperAdmin } = useAuth();
+  const isUserSuperAdmin = checkIsSuperAdmin();
   const {
     accountsTree,
+    showZeroCustomerAccounts,
+    setShowZeroCustomerAccounts,
     accountsFlat,
     isFetchingAccounts,
     accountDialogOpen,
@@ -283,15 +452,24 @@ const ChartOfAccountsTab = ({ accounting }) => {
     setDeleteAccountTarget,
     handleDeleteAccount,
     isDeletingAccount,
+    manualAdjustAccount,
+    isManualAdjustingAccount,
+    accountManualAdjustments,
+    isFetchingAccountManualAdjustments,
     inspectedAccountId,
     setInspectedAccountId,
     accountStatementFilters,
     setAccountStatementFilters,
     accountStatement,
     isFetchingAccountStatement,
+    reconciliationLogs,
+    isFetchingReconciliationLogs,
+    runReconciliation,
+    isRunningReconciliation,
   } = accounting;
 
   const [treeSearch, setTreeSearch] = useState("");
+  const [reconciliationOpen, setReconciliationOpen] = useState(false);
 
   // Client-side filter: keep a node if it matches, or any of its
   // descendants match - lets you jump straight to e.g. "رسوم" instead of
@@ -355,6 +533,77 @@ const ChartOfAccountsTab = ({ accounting }) => {
           ))}
         </div>
       )}
+
+      {/* "والتأكد من جميع الحسابات" - طلب صريح. رصد/تنبيه فقط، لا يُصحِّح أي
+          رصيد تلقائيًا - راجع ReconciliationService على الباك-إند. */}
+      <div className="border border-border rounded-lg bg-card">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between p-4"
+          onClick={() => setReconciliationOpen((v) => !v)}
+        >
+          <span className="font-semibold flex items-center gap-2">
+            <Icon icon="mdi:clipboard-check-outline" className="w-4 h-4" />
+            تدقيق الحسابات (التأكد من جميع الحسابات)
+            {reconciliationLogs?.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                {reconciliationLogs.length} انحراف مسجَّل
+              </span>
+            )}
+          </span>
+          <Icon icon={reconciliationOpen ? "mdi:chevron-up" : "mdi:chevron-down"} className="w-4 h-4" />
+        </button>
+        {reconciliationOpen && (
+          <div className="border-t border-border p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-xs text-muted-foreground">
+                يقارن رصيد كل حساب في الشجرة مع قيوده الفعلية، ورصيد حسابَي سلف
+                الموظفين/الموردين مع سجلَّيهما التفصيليَّين، بالإضافة لأرصدة
+                الزبائن - رصد وتسجيل فقط، بلا أي تعديل تلقائي على أي رصيد.
+              </p>
+              {isUserSuperAdmin && (
+                <Button size="sm" variant="outline" disabled={isRunningReconciliation} onClick={runReconciliation}>
+                  <Icon icon="mdi:refresh" className="w-3.5 h-3.5 ml-1" />
+                  {isRunningReconciliation ? "جارٍ التدقيق..." : "تشغيل تدقيق شامل الآن"}
+                </Button>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground border-b border-border">
+                    <th className="text-right p-1">النوع</th>
+                    <th className="text-right p-1">الحساب/الجهة</th>
+                    <th className="text-left p-1">المتوقَّع</th>
+                    <th className="text-left p-1">الفعلي</th>
+                    <th className="text-left p-1">الفرق</th>
+                    <th className="text-right p-1">تاريخ الاكتشاف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isFetchingReconciliationLogs && (
+                    <tr><td colSpan={6} className="p-3 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+                  )}
+                  {!isFetchingReconciliationLogs && (reconciliationLogs ?? []).length === 0 && (
+                    <tr><td colSpan={6} className="p-3 text-center text-muted-foreground">لا يوجد أي انحراف مسجَّل - كل الحسابات متطابقة.</td></tr>
+                  )}
+                  {(reconciliationLogs ?? []).map((log) => (
+                    <tr key={`${log.scope}-${log.id}`} className="border-b border-border/50">
+                      <td className="p-1">{log.scope}</td>
+                      <td className="p-1">{log.account_name || log.account_code || "-"}</td>
+                      <td className="p-1 font-mono">{fmtMoney(log.expected_balance)}</td>
+                      <td className="p-1 font-mono">{fmtMoney(log.actual_balance)}</td>
+                      <td className="p-1 font-mono text-amber-700 font-semibold">{fmtMoney(log.difference)}</td>
+                      <td className="p-1">{log.detected_at ? new Date(log.detected_at).toLocaleString("ar-SY") : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div className="border border-border rounded-lg bg-card">
         <div className="flex items-center justify-between p-4 border-b border-border">
@@ -364,12 +613,23 @@ const ChartOfAccountsTab = ({ accounting }) => {
             حساب جديد
           </Button>
         </div>
-        <div className="p-2 border-b border-border">
+        <div className="p-2 border-b border-border space-y-2">
           <Input
             placeholder="ابحث عن حساب بالاسم أو الرمز... (مثال: رسوم)"
             value={treeSearch}
             onChange={(e) => setTreeSearch(e.target.value)}
           />
+          {/* طلب صريح: الزبائن برصيد صفر لا يظهرون في الشجرة - مخفيون
+              افتراضيًا (من الباك-إند)، وهذا الخيار يُظهرهم عند الحاجة. */}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground select-none cursor-pointer px-1">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-gray-300"
+              checked={!!showZeroCustomerAccounts}
+              onChange={(e) => setShowZeroCustomerAccounts?.(e.target.checked)}
+            />
+            إظهار الزبائن الذين رصيدهم صفر
+          </label>
         </div>
         <div className="p-2 max-h-[600px] overflow-y-auto">
           {isFetchingAccounts && <p className="text-sm text-muted-foreground p-4">جارٍ التحميل...</p>}
@@ -377,7 +637,10 @@ const ChartOfAccountsTab = ({ accounting }) => {
             <p className="text-sm text-muted-foreground p-4">لا توجد حسابات بعد.</p>
           )}
           {!isFetchingAccounts && treeSearch && visibleTree.length === 0 && (
-            <p className="text-sm text-muted-foreground p-4">لا توجد حسابات مطابقة لـ "{treeSearch}"</p>
+            <p className="text-sm text-muted-foreground p-4">
+              لا توجد حسابات مطابقة لـ "{treeSearch}"
+              {!showZeroCustomerAccounts && " (الزبائن برصيد صفر مخفيون - فعّل خيار إظهارهم أعلاه)"}
+            </p>
           )}
           {visibleTree.map((node) => (
             <AccountNode
@@ -508,6 +771,14 @@ const ChartOfAccountsTab = ({ accounting }) => {
             onCancel={() => setAccountDialogOpen(false)}
             onSave={handleSaveAccount}
             isSaving={isSavingAccount}
+            isSuperAdmin={isUserSuperAdmin}
+            onManualAdjust={async (id, data) => {
+              const ok = await manualAdjustAccount(id, data);
+              if (ok) setAccountDialogOpen(false);
+            }}
+            isManualAdjusting={isManualAdjustingAccount}
+            manualAdjustHistory={accountManualAdjustments}
+            isFetchingManualAdjustHistory={isFetchingAccountManualAdjustments}
           />
         </DialogContent>
       </Dialog>

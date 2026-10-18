@@ -64,6 +64,14 @@ const StatusDropdown = ({ payment }) => {
 // Columns definition
 export const PaymentsColumns = [
   {
+    header: "رقم الدفعة",
+    accessor: "payment_number",
+    className: "min-w-[90px]",
+    cellClassName: "font-mono",
+    priority: 1,
+    cell: ({ row }) => <span className="font-mono">{row.payment_number ?? "-"}</span>,
+  },
+  {
     header: "اسم الشركة",
     accessor: "customer.company_name",
     className: "min-w-[120px] sm:min-w-[150px] md:min-w-[200px] lg:min-w-[250px]",
@@ -113,4 +121,4 @@ export const PaymentsColumns = [
     priority: 6,
     cell: ({ row }) => <StatusDropdown payment={row} />, 
   },
-];
+];

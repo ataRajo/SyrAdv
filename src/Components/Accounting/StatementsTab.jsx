@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import CustomerSearchSelect from "../Common/CustomerSearchSelect";
 
 const fmt = (n) => Number(n ?? 0).toLocaleString("ar-SY", { minimumFractionDigits: 2 });
 
@@ -129,14 +129,7 @@ const StatementsTab = ({ accounting }) => {
     handleOpenVoucher,
   } = accounting;
 
-  const [customerSearch, setCustomerSearch] = useState("");
   const [sendEmail, setSendEmail] = useState("");
-  const { data: customersResponse } = useGetCustomersQuery({
-    page: 1,
-    per_page: 60,
-    search: customerSearch || undefined,
-  });
-  const customers = customersResponse?.data ?? [];
 
   return (
     <div className="space-y-6">
@@ -145,25 +138,14 @@ const StatementsTab = ({ accounting }) => {
         <div className="p-4 border-b border-border space-y-3">
           <h3 className="font-semibold">كشف حساب عميل</h3>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-2 min-w-[220px]">
+            <div className="space-y-2 min-w-[260px]">
               <Label>العميل</Label>
-              <Input
-                placeholder="ابحث عن عميل..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                className="mb-2"
-              />
-              <Select
+              <CustomerSearchSelect
                 value={statementCustomerId ? String(statementCustomerId) : ""}
-                onValueChange={(v) => setStatementCustomerId(Number(v))}
-              >
-                <SelectTrigger><SelectValue placeholder="اختر العميل" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.company_name || c.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(id) => setStatementCustomerId(id ? Number(id) : null)}
+                placeholder="ابحث واختر العميل"
+                showRemaining
+              />
             </div>
             <div className="space-y-2">
               <Label>من تاريخ</Label>

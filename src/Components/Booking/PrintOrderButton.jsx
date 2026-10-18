@@ -3,6 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Printer, Loader2 } from "lucide-react";
 import { useGetOneBookingsQuery } from "../../RtkQuery/Slice/Booking/BookingApi";
 import { toast } from "sonner";
+import { getSacLogoBase64 } from "../../utils/branding/sacBrand";
+import {
+  sacLetterheadStyles,
+  sacLetterheadHeader,
+  sacLetterheadFooter,
+  sacLetterheadWatermark,
+} from "../../utils/branding/pdfLetterheadHtml";
 
 export const PrintOrderButton = ({ bookingId }) => {
   const [shouldPrint, setShouldPrint] = useState(false);
@@ -10,7 +17,7 @@ export const PrintOrderButton = ({ bookingId }) => {
     skip: !shouldPrint,
   });
 
-  const generateWordDocument = (booking) => {
+  const generateWordDocument = async (booking) => {
     try {
       if (!booking) {
         toast.error("لم يتم العثور على بيانات الحجز");
@@ -43,15 +50,19 @@ export const PrintOrderButton = ({ bookingId }) => {
       physicalSigns.forEach(sign => {
         const model = sign.template?.model || "غير محدد";
         const type = sign.template?.type || "غير محدد";
+        const size = sign.template?.size || "غير محدد";
+        // نفس النموذج بقياسين مختلفين = سطران منفصلان في أوردر الطباعة
+        const groupKey = `${model}|${size}`;
 
-        if (!groupedSigns[model]) {
-          groupedSigns[model] = {
+        if (!groupedSigns[groupKey]) {
+          groupedSigns[groupKey] = {
             model: model,
             type: type,
+            size: size,
             count: 1
           };
         } else {
-          groupedSigns[model].count++;
+          groupedSigns[groupKey].count++;
         }
       });
 
@@ -64,10 +75,13 @@ export const PrintOrderButton = ({ bookingId }) => {
             <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${sign.count}</td>
             <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${sign.type}</td>
             <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${sign.model}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${sign.size}</td>
             <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${printingType}</td>
           </tr>`;
         idx++;
       });
+
+      const logoBase64 = await getSacLogoBase64();
 
       const htmlContent = `<!DOCTYPE html>
       <html dir="rtl" lang="ar">
@@ -100,10 +114,10 @@ export const PrintOrderButton = ({ bookingId }) => {
             margin: 20px 0;
           }
           th {
-            background-color: #2563eb;
+            background-color: #D5A225;
             color: white;
             padding: 10px;
-            border: 1px solid #1e40af;
+            border: 1px solid #A77D14;
             text-align: center;
           }
           td {
@@ -131,17 +145,18 @@ export const PrintOrderButton = ({ bookingId }) => {
             font-size: 12px;
             color: #666;
           }
+
+          ${sacLetterheadStyles({ mode: "word" })}
         </style>
       </head>
       <body>
-        <div class="header">
-          <div class="title">أوردر طباعة</div>
-        </div>
-        
+        ${sacLetterheadWatermark({ mode: "word" })}
+        ${sacLetterheadHeader({ logoBase64, title: "أوردر طباعة" })}
+
         <div class="date">
           التاريخ: ${startDate}
         </div>
-        
+
         <table>
           <thead>
             <tr>
@@ -149,13 +164,14 @@ export const PrintOrderButton = ({ bookingId }) => {
               <th>العدد</th>
               <th>النوع</th>
               <th>النموذج</th>
+              <th>القياس</th>
               <th>نوع الطباعة</th>
             </tr>
           </thead>
           <tbody>
             ${tableRows}
             <tr>
-              <td colspan="5" style="background-color: #f3f4f6; font-weight: bold;">
+              <td colspan="6" style="background-color: #f3f4f6; font-weight: bold;">
                 اسم الشركة: ${companyName}
               </td>
             </tr>
@@ -164,6 +180,7 @@ export const PrintOrderButton = ({ bookingId }) => {
         <div class="footer">
           <p>هذا الأمر صادر بناءً على طلب العميل</p>
         </div>
+        ${sacLetterheadFooter({ mode: "word" })}
       </body>
       </html>`;
 

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useAuth } from "../../Context/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -20,9 +21,17 @@ import {
 } from "@/components/ui/dialog";
 import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router";
-import { useGetCustomersQuery } from "../../RtkQuery/Slice/Customers/CustomersApi";
+import CustomerSearchSelect from "../Common/CustomerSearchSelect";
+import DocumentUploadDialog from "../Common/DocumentUploadDialog";
 import { useGetBookingQuery } from "../../RtkQuery/Slice/Booking/BookingApi";
 import CurrencyAmountField from "./CurrencyAmountField";
+import HardDeleteDialog from "./HardDeleteDialog";
+import toast from "react-hot-toast";
+import {
+  useUpdateTransactionMutation,
+  useLazyPreviewDeleteTransactionQuery,
+  useDeleteTransactionMutation,
+} from "../../RtkQuery/Slice/Accounting/AccountingApi";
 
 const TYPE_LABELS = {
   incoming: { label: "قبض", variant: "default" },
@@ -66,13 +75,6 @@ const PARTY_TYPE_OPTIONS = [
  */
 const IncomingForm = ({ cashAccounts, suppliers, employees, postableAccounts, getEmployeeAdvanceBalance, onCancel, onSave, isSaving }) => {
   const [partyType, setPartyType] = useState("customer");
-  const [customerSearch, setCustomerSearch] = useState("");
-  const { data: customersResponse } = useGetCustomersQuery({
-    page: 1,
-    per_page: 60,
-    search: customerSearch || undefined,
-  });
-  const customers = customersResponse?.data ?? [];
 
   const [form, setForm] = useState({
     party_id: "",
@@ -158,24 +160,12 @@ const IncomingForm = ({ cashAccounts, suppliers, employees, postableAccounts, ge
       {partyType === "customer" && (
         <div className="space-y-2">
           <Label>العميل</Label>
-          <Input
-            placeholder="ابحث عن عميل..."
-            value={customerSearch}
-            onChange={(e) => setCustomerSearch(e.target.value)}
-            className="mb-2"
+          <CustomerSearchSelect
+            value={form.party_id}
+            onChange={(id) => handlePartyIdChange(id || "")}
+            placeholder="ابحث واختر العميل"
+            showRemaining
           />
-          <Select value={form.party_id} onValueChange={handlePartyIdChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="اختر العميل" />
-            </SelectTrigger>
-            <SelectContent>
-              {customers.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.company_name || c.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       )}
 
@@ -478,8 +468,48 @@ const TransferForm = ({ cashAccounts, onCancel, onSave, isSaving }) => {
   );
 };
 
+// شارة حالة التوثيق لكل قيد (طلب صريح: السند لا يُرحَّل على الشجرة قبل التوثيق).
+const DocumentStatusBadge = ({ tx }) => {
+  if (tx.status === "pending" && tx.documented_at) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+        title={tx.documented_by_name ? `وثّقه: ${tx.documented_by_name}` : ""}
+      >
+        <Icon icon="mdi:timer-sand" className="h-3.5 w-3.5" /> موثَّق - بانتظار الترحيل
+      </span>
+    );
+  }
+  if (tx.status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+        <Icon icon="mdi:clock-outline" className="h-3.5 w-3.5" /> بانتظار التوثيق
+      </span>
+    );
+  }
+  if (tx.status === "cancelled") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground line-through"
+        title={tx.cancel_reason || ""}
+      >
+        ملغى
+      </span>
+    );
+  }
+  if (tx.is_documented) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+        <Icon icon="mdi:check-decagram" className="h-3.5 w-3.5" /> موثَّق
+      </span>
+    );
+  }
+  return <span className="text-[11px] text-muted-foreground">مرحَّل</span>;
+};
+
 const ReverseForm = ({ target, onCancel, onSave, isSaving }) => {
   const [reason, setReason] = useState("");
+  const isPending = target?.status === "pending";
   return (
     <form
       onSubmit={(e) => {
@@ -489,17 +519,59 @@ const ReverseForm = ({ target, onCancel, onSave, isSaving }) => {
       className="space-y-4"
     >
       <p className="text-sm text-muted-foreground">
-        سيتم إنشاء قيد جديد يعكس القيد رقم <strong>{target?.entry_number}</strong> دون حذف أو تعديل القيد الأصلي.
+        {isPending ? (
+          <>السند <strong>{target?.voucher_number || target?.entry_number}</strong> لم يُوثَّق بعد ولم يؤثر على أي رصيد - سيُعلَّم ملغى فقط (بلا قيد عكسي).</>
+        ) : (
+          <>سيتم إنشاء قيد جديد يعكس القيد رقم <strong>{target?.entry_number}</strong> دون حذف أو تعديل القيد الأصلي.</>
+        )}
       </p>
       <div className="space-y-2">
-        <Label>سبب العكس</Label>
+        <Label>{isPending ? "سبب الإلغاء" : "سبب العكس"}</Label>
         <Textarea value={reason} onChange={(e) => setReason(e.target.value)} required />
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>إلغاء</Button>
         <Button type="submit" variant="destructive" disabled={isSaving || !reason}>
-          {isSaving ? "جارٍ التنفيذ..." : "تأكيد عكس القيد"}
+          {isSaving ? "جارٍ التنفيذ..." : isPending ? "تأكيد إلغاء السند" : "تأكيد عكس القيد"}
         </Button>
+      </DialogFooter>
+    </form>
+  );
+};
+
+// تعديل غير مالي: البيان + التاريخ فقط (المبالغ والحسابات ثابتة في الدفتر).
+const EditTransactionForm = ({ target, onCancel }) => {
+  const [description, setDescription] = useState(target?.description || "");
+  const [entryDate, setEntryDate] = useState((target?.entry_date || "").slice(0, 10));
+  const [updateTransaction, { isLoading }] = useUpdateTransactionMutation();
+
+  const submit = async (e) => {
+    e.preventDefault();
+    try {
+      await updateTransaction({ id: target.id, description, entry_date: entryDate }).unwrap();
+      toast.success("تم تعديل السند");
+      onCancel();
+    } catch (err) {
+      toast.error(err?.data?.message || "فشل التعديل");
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        يمكن تعديل البيان والتاريخ فقط. لتغيير المبلغ أو الحسابات استخدم «عكس القيد» ثم سجّل سندًا جديدًا (أو احذف السند إن كان تجريبيًا).
+      </p>
+      <div className="space-y-2">
+        <Label>البيان</Label>
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} required />
+      </div>
+      <div className="space-y-2">
+        <Label>التاريخ</Label>
+        <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>إلغاء</Button>
+        <Button type="submit" disabled={isLoading || !description}>{isLoading ? "جارٍ الحفظ..." : "حفظ"}</Button>
       </DialogFooter>
     </form>
   );
@@ -536,9 +608,25 @@ const TransactionsTab = ({ accounting }) => {
     handleReverse,
     isReversing,
     handleOpenVoucher,
+    documentTarget,
+    setDocumentTarget,
+    handleDocumentTransaction,
+    isDocumentingTransaction,
+    handlePostTransaction,
+    isPostingTransaction,
+    handlePostTransactionsBatch,
+    isPostingBatch,
   } = accounting;
 
   const navigate = useNavigate();
+  // ترحيل دفتر اليومية محصور بالسوبر أدمن (طلب صريح) - الخادم يفرضه أيضًا.
+  const { hasRole, hasPermission } = useAuth();
+  const canPost = hasRole("super admin");
+  const canEdit = canPost || hasPermission("edit-financials");
+  const canHardDelete = canPost || hasPermission("delete-financials");
+  const [editTarget, setEditTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const awaitingPostingOnPage = transactions.filter((t) => t.status === "pending" && t.documented_at);
 
   return (
     <div className="space-y-4">
@@ -569,6 +657,33 @@ const TransactionsTab = ({ accounting }) => {
             value={transactionFilters.to_date || ""}
             onChange={(e) => setTransactionFilters((f) => ({ ...f, to_date: e.target.value, page: 1 }))}
           />
+          <Select
+            value={transactionFilters.status || "all"}
+            onValueChange={(v) =>
+              setTransactionFilters((f) => ({ ...f, status: v === "all" ? undefined : v, page: 1 }))
+            }
+          >
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="pending">غير مرحَّلة (الكل)</SelectItem>
+              <SelectItem value="awaiting_documentation">بانتظار التوثيق</SelectItem>
+              <SelectItem value="awaiting_posting">موثَّقة - بانتظار الترحيل</SelectItem>
+              <SelectItem value="posted">مرحَّلة</SelectItem>
+              <SelectItem value="cancelled">ملغاة</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="w-64">
+            <CustomerSearchSelect
+              value={transactionFilters.customer_id ? String(transactionFilters.customer_id) : ""}
+              onChange={(id) =>
+                setTransactionFilters((f) => ({ ...f, customer_id: id || undefined, page: 1 }))
+              }
+              allowAll
+              allValue=""
+              allLabel="كل العملاء"
+            />
+          </div>
           <Input
             type="number"
             placeholder="رقم الموظف (دفتر اليومية)"
@@ -579,6 +694,18 @@ const TransactionsTab = ({ accounting }) => {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {canPost && awaitingPostingOnPage.length > 0 && (
+            <Button
+              size="sm"
+              className="bg-blue-600 text-white hover:bg-blue-700"
+              disabled={isPostingBatch}
+              onClick={() => handlePostTransactionsBatch(awaitingPostingOnPage.map((t) => t.id))}
+              title="ترحيل كل السندات الموثَّقة الظاهرة في هذه الصفحة"
+            >
+              <Icon icon="mdi:check-all" className="w-4 h-4 ml-1" />
+              {isPostingBatch ? "جارٍ الترحيل..." : `ترحيل الموثَّق (${awaitingPostingOnPage.length})`}
+            </Button>
+          )}
           <Button size="sm" onClick={() => setIncomingDialogOpen(true)}>
             <Icon icon="mdi:cash-plus" className="w-4 h-4 ml-1" /> قيد قبض
           </Button>
@@ -604,18 +731,22 @@ const TransactionsTab = ({ accounting }) => {
         <th className="p-2 text-center">الموظف</th>
         <th className="p-2 text-center">مدين</th>
         <th className="p-2 text-center">دائن</th>
+        <th className="p-2 text-center">التوثيق</th>
         <th className="p-2 text-center">إجراءات</th>
       </tr>
     </thead>
     <tbody>
       {isFetchingTransactions && (
-        <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
+        <tr><td colSpan={11} className="p-4 text-center text-muted-foreground">جارٍ التحميل...</td></tr>
       )}
       {!isFetchingTransactions && transactions.length === 0 && (
-        <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">لا توجد معاملات</td></tr>
+        <tr><td colSpan={11} className="p-4 text-center text-muted-foreground">لا توجد معاملات</td></tr>
       )}
       {transactions.map((tx) => (
-        <tr key={tx.id} className="border-b border-border/50 hover:bg-muted/30">
+        <tr
+          key={tx.id}
+          className={`border-b border-border/50 hover:bg-muted/30 ${tx.status === "pending" ? "bg-amber-50/40 dark:bg-amber-900/10" : ""} ${tx.status === "cancelled" ? "opacity-60" : ""}`}
+        >
           <td className="p-2 font-mono text-xs text-center">{tx.entry_number}</td>
           <td className="p-2 font-mono text-xs text-center">{tx.voucher_number || "-"}</td>
           <td className="p-2 text-center">
@@ -645,7 +776,46 @@ const TransactionsTab = ({ accounting }) => {
           <td className="p-2 font-mono text-center">{Number(tx.total_debit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
           <td className="p-2 font-mono text-center">{Number(tx.total_credit).toLocaleString("ar-SY", { minimumFractionDigits: 2 })}</td>
           <td className="p-2 text-center">
+            <div className="flex flex-col items-center gap-1">
+              <DocumentStatusBadge tx={tx} />
+              {tx.voucher_document_url && (
+                <a
+                  href={tx.voucher_document_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-primary underline"
+                >
+                  صورة السند
+                </a>
+              )}
+            </div>
+          </td>
+          <td className="p-2 text-center">
             <div className="flex items-center justify-center gap-1">
+              {canPost && tx.status === "pending" && tx.documented_at && (
+                <Button
+                  size="sm"
+                  className="h-7 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700"
+                  disabled={isPostingTransaction}
+                  title="ترحيل السند على شجرة الحسابات (سوبر أدمن)"
+                  onClick={() => handlePostTransaction(tx.id)}
+                >
+                  <Icon icon="mdi:send-check" className="w-4 h-4" />
+                  <span className="mr-1">ترحيل</span>
+                </Button>
+              )}
+              {tx.status !== "cancelled" && (tx.status === "pending" || tx.is_voucher) && (
+                <Button
+                  size="sm"
+                  variant={tx.status === "pending" && !tx.documented_at ? "default" : "ghost"}
+                  className={tx.status === "pending" && !tx.documented_at ? "h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700" : "h-7 w-7 p-0"}
+                  title={tx.status === "pending" ? "توثيق السند (رفع صورة السند الموقَّع) وترحيله" : "إرفاق/استبدال صورة السند"}
+                  onClick={() => setDocumentTarget(tx)}
+                >
+                  <Icon icon="mdi:file-upload-outline" className="w-4 h-4" />
+                  {tx.status === "pending" && !tx.documented_at && <span className="mr-1">توثيق</span>}
+                </Button>
+              )}
               {tx.voucher_number && (
                 <Button
                   size="icon"
@@ -657,12 +827,34 @@ const TransactionsTab = ({ accounting }) => {
                   <Icon icon="mdi:printer-outline" className="w-4 h-4" />
                 </Button>
               )}
-              {tx.type !== "reversal" && (
+              {canEdit && (
                 <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7"
-                  title="عكس القيد"
+                  title="تعديل (البيان/التاريخ)"
+                  onClick={() => setEditTarget(tx)}
+                >
+                  <Icon icon="mdi:pencil-outline" className="w-4 h-4" />
+                </Button>
+              )}
+              {canHardDelete && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="حذف نهائي (بيانات تجريبية)"
+                  onClick={() => setDeleteTarget(tx)}
+                >
+                  <Icon icon="mdi:trash-can-outline" className="w-4 h-4" />
+                </Button>
+              )}
+              {tx.type !== "reversal" && tx.status !== "cancelled" && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  title={tx.status === "pending" ? "إلغاء السند" : "عكس القيد"}
                   onClick={() => setReverseTarget(tx)}
                 >
                   <Icon icon="mdi:undo" className="w-4 h-4 text-destructive" />
@@ -741,9 +933,42 @@ const TransactionsTab = ({ accounting }) => {
         </DialogContent>
       </Dialog>
 
+      <DocumentUploadDialog
+        open={Boolean(documentTarget)}
+        onClose={() => setDocumentTarget(null)}
+        onSubmit={handleDocumentTransaction}
+        isLoading={isDocumentingTransaction}
+        title={`توثيق ${documentTarget?.voucher_type_label || "السند"} ${documentTarget?.voucher_number || documentTarget?.entry_number || ""}`}
+        subtitle={documentTarget?.description}
+        existingImageUrl={documentTarget?.voucher_document_url}
+        warning={
+          documentTarget?.status === "pending"
+            ? canPost
+              ? "هذا السند لم يُرحَّل بعد - سيُوثَّق ويُرحَّل على شجرة الحسابات فور رفع صورة السند الموقَّع."
+              : "هذا السند لم يُرحَّل بعد - بعد رفع صورة السند الموقَّع يبقى بانتظار ترحيله من السوبر أدمن."
+            : "هذا القيد مرحَّل أصلًا - الصورة تُرفق للأرشفة فقط."
+        }
+      />
+
+      <Dialog open={Boolean(editTarget)} onOpenChange={(v) => !v && setEditTarget(null)}>
+        <DialogContent dir="rtl">
+          <DialogHeader><DialogTitle>تعديل {editTarget?.voucher_number || editTarget?.entry_number}</DialogTitle></DialogHeader>
+          {editTarget && <EditTransactionForm key={editTarget.id} target={editTarget} onCancel={() => setEditTarget(null)} />}
+        </DialogContent>
+      </Dialog>
+
+      <HardDeleteDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        id={deleteTarget?.id}
+        title={`حذف نهائي - ${deleteTarget?.voucher_number || deleteTarget?.entry_number || ""}`}
+        usePreviewLazy={useLazyPreviewDeleteTransactionQuery}
+        useDelete={useDeleteTransactionMutation}
+      />
+
       <Dialog open={Boolean(reverseTarget)} onOpenChange={(v) => !v && setReverseTarget(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>عكس القيد {reverseTarget?.entry_number}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{reverseTarget?.status === "pending" ? "إلغاء السند" : "عكس القيد"} {reverseTarget?.voucher_number || reverseTarget?.entry_number}</DialogTitle></DialogHeader>
           <ReverseForm
             target={reverseTarget}
             onCancel={() => setReverseTarget(null)}

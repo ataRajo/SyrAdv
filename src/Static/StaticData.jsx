@@ -15,7 +15,8 @@ import {
   IconFlag2Off,
   Icon24Hours,
   IconTruckDelivery,
-  IconBrandWhatsapp
+  IconBrandWhatsapp,
+  IconClipboardList
 } from "@tabler/icons-react";
 
 export const BookingType = {
@@ -105,6 +106,9 @@ export const Permissions = {
   ExecuteWorkshopOrders: "execute-workshop-orders",
   // مدير الورشة - يرى أوامر ورشته ويُسنِدها لعامل بعينه ضمن فريقه.
   ManageWorkshopTeam: "manage-workshop-team",
+  // صلاحية الصيانة المستقلة (طلب صريح) - تبويب "الصيانة" في الورشات. مرتبط
+  // بورشة => ورشته فقط؛ بلا ورشة => كل الورشات. راجع OrderService::canManageMaintenance.
+  ManageMaintenanceHolds: "manage-maintenance-holds",
   ViewRegions: "view-regions", //
   ViewRoadSigns: "view-road-signs",
   ViewTemplates: "view-templates",
@@ -118,6 +122,14 @@ export const Permissions = {
 
 
   ExtendBookings: "extend-bookings",
+
+  // ميزة "الخطط الإعلانية" (طلب صريح) - صلاحيات جديدة يجب تعريف ما يقابلها
+  // في جدول الصلاحيات على الباك-إند (نفس تسمية بقية المشروع kebab-case)،
+  // راجع API_CONTRACT.md المرفق مع هذا التسليم.
+  ViewAdvertisingPlans: "view-advertising-plans",
+  CreateAdvertisingPlans: "create-advertising-plans",
+  EditAdvertisingPlans: "edit-advertising-plans",
+  DeleteAdvertisingPlans: "delete-advertising-plans",
 
 };
 
@@ -147,6 +159,15 @@ export const navLinkSidebar = [
     permission: Permissions.ViewBookings,
     // Add this to indicate it can have notifications
     hasNotifications: true,
+  },
+  {
+    // ميزة "الخطط الإعلانية" (طلب صريح): عرض/اختيار مجموعة لوحات على خريطة
+    // مع سعر نهائي، ومشاركتها كرابط عام بلا تسجيل دخول مع الزبون قبل
+    // تحويلها لحجز فعلي - راجع Pages/AdvertisingPlans.
+    title: "الخطط الإعلانية",
+    url: "/dashboard/advertising-plans",
+    icon: IconClipboardList,
+    permission: Permissions.ViewAdvertisingPlans,
   },
   {
     title: "الدفعات",
@@ -231,7 +252,12 @@ export const navLinkSidebar = [
     title: "الورشات",
     url: "/dashboard/workshops",
     icon: IconFlag2Off,
-    permission: [Permissions.ViewOrders, Permissions.ViewWorkshopOrders],
+    permission: [
+      Permissions.ViewOrders,
+      Permissions.ViewWorkshopOrders,
+      Permissions.ManageWorkshopTeam,
+      Permissions.ManageMaintenanceHolds,
+    ],
   },
   {
     // لوحة تحكم السوبر أدمن بإشعارات واتساب (طلب صريح) - تفعيل/تعطيل كل
@@ -248,6 +274,14 @@ export const navLinkSidebar = [
     title: "رسائل واتساب الجماعية",
     url: "/dashboard/settings/whatsapp-bulk",
     icon: IconBrandWhatsapp,
+    permission: Permissions.ViewUsers,
+  },
+  {
+    // تقييم اللوحات بالذكاء الاصطناعي - الحماية الفعلية على الباك-إند
+    // (super admin)، والـ permission هنا لإخفاء الرابط فقط (نفس نمط ما سبق).
+    title: "تقييم اللوحات (AI)",
+    url: "/dashboard/settings/road-sign-evaluations",
+    icon: IconChartBar,
     permission: Permissions.ViewUsers,
   }
 
